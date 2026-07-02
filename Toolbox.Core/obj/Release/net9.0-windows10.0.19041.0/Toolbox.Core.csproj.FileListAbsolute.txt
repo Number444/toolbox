@@ -1,0 +1,11 @@
+d:\Agent Space\Toolbox\Toolbox.Core\bin\Release\net9.0-windows10.0.19041.0\Toolbox.Core.deps.json
+d:\Agent Space\Toolbox\Toolbox.Core\bin\Release\net9.0-windows10.0.19041.0\Toolbox.Core.dll
+d:\Agent Space\Toolbox\Toolbox.Core\bin\Release\net9.0-windows10.0.19041.0\Toolbox.Core.pdb
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.GeneratedMSBuildEditorConfig.editorconfig
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.AssemblyInfoInputs.cache
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.AssemblyInfo.cs
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.csproj.CoreCompileInputs.cache
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.dll
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\refint\Toolbox.Core.dll
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\Toolbox.Core.pdb
+d:\Agent Space\Toolbox\Toolbox.Core\obj\Release\net9.0-windows10.0.19041.0\ref\Toolbox.Core.dll

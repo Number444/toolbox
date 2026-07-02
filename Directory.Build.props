@@ -1,0 +1,9 @@
+<Project>
+
+  <!-- 对 wpftmp 临时编译项目禁用自动程序集特性生成 -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('wpftmp'))">
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+  </PropertyGroup>
+
+</Project>

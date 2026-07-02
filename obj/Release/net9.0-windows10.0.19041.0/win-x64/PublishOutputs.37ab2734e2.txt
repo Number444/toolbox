@@ -1,0 +1,12 @@
+D:\Agent Space\Toolbox\setup\publish\Toolbox.exe
+D:\Agent Space\Toolbox\setup\publish\Toolbox.dll
+D:\Agent Space\Toolbox\setup\publish\Toolbox.deps.json
+D:\Agent Space\Toolbox\setup\publish\Toolbox.runtimeconfig.json
+D:\Agent Space\Toolbox\setup\publish\Toolbox.pdb
+D:\Agent Space\Toolbox\setup\publish\Microsoft.Windows.SDK.NET.dll
+D:\Agent Space\Toolbox\setup\publish\WinRT.Runtime.dll
+D:\Agent Space\Toolbox\setup\publish\QRCoder.dll
+D:\Agent Space\Toolbox\setup\publish\Toolbox.Core.dll
+D:\Agent Space\Toolbox\setup\publish\Toolbox.Plugins.dll
+D:\Agent Space\Toolbox\setup\publish\Toolbox.Core.pdb
+D:\Agent Space\Toolbox\setup\publish\Toolbox.Plugins.pdb
