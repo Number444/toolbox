@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -5,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Toolbox.Helpers;
+using Toolbox.Core.Services;
 
 namespace Toolbox;
 
@@ -13,6 +15,9 @@ namespace Toolbox;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private bool _isShuttingDown;
+    private Models.ITool? _savedSelectedTool;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -36,6 +41,9 @@ public partial class MainWindow : Window
             // 初始化导航高亮位置（等布局完成后）
             Dispatcher.BeginInvoke(new Action(InitHighlight),
                 System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // 设置页返回事件
+            SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
         };
 
         // 窗口状态变更时更新最大化/还原图标
@@ -85,6 +93,10 @@ public partial class MainWindow : Window
                 vm.SelectedTool = tool;
             }
             PositionHighlight(element);
+
+            // 如果当前在设置页，自动退出返回工具箱
+            if (SettingsLayer.Visibility == Visibility.Visible)
+                ExitSettingsView();
         }
     }
 
@@ -364,6 +376,98 @@ public partial class MainWindow : Window
             element = VisualTreeHelper.GetParent(element);
         }
         return false;
+    }
+
+    // --- 设置页 ---
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        EnterSettingsView();
+    }
+
+    private void EnterSettingsView()
+    {
+        // 保存当前选中工具引用以便返回时恢复高亮
+        _savedSelectedTool = (DataContext as ViewModels.MainViewModel)?.SelectedTool;
+
+        // 隐藏内容区，显示设置层
+        ContentScrollViewer.Visibility = Visibility.Collapsed;
+        SettingsLayer.Visibility = Visibility.Visible;
+        HighlightBar.Visibility = Visibility.Collapsed;
+    }
+
+    private void ExitSettingsView()
+    {
+        SettingsLayer.Visibility = Visibility.Collapsed;
+        ContentScrollViewer.Visibility = Visibility.Visible;
+
+        // 恢复高亮（如果有选中工具）
+        if (_savedSelectedTool != null
+            && DataContext is ViewModels.MainViewModel vm
+            && vm.VisibleGroups.Any(g => g.IsExpanded && g.Tools.Contains(_savedSelectedTool)))
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var target = FindToolBorderByTool(_savedSelectedTool);
+                if (target != null)
+                    PositionHighlight(target);
+                else
+                    ScheduleHighlightReposition();
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    // --- 窗口关闭/退出 ---
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (_isShuttingDown)
+        {
+            base.OnClosing(e);
+            return;
+        }
+
+        if (AppSettings.Instance.MinimizeOnClose)
+        {
+            e.Cancel = true;
+            Hide();
+            ShowInTaskbar = false;
+            SystemTrayHelper.Instance.Show(
+                tooltip: "Toolbox - \u70B9\u51FB\u6062\u590D",
+                onDoubleClick: () =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        ShowInTaskbar = true;
+                        Show();
+                        WindowState = WindowState.Normal;
+                        Activate();
+                        SystemTrayHelper.Instance.Hide();
+                    });
+                },
+                onExitClick: () =>
+                {
+                    Dispatcher.Invoke(() => { Shutdown(); });
+                });
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    public void Shutdown()
+    {
+        _isShuttingDown = true;
+        AppSettings.Instance.Save();
+
+        if (Helpers.SystemTrayHelper.Instance.IsVisible)
+            Helpers.SystemTrayHelper.Instance.Hide();
+
+        // 关闭悬浮窗释放 SMTC 监听
+        if (Toolbox.Tools.Views.MusicFloatWindow.Instance.IsLoaded)
+            Toolbox.Tools.Views.MusicFloatWindow.Instance.Close();
+
+        Application.Current.Shutdown();
     }
 
     // --- 标题栏按钮事件 ---

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj": {}
+    "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj": {}
   },
   "projects": {
-    "d:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj": {
+    "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj",
+        "projectUniqueName": "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj",
         "projectName": "Toolbox.Core",
-        "projectPath": "d:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj",
+        "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj",
         "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-        "outputPath": "d:\\Agent Space\\Toolbox\\Toolbox.Core\\obj\\",
+        "outputPath": "D:\\Agent Space\\Toolbox\\Toolbox.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -77,21 +77,16 @@
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.312/PortableRuntimeIdentifierGraph.json"
         }
-      },
-      "runtimes": {
-        "win-x64": {
-          "#import": []
-        }
       }
     },
-    "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj": {
+    "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
+        "projectUniqueName": "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
         "projectName": "Toolbox.Plugins",
-        "projectPath": "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
+        "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
         "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-        "outputPath": "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\obj\\",
+        "outputPath": "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -110,8 +105,8 @@
           "net9.0-windows10.0.19041": {
             "targetAlias": "net9.0-windows10.0.19041.0",
             "projectReferences": {
-              "d:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj": {
-                "projectPath": "d:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj"
+              "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj": {
+                "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj"
               }
             }
           }
@@ -166,11 +161,6 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.312/PortableRuntimeIdentifierGraph.json"
-        }
-      },
-      "runtimes": {
-        "win-x64": {
-          "#import": []
         }
       }
     }

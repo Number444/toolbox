@@ -1,11 +1,14 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Views;
 using Xunit;
+using Toolbox.Core.Services;
 
 namespace Toolbox.Tests;
 
@@ -526,6 +529,13 @@ public class NeteaseMusicToolTests
     }
 
     [Fact]
+    public void MusicFloatWindow_SizeMode_DefaultsToLarge()
+    {
+        var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+        Assert.Equal(Toolbox.Tools.Views.FloatSizeMode.Large, window.SizeMode);
+    }
+
+    [Fact]
     public void LoadCoverFromData_ReturnsNullImage_WhenDataIsEmpty()
     {
         Exception? threadException = null;
@@ -551,5 +561,332 @@ public class NeteaseMusicToolTests
         if (threadException != null)
             throw new InvalidOperationException(
                 $"STA thread test failed: {threadException.Message}", threadException);
+    }
+
+    [Fact]
+    public void NeteaseMusicTool_OpenButton_Click_ShowsWindow()
+    {
+        Exception? threadException = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                // 重置单例以避免前序测试的实例跨线程访问
+                Toolbox.Tools.Views.MusicFloatWindow.ForceResetInstance();
+                var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+                Assert.False(window.IsLoaded);
+                window.Show();
+                Assert.True(window.IsVisible);
+                window.Close();
+            }
+            catch (Exception ex) { threadException = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+    }
+
+    [Fact]
+    public void MusicFloatWindow_OnClosed_ResetsSingleton()
+    {
+        Exception? threadException = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                // 重置单例以避免前序测试的实例跨线程访问
+                Toolbox.Tools.Views.MusicFloatWindow.ForceResetInstance();
+                var firstRef = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+                firstRef.Close();
+                // 关闭后单例应被重置，第二次获取应返回新实例
+                var secondRef = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+                Assert.NotSame(firstRef, secondRef);
+                secondRef.Close();
+            }
+            catch (Exception ex) { threadException = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+    }
+
+    // ── Task 1: SizeMode 切换与 EnsureChildInPanel 修复 ──────
+
+    /// <summary>
+    /// 验证 Large→Compact→Large 切换过程不抛出异常。
+    /// 回归场景：切换回 Large 时 EnsureChildInPanel 遇到 Border 父容器会崩溃。
+    /// </summary>
+    [Fact]
+    public void MusicFloatWindow_SizeMode_ToggleLargeToCompactToLarge_NoException()
+    {
+        Exception? threadException = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                Toolbox.Tools.Views.MusicFloatWindow.ForceResetInstance();
+                var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+                window.Show();
+
+                // 切换到紧凑模式
+                window.SizeMode = FloatSizeMode.Compact;
+                // 再切换回大模式
+                window.SizeMode = FloatSizeMode.Large;
+
+                window.Close();
+            }
+            catch (Exception ex) { threadException = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+    }
+
+    /// <summary>
+    /// 验证 EnsureChildInPanel 能够处理父容器为 Border (Decorator) 的情况。
+    /// 创建 Border 作为 child 的父容器，再调用 EnsureChildInPanel 将其迁移到 Panel。
+    /// </summary>
+    [Fact]
+    public void EnsureChildInPanel_WithBorderParent_MovesChildToPanel()
+    {
+        Exception? threadException = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var border = new Border();
+                var panel = new StackPanel();
+                var child = new TextBlock { Text = "Test" };
+
+                // 将 child 放入 Border.Child（模拟 CompactCoverSlot 场景）
+                border.Child = child;
+
+                // 验证 child 当前父容器是 Border
+                var parentBefore = System.Windows.Media.VisualTreeHelper.GetParent(child);
+                Assert.IsType<Border>(parentBefore);
+
+                // 通过反射调用私有的 EnsureChildInPanel 方法
+                var method = typeof(MusicFloatWindow).GetMethod("EnsureChildInPanel",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                Assert.NotNull(method);
+
+                method.Invoke(null, [panel, child]);
+
+                // 验证 child 已被移到 panel
+                Assert.Same(panel, System.Windows.Media.VisualTreeHelper.GetParent(child));
+                Assert.True(panel.Children.Contains(child), "Child should be in panel.Children");
+                // 验证 Border.Child 已被置空
+                Assert.Null(border.Child);
+            }
+            catch (Exception ex) { threadException = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+    }
+
+    // ── Task 2: 紧凑模式右侧布局列宽交换 ──────────────────────
+// Step 1: 先写测试验证。
+
+    [Fact]
+    public void MusicFloatWindow_CompactMode_RightSide_ColumnWidthsSwapped()
+    {
+        Exception? exception = null;
+        GridLength? col0Width = null;
+        GridLength? col1Width = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                MusicFloatWindow.ForceResetInstance();
+                var window = MusicFloatWindow.Instance;
+                window.Show();
+                window.Left = 1400;
+                window.SizeMode = FloatSizeMode.Compact;
+                var field = typeof(MusicFloatWindow)
+                    .GetField("LayoutCompact",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                if (field?.GetValue(window) is Grid layoutCompact)
+                {
+                    col0Width = layoutCompact.ColumnDefinitions[0].Width;
+                    col1Width = layoutCompact.ColumnDefinitions[1].Width;
+                }
+            }
+            catch (Exception ex) { exception = ex; }
+            finally
+            {
+                if (MusicFloatWindow.Instance.IsLoaded)
+                    MusicFloatWindow.Instance.Close();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        Assert.Null(exception);
+        Assert.NotNull(col0Width);
+        Assert.NotNull(col1Width);
+        Assert.Equal(GridUnitType.Star, col0Width!.Value.GridUnitType);
+        Assert.Equal(GridUnitType.Auto, col1Width!.Value.GridUnitType);
+    }
+
+    [Fact]
+    public void MusicFloatWindow_CompactMode_LeftSide_ColumnWidthsDefault()
+    {
+        Exception? exception = null;
+        GridLength? col0Width = null;
+        GridLength? col1Width = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                MusicFloatWindow.ForceResetInstance();
+                var window = MusicFloatWindow.Instance;
+                window.Show();
+                window.Left = 400;
+                window.SizeMode = FloatSizeMode.Compact;
+                var field = typeof(MusicFloatWindow)
+                    .GetField("LayoutCompact",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                if (field?.GetValue(window) is Grid layoutCompact)
+                {
+                    col0Width = layoutCompact.ColumnDefinitions[0].Width;
+                    col1Width = layoutCompact.ColumnDefinitions[1].Width;
+                }
+            }
+            catch (Exception ex) { exception = ex; }
+            finally
+            {
+                if (MusicFloatWindow.Instance.IsLoaded)
+                    MusicFloatWindow.Instance.Close();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        Assert.Null(exception);
+        Assert.NotNull(col0Width);
+        Assert.NotNull(col1Width);
+        // 左侧时应该是默认：列0=Auto（封面），列1=*（文本）
+        Assert.Equal(GridUnitType.Auto, col0Width!.Value.GridUnitType);
+        Assert.Equal(GridUnitType.Star, col1Width!.Value.GridUnitType);
+    }
+
+    // ── Task 3: 按钮默认颜色（绿色强调色）────────────────────────
+
+    /// <summary>
+    /// 验证 btnClose 和 toggleBtn 的 Background 不是 Transparent，
+    /// 修复后应使用全局默认样式（AccentBrush #76B580）。
+    /// </summary>
+    [Fact]
+    public void NeteaseMusicTool_CloseAndToggleButton_BackgroundIsNotTransparent()
+    {
+        Exception? threadException = null;
+        Color? btnCloseBg = null;
+        Color? toggleBtnBg = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var tool = new Toolbox.Tools.NeteaseMusicTool();
+                var content = tool.CreateContent() as StackPanel;
+                Assert.NotNull(content);
+
+                // 获取 btnClose（第二个 Button，root.Children[1]）
+                var btnClose = Assert.IsType<Button>(content.Children[1]);
+                // 获取 toggleBtn（在 sizeRow 中，sizeRow 是 root.Children[4]）
+                var sizeRow = Assert.IsType<Grid>(content.Children[4]);
+                var toggleBtn = Assert.IsType<Button>(sizeRow.Children[1]);
+
+                btnCloseBg = (btnClose.Background as SolidColorBrush)?.Color;
+                toggleBtnBg = (toggleBtn.Background as SolidColorBrush)?.Color;
+            }
+            catch (Exception ex) { threadException = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+
+        Assert.NotNull(btnCloseBg);
+        Assert.NotNull(toggleBtnBg);
+        Assert.NotEqual(Colors.Transparent, btnCloseBg!.Value);
+        Assert.NotEqual(Colors.Transparent, toggleBtnBg!.Value);
+    }
+
+    // ── Task 4: 紧凑模式歌名宽度不随 Canvas 缩小 ──────────────────
+
+    [Fact]
+    public void MusicFloatWindow_CompactMode_SongTitleWidth_MatchesCanvasWidth()
+    {
+        // 验证紧凑模式下 SongTitle.Width 应等于 Canvas 可用宽度(≈98)，而非 220
+        Exception? exception = null;
+        double? titleWidth = null;
+        double? canvasWidth = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                MusicFloatWindow.ForceResetInstance();
+                var window = MusicFloatWindow.Instance;
+                window.Show();
+                window.SizeMode = FloatSizeMode.Compact;
+
+                var titleField = typeof(MusicFloatWindow)
+                    .GetField("SongTitle",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                var canvasField = typeof(MusicFloatWindow)
+                    .GetField("TitleCanvas",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+
+                if (titleField?.GetValue(window) is TextBlock songTitle)
+                {
+                    titleWidth = songTitle.Width;
+                }
+                if (canvasField?.GetValue(window) is Canvas titleCanvas)
+                {
+                    canvasWidth = titleCanvas.Width;
+                }
+            }
+            catch (Exception ex) { exception = ex; }
+            finally
+            {
+                if (MusicFloatWindow.Instance.IsLoaded)
+                    MusicFloatWindow.Instance.Close();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(exception);
+        Assert.NotNull(titleWidth);
+        Assert.NotNull(canvasWidth);
+
+        // 紧凑模式：SongTitle.Width 应 ≈ Canvas.Width，而不是 220
+        Assert.Equal(canvasWidth!.Value, titleWidth!.Value, 1);
+        Assert.NotEqual(220.0, titleWidth!.Value);
     }
 }

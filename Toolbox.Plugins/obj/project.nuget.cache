@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "0SUbpkw9ZIA=",
+  "dgSpecHash": "ERcxTSrY0Ds=",
   "success": true,
-  "projectFilePath": "d:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
+  "projectFilePath": "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.win32.systemevents\\6.0.0\\microsoft.win32.systemevents.6.0.0.nupkg.sha512",
     "C:\\Users\\Administrator\\.nuget\\packages\\qrcoder\\1.8.0\\qrcoder.1.8.0.nupkg.sha512",

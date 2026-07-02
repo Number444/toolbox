@@ -29,3 +29,6 @@ D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\refint\Toolbox.dll
 D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.pdb
 D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.genruntimeconfig.cache
 D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\ref\Toolbox.dll
+D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.sourcelink.json
+D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\Views\SettingsView.g.cs
+D:\Agent Space\Toolbox\obj\Debug\net9.0-windows10.0.19041.0\Views\SettingsView.baml

@@ -473,6 +473,23 @@
           "build/net6.0/xunit.runner.visualstudio.props": {}
         }
       },
+      "Toolbox/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "dependencies": {
+          "Toolbox.Core": "1.0.0",
+          "Toolbox.Plugins": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/Toolbox.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/Toolbox.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App"
+        ]
+      },
       "Toolbox.Core/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v9.0",
@@ -1050,6 +1067,11 @@
         "xunit.runner.visualstudio.nuspec"
       ]
     },
+    "Toolbox/1.0.0": {
+      "type": "project",
+      "path": "../Toolbox.csproj",
+      "msbuildProject": "../Toolbox.csproj"
+    },
     "Toolbox.Core/1.0.0": {
       "type": "project",
       "path": "../Toolbox.Core/Toolbox.Core.csproj",
@@ -1064,6 +1086,7 @@
   "projectFileDependencyGroups": {
     "net9.0-windows10.0.19041": [
       "Microsoft.NET.Test.Sdk >= 17.11.0",
+      "Toolbox >= 1.0.0",
       "Toolbox.Core >= 1.0.0",
       "Toolbox.Plugins >= 1.0.0",
       "xunit >= 2.9.0",
@@ -1102,6 +1125,9 @@
           "projectReferences": {
             "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj": {
               "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.Core\\Toolbox.Core.csproj"
+            },
+            "D:\\Agent Space\\Toolbox\\Toolbox.csproj": {
+              "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.csproj"
             },
             "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj": {
               "projectPath": "D:\\Agent Space\\Toolbox\\Toolbox.Plugins\\Toolbox.Plugins.csproj"

@@ -18,77 +18,94 @@
                     Opacity="1"
                     Margin="0">
 
-            <!-- 封面 + DropShadowEffect（Effect 在 Border 上，Clip 在 Image 上，两者分离避免分层窗口下的渲染冲突） -->
-            <Grid x:Name="CoverGrid" Width="180" Height="180"
-                  HorizontalAlignment="Center"
-                  Margin="12,12,12,0">
-                <Border x:Name="CoverContainer"
-                        CornerRadius="10">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="15"
-                                          ShadowDepth="4"
-                                          Opacity="0.5"
-                                          Color="Black" />
-                    </Border.Effect>
-                    <Grid>
-                        <Grid.Clip>
-                            <RectangleGeometry RadiusX="10" RadiusY="10"
-                                Rect="0,0,180,180" />
-                        </Grid.Clip>
-                        <!-- CoverImageBack 承载旧封面，交叉淡入期间可见 -->
-                        <Image x:Name="CoverImageBack"
-                               Stretch="UniformToFill" />
-                        <!-- CoverImage 承载新封面，Opactiy 动画 0→1 实现淡入 -->
-                        <Image x:Name="CoverImage"
-                               Stretch="UniformToFill" />
-                    </Grid>
-                </Border>
-            </Grid>
+            <!-- 形态 A：大模式（原样，默认可见） -->
+            <StackPanel x:Name="LayoutLarge" Visibility="Visible">
 
-            <!-- 歌曲标题（支持超长歌名自动缓慢滚动） -->
-            <Canvas x:Name="TitleCanvas"
-                    Width="220"
-                    Height="24"
-                    ClipToBounds="True"
-                    HorizontalAlignment="Center"
-                    Margin="12,8,12,0">
-                <TextBlock x:Name="SongTitle"
-                           Text="未在播放"
-                           Foreground="#FFFFFF"
-                           FontSize="15"
-                           FontWeight="Bold"
-                           TextTrimming="None"
-                           VerticalAlignment="Center"
+                <!-- 封面 + DropShadowEffect -->
+                <Grid x:Name="CoverGrid" Width="180" Height="180"
+                      HorizontalAlignment="Center"
+                      Margin="12,12,12,0">
+                    <Border x:Name="CoverContainer"
+                            CornerRadius="10">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="15"
+                                              ShadowDepth="4"
+                                              Opacity="0.5"
+                                              Color="Black" />
+                        </Border.Effect>
+                        <Grid x:Name="CoverClipContainer">
+                            <Grid.Clip>
+                                <RectangleGeometry RadiusX="10" RadiusY="10"
+                                    Rect="0,0,180,180" />
+                            </Grid.Clip>
+                            <!-- CoverImageBack 承载旧封面，交叉淡入期间可见 -->
+                            <Image x:Name="CoverImageBack"
+                                   Stretch="UniformToFill" />
+                            <!-- CoverImage 承载新封面，Opactiy 动画 0→1 实现淡入 -->
+                            <Image x:Name="CoverImage"
+                                   Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- 歌曲标题（支持超长歌名自动缓慢滚动） -->
+                <Canvas x:Name="TitleCanvas"
+                        Width="220"
+                        Height="24"
+                        ClipToBounds="True"
+                        HorizontalAlignment="Center"
+                        Margin="12,8,12,0">
+                    <TextBlock x:Name="SongTitle"
+                               Text="未在播放"
+                               Foreground="#FFFFFF"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               TextTrimming="None"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center"
+                               Height="24"
+                               Width="220">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="TitleTranslate" X="0" />
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Effect>
+                            <DropShadowEffect BlurRadius="6"
+                                ShadowDepth="1"
+                                Opacity="0.6"
+                                Color="Black" />
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Canvas>
+
+                <!-- 歌手 -->
+                <TextBlock x:Name="SongArtist"
+                           Text="—"
+                           Foreground="#CCCCCC"
+                           FontSize="12"
                            TextAlignment="Center"
-                           Height="24"
-                           Width="220">
-                    <TextBlock.RenderTransform>
-                        <TranslateTransform x:Name="TitleTranslate" X="0" />
-                    </TextBlock.RenderTransform>
+                           TextTrimming="CharacterEllipsis"
+                           Margin="12,2,12,12">
                     <TextBlock.Effect>
-                        <DropShadowEffect BlurRadius="6"
+                        <DropShadowEffect BlurRadius="5"
                             ShadowDepth="1"
-                            Opacity="0.6"
+                            Opacity="0.5"
                             Color="Black" />
                     </TextBlock.Effect>
                 </TextBlock>
-            </Canvas>
 
-            <!-- 歌手 -->
-            <TextBlock x:Name="SongArtist"
-                       Text="—"
-                       Foreground="#CCCCCC"
-                       FontSize="12"
-                       TextAlignment="Center"
-                       TextTrimming="CharacterEllipsis"
-                       Margin="12,2,12,12">
-                <TextBlock.Effect>
-                    <DropShadowEffect BlurRadius="5"
-                        ShadowDepth="1"
-                        Opacity="0.5"
-                        Color="Black" />
-                </TextBlock.Effect>
-            </TextBlock>
+            </StackPanel>
+
+            <!-- 形态 B：紧凑模式（新增骨架，默认隐藏） -->
+            <Grid x:Name="LayoutCompact" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="CompactCoverSlot" Grid.Column="0"/>
+                <StackPanel x:Name="CompactTextSlot" Grid.Column="1"
+                            VerticalAlignment="Center"/>
+            </Grid>
+
         </StackPanel>
     </Grid>
 </Window>

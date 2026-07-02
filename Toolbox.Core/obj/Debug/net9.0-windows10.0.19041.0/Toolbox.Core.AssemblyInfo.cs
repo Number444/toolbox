@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("Toolbox.Tests")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("Toolbox.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+821e93ec0410c461c789817a81169b764037c9da")]
 [assembly: System.Reflection.AssemblyProductAttribute("Toolbox.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Toolbox.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

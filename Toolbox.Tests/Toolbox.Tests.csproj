@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Toolbox.Core\Toolbox.Core.csproj" />
     <ProjectReference Include="..\Toolbox.Plugins\Toolbox.Plugins.csproj" />
+    <ProjectReference Include="..\Toolbox.csproj" />
   </ItemGroup>
 
   <ItemGroup>

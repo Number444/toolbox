@@ -9,6 +9,7 @@
       "Toolbox.Tests/1.0.0": {
         "dependencies": {
           "Microsoft.NET.Test.Sdk": "17.11.0",
+          "Toolbox": "1.0.0",
           "Toolbox.Core": "1.0.0",
           "Toolbox.Plugins": "1.0.0",
           "xunit": "2.9.0",
@@ -370,6 +371,18 @@
         }
       },
       "xunit.runner.visualstudio/2.8.2": {},
+      "Toolbox/1.0.0": {
+        "dependencies": {
+          "Toolbox.Core": "1.0.0",
+          "Toolbox.Plugins": "1.0.0"
+        },
+        "runtime": {
+          "Toolbox.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
       "Toolbox.Core/1.0.0": {
         "runtime": {
           "Toolbox.Core.dll": {
@@ -521,6 +534,11 @@
       "sha512": "sha512-vm1tbfXhFmjFMUmS4M0J0ASXz3/U5XvXBa6DOQUL3fEz4Vt6YPhv+ESCarx6M6D+9kJkJYZKCNvJMas1+nVfmQ==",
       "path": "xunit.runner.visualstudio/2.8.2",
       "hashPath": "xunit.runner.visualstudio.2.8.2.nupkg.sha512"
+    },
+    "Toolbox/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     },
     "Toolbox.Core/1.0.0": {
       "type": "project",

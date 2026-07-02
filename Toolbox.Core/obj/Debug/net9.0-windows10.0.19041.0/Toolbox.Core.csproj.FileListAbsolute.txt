@@ -9,3 +9,4 @@ D:\Agent Space\Toolbox\Toolbox.Core\obj\Debug\net9.0-windows10.0.19041.0\Toolbox
 D:\Agent Space\Toolbox\Toolbox.Core\obj\Debug\net9.0-windows10.0.19041.0\refint\Toolbox.Core.dll
 D:\Agent Space\Toolbox\Toolbox.Core\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Core.pdb
 D:\Agent Space\Toolbox\Toolbox.Core\obj\Debug\net9.0-windows10.0.19041.0\ref\Toolbox.Core.dll
+D:\Agent Space\Toolbox\Toolbox.Core\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Core.sourcelink.json

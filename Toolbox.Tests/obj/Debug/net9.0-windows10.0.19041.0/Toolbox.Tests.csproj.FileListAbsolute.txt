@@ -104,3 +104,9 @@ D:\Agent Space\Toolbox\Toolbox.Tests\obj\Debug\net9.0-windows10.0.19041.0\refint
 D:\Agent Space\Toolbox\Toolbox.Tests\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Tests.pdb
 D:\Agent Space\Toolbox\Toolbox.Tests\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Tests.genruntimeconfig.cache
 D:\Agent Space\Toolbox\Toolbox.Tests\obj\Debug\net9.0-windows10.0.19041.0\ref\Toolbox.Tests.dll
+D:\Agent Space\Toolbox\Toolbox.Tests\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Tests.sourcelink.json
+D:\Agent Space\Toolbox\Toolbox.Tests\bin\Debug\net9.0-windows10.0.19041.0\Toolbox.deps.json
+D:\Agent Space\Toolbox\Toolbox.Tests\bin\Debug\net9.0-windows10.0.19041.0\Toolbox.runtimeconfig.json
+D:\Agent Space\Toolbox\Toolbox.Tests\bin\Debug\net9.0-windows10.0.19041.0\Toolbox.exe
+D:\Agent Space\Toolbox\Toolbox.Tests\bin\Debug\net9.0-windows10.0.19041.0\Toolbox.dll
+D:\Agent Space\Toolbox\Toolbox.Tests\bin\Debug\net9.0-windows10.0.19041.0\Toolbox.pdb

@@ -20,3 +20,4 @@ D:\Agent Space\Toolbox\Toolbox.Plugins\obj\Debug\net9.0-windows10.0.19041.0\Tool
 D:\Agent Space\Toolbox\Toolbox.Plugins\obj\Debug\net9.0-windows10.0.19041.0\refint\Toolbox.Plugins.dll
 D:\Agent Space\Toolbox\Toolbox.Plugins\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Plugins.pdb
 D:\Agent Space\Toolbox\Toolbox.Plugins\obj\Debug\net9.0-windows10.0.19041.0\ref\Toolbox.Plugins.dll
+D:\Agent Space\Toolbox\Toolbox.Plugins\obj\Debug\net9.0-windows10.0.19041.0\Toolbox.Plugins.sourcelink.json
