@@ -78,4 +78,29 @@ public static class Win32Helper
         };
         _ = DwmExtendFrameIntoClientArea(hwnd, ref margins);
     }
+
+    // ---- 单实例互斥锁辅助 API ----
+
+    public const int SW_RESTORE = 9;
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>通过窗口标题查找已运行的实例</summary>
+    public static IntPtr FindWindowByTitle(string title)
+    {
+        return FindWindow(null, title);
+    }
 }

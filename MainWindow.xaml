@@ -385,7 +385,9 @@
                             Grid.ColumnSpan="2"
                             Background="{StaticResource BgCardBrush}"
                             Visibility="Collapsed">
-                        <local:SettingsView x:Name="SettingsViewControl"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <local:SettingsView x:Name="SettingsViewControl"/>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
             </Border>

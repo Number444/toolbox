@@ -44,6 +44,14 @@
                            Foreground="{StaticResource TextSecondaryBrush}"
                            TextWrapping="Wrap"/>
 
+                <!-- 启动时自动打开悬浮窗 -->
+                <CheckBox x:Name="AutoOpenCheckBox"
+                          Content="启动时自动打开悬浮窗"
+                          IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=AutoOpenFloatWindow, Mode=TwoWay}"
+                          FontSize="14"
+                          Foreground="{StaticResource TextPrimaryBrush}"
+                          Margin="0,16,0,0"/>
+
                 <!-- 悬浮窗默认大小 -->
                 <WrapPanel Margin="0,16,0,0">
                     <TextBlock Text="悬浮窗默认大小："

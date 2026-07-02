@@ -44,6 +44,18 @@ public partial class MainWindow : Window
 
             // 设置页返回事件
             SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
+
+            // 启动时自动打开悬浮窗
+            if (AppSettings.Instance.AutoOpenFloatWindow)
+            {
+                var w = Toolbox.Tools.Views.MusicFloatWindow.Instance;
+                var savedMode = AppSettings.Instance.MusicFloatSizeMode;
+                w.SizeMode = savedMode == "Compact"
+                    ? Toolbox.Tools.Views.FloatSizeMode.Compact
+                    : Toolbox.Tools.Views.FloatSizeMode.Large;
+                Dispatcher.BeginInvoke(new Action(() => w.Show()),
+                    System.Windows.Threading.DispatcherPriority.Background);
+            }
         };
 
         // 窗口状态变更时更新最大化/还原图标

@@ -40,6 +40,19 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _autoOpenFloatWindow;
+    public bool AutoOpenFloatWindow
+    {
+        get => _autoOpenFloatWindow;
+        set
+        {
+            if (_autoOpenFloatWindow == value) return;
+            _autoOpenFloatWindow = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     public AppSettings() : this(
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox"))
     { }
@@ -65,6 +78,9 @@ public sealed class AppSettings : INotifyPropertyChanged
                 _minimizeOnClose = data.MinimizeOnClose;
                 OnPropertyChanged(nameof(MinimizeOnClose));
 
+                _autoOpenFloatWindow = data.AutoOpenFloatWindow;
+                OnPropertyChanged(nameof(AutoOpenFloatWindow));
+
                 if (!string.IsNullOrEmpty(data.MusicFloatSizeMode))
                 {
                     _musicFloatSizeMode = data.MusicFloatSizeMode;
@@ -80,6 +96,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         var data = new SettingsData
         {
             MinimizeOnClose = _minimizeOnClose,
+            AutoOpenFloatWindow = _autoOpenFloatWindow,
             MusicFloatSizeMode = _musicFloatSizeMode
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
@@ -94,6 +111,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private sealed class SettingsData
     {
         public bool MinimizeOnClose { get; set; }
+        public bool AutoOpenFloatWindow { get; set; }
         public string? MusicFloatSizeMode { get; set; }
     }
 }
