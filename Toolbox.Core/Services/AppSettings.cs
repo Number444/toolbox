@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Win32;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -53,6 +54,39 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _autoStart;
+    public bool AutoStart
+    {
+        get => _autoStart;
+        set
+        {
+            if (_autoStart == value) return;
+            _autoStart = value;
+            OnPropertyChanged();
+            Save();
+            SetStartupRegistry(value);
+        }
+    }
+
+    private static void SetStartupRegistry(bool enable)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(
+            @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+        if (key == null) return;
+
+        if (enable)
+        {
+            var exePath = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exePath))
+                key.SetValue("Toolbox", $"\"{exePath}\"");
+        }
+        else
+        {
+            if (key.GetValue("Toolbox") != null)
+                key.DeleteValue("Toolbox", false);
+        }
+    }
+
     public AppSettings() : this(
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox"))
     { }
@@ -86,6 +120,9 @@ public sealed class AppSettings : INotifyPropertyChanged
                     _musicFloatSizeMode = data.MusicFloatSizeMode;
                     OnPropertyChanged(nameof(MusicFloatSizeMode));
                 }
+
+                _autoStart = data.AutoStart;
+                OnPropertyChanged(nameof(AutoStart));
             }
         }
         catch { /* 文件损坏，忽略，保留默认值 */ }
@@ -97,7 +134,8 @@ public sealed class AppSettings : INotifyPropertyChanged
         {
             MinimizeOnClose = _minimizeOnClose,
             AutoOpenFloatWindow = _autoOpenFloatWindow,
-            MusicFloatSizeMode = _musicFloatSizeMode
+            MusicFloatSizeMode = _musicFloatSizeMode,
+            AutoStart = _autoStart
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(SettingsPath, json);
@@ -113,5 +151,6 @@ public sealed class AppSettings : INotifyPropertyChanged
         public bool MinimizeOnClose { get; set; }
         public bool AutoOpenFloatWindow { get; set; }
         public string? MusicFloatSizeMode { get; set; }
+        public bool AutoStart { get; set; }
     }
 }

@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using Toolbox.Models;
 using Toolbox.Core.Services;
 using Toolbox.Tools.Views;
@@ -10,121 +9,115 @@ namespace Toolbox.Tools;
 
 /// <summary>
 /// Toolbox 插件——网易云音乐实时信息悬浮窗。
-/// 通过 Windows SMTC API 监听网易云音乐播放状态，
-/// 在桌面左侧创建置顶悬浮窗显示歌曲信息和播放控制。
+/// UI 布局：左侧胶囊开关控制开/关，右侧带图标的药丸按钮显示并切换模式名。
 /// </summary>
 public class NeteaseMusicTool : ITool
 {
     public string Name => "网易云音乐悬浮窗";
     public string Description => "读取网易云音乐实时播放信息并在左侧显示悬浮窗";
-    public string IconGlyph => "\u266B"; // ♫ 音符图标
+    public string IconGlyph => "\u266B";
     public string Category => ToolCategory.Media;
 
-    /// <summary>
-    /// 创建工具的 UI 面板。卡片布局：打开/关闭按钮 + 形态选择。
-    /// </summary>
     public UIElement CreateContent()
     {
         var root = new StackPanel { Margin = new Thickness(8) };
 
-        // ── 打开/关闭按钮行 ──
-        var btnOpen = new Button
+        // 主行：胶囊开关 | 文字说明 | 模式切换按钮
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // ├─ 胶囊复选框（纯开关）
+        var capsuleToggle = new CheckBox
         {
-            Content = "打开悬浮窗",
-            Height = 36,
-            Margin = new Thickness(0, 4, 0, 4)
+            Style = FindResourceStyle("CapsuleToggleStyle", null),
+            VerticalAlignment = VerticalAlignment.Center
         };
-        btnOpen.Click += (s, e) =>
+
+        // ├─ 文字说明：悬浮窗
+        var label = new TextBlock
         {
-            var w = Views.MusicFloatWindow.Instance;
+            Text = "悬浮窗",
+            FontSize = 13,
+            Foreground = FindResourceBrush("TextSecondaryBrush", Brushes.Gray),
+            VerticalAlignment = VerticalAlignment.Center
+        };
 
-            // 加载保存的悬浮窗大小设置
+        // └─ 模式切换按钮（图标 + 文字）
+        var modeBtn = new Button
+        {
+            Style = FindResourceStyle("ModeBtnStyle", null),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        // ── 用 TextBlock + Run 构建带切换图标的文本内容 ──
+        TextBlock BuildModeContent(string modeName)
+        {
+            return new TextBlock(new System.Windows.Documents.Run($"⇄ {modeName}"));
+        }
+
+        bool isUpdating = false;
+
+        void UpdateUI()
+        {
+            isUpdating = true;
+            var w = MusicFloatWindow.Instance;
+            capsuleToggle.IsChecked = w.IsVisible;
+            var mode = AppSettings.Instance.MusicFloatSizeMode;
+            var modeName = mode == "Compact" ? "紧凑模式" : "大模式";
+            modeBtn.Content = BuildModeContent(modeName);
+            isUpdating = false;
+        }
+
+        // 胶囊开关 → 打开/关闭悬浮窗
+        capsuleToggle.Checked += (s, e) =>
+        {
+            if (isUpdating) return;
+            var w = MusicFloatWindow.Instance;
             var savedMode = AppSettings.Instance.MusicFloatSizeMode;
-            if (savedMode == "Compact")
-                w.SizeMode = FloatSizeMode.Compact;
-            else
-                w.SizeMode = FloatSizeMode.Large;
-
+            w.SizeMode = savedMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
             w.Show();
         };
 
-        var btnClose = new Button
+        capsuleToggle.Unchecked += (s, e) =>
         {
-            Content = "关闭悬浮窗",
-            Height = 36,
-            Margin = new Thickness(0, 4, 0, 4),
-            BorderBrush = FindResourceBrush("BorderSubtleBrush", Brushes.Gray),
-            BorderThickness = new Thickness(1)
+            if (isUpdating) return;
+            MusicFloatWindow.Instance.Hide();
         };
-        btnClose.Click += (s, e) => Views.MusicFloatWindow.Instance.Hide();
 
-        root.Children.Add(btnOpen);
-        root.Children.Add(btnClose);
+        // 模式按钮 → 切换大小模式
+        modeBtn.Click += (s, e) =>
+        {
+            var currentMode = AppSettings.Instance.MusicFloatSizeMode;
+            var newMode = currentMode == "Compact" ? "Large" : "Compact";
+            AppSettings.Instance.MusicFloatSizeMode = newMode;
 
-        // ── 分隔线 ──
-        root.Children.Add(new Rectangle
-        {
-            Height = 1,
-            Fill = FindResourceBrush("BorderSubtleBrush", Brushes.LightGray),
-            Margin = new Thickness(0, 8, 0, 8)
-        });
-
-        // ── 显示形态选择 ──
-        var sizeLabel = new TextBlock
-        {
-            Text = "显示形态",
-            FontSize = 13,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = FindResourceBrush("TextSecondaryBrush", Brushes.Gray),
-            Margin = new Thickness(0, 0, 0, 6)
-        };
-        root.Children.Add(sizeLabel);
-
-        var isCompact = AppSettings.Instance.MusicFloatSizeMode == "Compact";
-        var sizeStatus = new TextBlock
-        {
-            Text = isCompact ? "当前：紧凑模式" : "当前：大模式",
-            FontSize = 13,
-            Foreground = FindResourceBrush("TextPrimaryBrush", Brushes.Black),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        var toggleBtn = new Button
-        {
-            Content = "切换大小",
-            Height = 32,
-            Padding = new Thickness(12, 0, 12, 0),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            BorderBrush = FindResourceBrush("BorderSubtleBrush", Brushes.Gray),
-            BorderThickness = new Thickness(1)
-        };
-        toggleBtn.Click += (s, e) =>
-        {
-            var w = Views.MusicFloatWindow.Instance;
-            if (!w.IsLoaded)
+            var w = MusicFloatWindow.Instance;
+            if (w.IsLoaded && w.IsVisible)
             {
-                sizeStatus.Text = "请先打开悬浮窗";
-                return;
+                w.SizeMode = newMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
             }
-            var newMode = w.SizeMode == FloatSizeMode.Large
-                ? FloatSizeMode.Compact
-                : FloatSizeMode.Large;
-            w.SizeMode = newMode;
-            sizeStatus.Text = newMode == FloatSizeMode.Large
-                ? "当前：大模式"
-                : "当前：紧凑模式";
 
-            // 保存设置
-            AppSettings.Instance.MusicFloatSizeMode = newMode == FloatSizeMode.Large ? "Large" : "Compact";
+            UpdateUI();
         };
 
-        var sizeRow = new Grid();
-        sizeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        sizeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        sizeStatus.SetValue(Grid.ColumnProperty, 0);
-        toggleBtn.SetValue(Grid.ColumnProperty, 1);
-        sizeRow.Children.Add(sizeStatus);
-        sizeRow.Children.Add(toggleBtn);
-        root.Children.Add(sizeRow);
+        // 组装
+        row.Children.Add(capsuleToggle);
+        Grid.SetColumn(capsuleToggle, 0);
+        row.Children.Add(new Grid { Width = 8 });
+        Grid.SetColumn(row.Children[^1] as Grid, 1);
+        row.Children.Add(label);
+        Grid.SetColumn(label, 2);
+        row.Children.Add(new Grid { Width = 8 });
+        Grid.SetColumn(row.Children[^1] as Grid, 3);
+        row.Children.Add(modeBtn);
+        Grid.SetColumn(modeBtn, 4);
+        root.Children.Add(row);
+
+        root.Loaded += (_, _) => UpdateUI();
 
         return root;
     }
@@ -135,6 +128,17 @@ public class NeteaseMusicTool : ITool
         {
             if (Application.Current?.Resources[key] is Brush brush)
                 return brush;
+        }
+        catch { }
+        return fallback;
+    }
+
+    private static Style? FindResourceStyle(string key, Style? fallback)
+    {
+        try
+        {
+            if (Application.Current?.Resources[key] is Style style)
+                return style;
         }
         catch { }
         return fallback;

@@ -34,10 +34,9 @@
                 BorderThickness="1">
             <StackPanel>
                 <CheckBox x:Name="MinimizeCheckBox"
+                          Style="{StaticResource ToggleSwitchStyle}"
                           Content="关闭按钮最小化到任务栏"
                           IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=MinimizeOnClose, Mode=TwoWay}"
-                          FontSize="14"
-                          Foreground="{StaticResource TextPrimaryBrush}"
                           Margin="0,0,0,8"/>
                 <TextBlock Text="勾选后点击关闭按钮会将 Toolbox 收入任务栏而非退出程序。"
                            FontSize="12"
@@ -46,10 +45,9 @@
 
                 <!-- 启动时自动打开悬浮窗 -->
                 <CheckBox x:Name="AutoOpenCheckBox"
+                          Style="{StaticResource ToggleSwitchStyle}"
                           Content="启动时自动打开悬浮窗"
                           IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=AutoOpenFloatWindow, Mode=TwoWay}"
-                          FontSize="14"
-                          Foreground="{StaticResource TextPrimaryBrush}"
                           Margin="0,16,0,0"/>
 
                 <!-- 悬浮窗默认大小 -->
@@ -67,6 +65,12 @@
                         <ComboBoxItem Tag="Compact" Content="紧凑模式"/>
                     </ComboBox>
                 </WrapPanel>
+
+                <!-- 开机自启（滑块开关） -->
+                <CheckBox Content="开机自动启动 Toolbox"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=AutoStart, Mode=TwoWay}"
+                          Margin="0,16,0,0"/>
             </StackPanel>
         </Border>
 
