@@ -1,0 +1,13 @@
+<Project>
+
+  <!-- 对 wpftmp 项目：在 CoreCompile 之前移除子项目目录的 .cs 文件和 obj 中已生成的程序集信息 -->
+  <Target Name="_RemoveDuplicateWpftmpCompileItems" BeforeTargets="CoreCompile"
+          Condition="$(MSBuildProjectName.EndsWith('wpftmp'))">
+    <ItemGroup>
+      <Compile Remove="Toolbox.Plugins\**\*.cs" />
+      <Compile Remove="Toolbox.Core\**\*.cs" />
+      <Compile Remove="**\obj\**\*.cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>

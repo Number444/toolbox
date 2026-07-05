@@ -1,0 +1,49 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+.vs/
+*.DotSettings.user
+
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+packages/
+
+## Publish output
+setup/publish/
+**/bin/Publish/
+publish/
+publish_test/
+
+## Build results
+[Dd]ebug[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+*.sln.ide/
+*.sln.ide.workspace
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## Windows
+Thumbs.db
+Desktop.ini
+*.log
+
+## Inno Setup
+setup/*.exe

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <NoWarn>CA1416</NoWarn>
+    <ApplicationIcon>Toolbox.ico</ApplicationIcon>
+    <AppHostDotNetIcon>Toolbox.ico</AppHostDotNetIcon>
+  </PropertyGroup>
+
+  <!-- 移除自动导入的 WinForms/Drawing using，避免与 WPF 类型冲突 -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <!-- 排除子项目目录中的源代码，避免重复编译导致运行时类型冲突 -->
+  <ItemGroup>
+    <Compile Remove="Toolbox.Core\**\*.cs" />
+    <Compile Remove="Toolbox.Plugins\**\*.cs" />
+    <Compile Remove="Toolbox.Tests\**\*.cs" />
+    <Page Remove="Toolbox.Core\**\*.xaml" />
+    <Page Remove="Toolbox.Plugins\**\*.xaml" />
+  </ItemGroup>
+
+  <!-- 但保留子项目的 .xaml 文件可能需要的资源 -->
+  <ItemGroup>
+    <None Remove="Toolbox.Core\**\*.cs" />
+    <None Remove="Toolbox.Plugins\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Toolbox.Core\Toolbox.Core.csproj" />
+    <ProjectReference Include="Toolbox.Plugins\Toolbox.Plugins.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Toolbox.ico" />
+  </ItemGroup>
+
+</Project>
