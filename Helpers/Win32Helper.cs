@@ -71,7 +71,7 @@ public static class Win32Helper
         _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
     }
 
-    // ---- 新增：将 DWM 帧扩展到标题栏区域，使 Mica 透入 ----
+    // ---- 将 DWM 帧扩展到标题栏区域，使 Mica 透入 ----
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmExtendFrameIntoClientArea(
@@ -101,8 +101,7 @@ public static class Win32Helper
         _ = DwmExtendFrameIntoClientArea(hwnd, ref margins);
     }
 
-    // ---- WM_NCCALCSIZE 拦截 —— 消除 WPF 1px GDI 非客户区边界残留 ----
-    // ---- WM_ERASEBKGND 拦截 —— 防止系统绘制默认白色背景 ----
+    // ---- WM_NCCALCSIZE & WM_ERASEBKGND 拦截 ----
 
     private const int WM_NCCALCSIZE = 0x0083;
     private const int WM_ERASEBKGND = 0x0014;
@@ -113,6 +112,7 @@ public static class Win32Helper
     /// 客户区 = 整个窗口。消除 AllowsTransparency=False +
     /// WindowStyle=None + ExtendFrameIntoClientArea(-1) 组合下
     /// 的 1px GDI NC 边界残留（特定机器上表现为白色线条）。
+    /// 同时拦截 WM_ERASEBKGND 阻止系统默认白色背景填充。
     /// </summary>
     public static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -125,7 +125,7 @@ public static class Win32Helper
         if (msg == WM_ERASEBKGND)
         {
             handled = true;
-            return new IntPtr(1); // 告知系统：应用程序已自行处理背景，禁止绘制默认白色
+            return new IntPtr(1);
         }
 
         return IntPtr.Zero;

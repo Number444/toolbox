@@ -28,7 +28,7 @@ public partial class MainWindow : Window
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
             Win32Helper.EnableMicaBackdrop(hwnd);           // 2. Mica 材质
-            Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式（强制深色边框）
+Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式（强制深色边框）
             Win32Helper.SetBorderColor(hwnd);               // 4. 压制 DWM 系统边框绘制
             Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 5. 扩展帧到标题栏
 
