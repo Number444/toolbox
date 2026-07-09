@@ -1,5 +1,6 @@
 using System.Threading;
 using Toolbox.Core.Services;
+using Toolbox.Services;
 
 namespace Toolbox;
 
@@ -26,6 +27,7 @@ public partial class App : System.Windows.Application
 
         base.OnStartup(e);
         AppSettings.Instance.Load();
+        AudioflowSettings.Instance.Load();
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)

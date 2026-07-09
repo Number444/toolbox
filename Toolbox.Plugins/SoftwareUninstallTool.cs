@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using Toolbox.Models;
@@ -16,10 +17,13 @@ namespace Toolbox.Tools;
 public class SoftwareUninstallTool : ITool
 {
     private TextBox? _searchBox;
+    private TextBlock? _placeholderText;
     private ListView? _softwareList;
     private TextBlock? _statusBlock;
     private TextBlock? _errorBlock;
     private Button? _refreshButton;
+    private Button? _sortButton;
+    private SortMode _currentSort = SortMode.InstallDate;
     private readonly ObservableCollection<InstalledSoftware> _allSoftware = new();
     private List<InstalledSoftware> _loadedSoftware = new();
     private readonly HashSet<string> _pendingUninstall = new(StringComparer.OrdinalIgnoreCase);
@@ -42,36 +46,81 @@ public class SoftwareUninstallTool : ITool
     {
         var root = new StackPanel { Margin = new Thickness(8, 8, 0, 0) };
 
-        // 描述文字
+        // 1. 描述文字
         var desc = new TextBlock
         {
             Text = "电脑上所有已安装的软件，双击即可调用其自带的卸载程序。",
             TextWrapping = TextWrapping.Wrap,
             Foreground = new SolidColorBrush(TextSecondary),
-            Margin = new Thickness(0, 0, 0, 12)
+            Margin = new Thickness(0, 15, 0, 12)
         };
+        root.Children.Add(desc);
 
-        // 搜索框
+        // 2. 搜索框（独占一行）
+        var searchContainer = new Grid();
         _searchBox = new TextBox
         {
             Height = 32,
             FontSize = 14,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 8)
+            VerticalContentAlignment = VerticalAlignment.Center
         };
-        _searchBox.TextChanged += OnSearchTextChanged;
 
-        // 错误/信息提示
+        // 搜索框 placeholder 文字
+        _placeholderText = new TextBlock
+        {
+            Text = "搜索软件",
+            Foreground = new SolidColorBrush(TextSecondary),
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+            Margin = new Thickness(10, 0, 0, 0)
+        };
+
+        searchContainer.Children.Add(_searchBox);
+        searchContainer.Children.Add(_placeholderText);
+        root.Children.Add(searchContainer);
+
+        // 3. 操作栏：刷新按钮（左）+ 排序按钮（右），水平排列
+        var actionBar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 11, 0, 0)
+        };
+
+        _refreshButton = new Button
+        {
+            Content = "🔄 刷新列表",
+            FontSize = 13,
+            Padding = new Thickness(8, 4, 8, 4)
+        };
+        _refreshButton.Click += (_, _) => LoadSoftwareListAsync();
+
+        _sortButton = new Button
+        {
+            Style = FindResourceStyle("ModeBtnStyle"),
+            Content = BuildSortButtonContent(),
+            Margin = new Thickness(6, 0, 0, 0)
+        };
+
+        actionBar.Children.Add(_refreshButton);
+        actionBar.Children.Add(_sortButton);
+        Panel.SetZIndex(actionBar, 1);
+        root.Children.Add(actionBar);
+
+        // 4. 错误/信息提示（初始隐藏，出错时才显示）
         _errorBlock = new TextBlock
         {
             Text = "",
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
             Foreground = new SolidColorBrush(Danger),
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 11, 0, 0),
+            Visibility = Visibility.Collapsed
         };
+        root.Children.Add(_errorBlock);
+        Panel.SetZIndex(_errorBlock, 2); // 错误信息显示时需渲染在列表之上
 
-        // 加载提示
+        // 5. 加载提示
         var loadingBlock = new TextBlock
         {
             Text = "正在扫描已安装软件...",
@@ -79,40 +128,41 @@ public class SoftwareUninstallTool : ITool
             Foreground = new SolidColorBrush(TextSecondary),
             Margin = new Thickness(0, 0, 0, 8)
         };
+        root.Children.Add(loadingBlock);
 
-        // 软件列表（GridView 模式 + 深色主题）
+        // 6. 软件列表（GridView 模式 + 深色主题）
         _softwareList = CreateStyledListView();
+        root.Children.Add(_softwareList);
 
-        // 状态栏
+        // 7. 状态栏
         _statusBlock = new TextBlock
         {
             FontSize = 12,
             Foreground = new SolidColorBrush(TextSecondary),
-            Margin = new Thickness(0, 0, 0, 4)
+            Margin = new Thickness(0, 0, 0, 19)
         };
-
-        // 刷新按钮
-        _refreshButton = new Button
-        {
-            Content = "🔄 刷新列表",
-            FontSize = 13,
-            Padding = new Thickness(8, 4, 8, 4),
-            Margin = new Thickness(0, 0, 0, 0)
-        };
-        _refreshButton.Click += (_, _) => LoadSoftwareListAsync();
-
-        root.Children.Add(desc);
-        root.Children.Add(_searchBox);
-        root.Children.Add(_errorBlock);
-        root.Children.Add(loadingBlock);
-        root.Children.Add(_softwareList);
         root.Children.Add(_statusBlock);
-        root.Children.Add(_refreshButton);
+
+        // 事件绑定
+        _searchBox.TextChanged += OnSearchTextChanged;
+        _sortButton.Click += OnSortButtonClick;
 
         // 异步加载（不阻塞 UI）
         LoadSoftwareListAsync(loadingBlock);
 
         return root;
+    }
+
+    private TextBlock BuildSortButtonContent()
+    {
+        return new TextBlock(new Run($"{_currentSort.GetIcon()} {_currentSort.GetLabel()}"));
+    }
+
+    private void OnSortButtonClick(object sender, RoutedEventArgs e)
+    {
+        _currentSort = _currentSort.Next();
+        _sortButton!.Content = BuildSortButtonContent();
+        ApplySort();
     }
 
     /// <summary>
@@ -122,7 +172,7 @@ public class SoftwareUninstallTool : ITool
     {
         var listView = new ListView
         {
-            Margin = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(0, 11, 0, 8),
             FontSize = 13,
             Background = new SolidColorBrush(BgDark),
             Foreground = new SolidColorBrush(TextPrimary),
@@ -130,24 +180,24 @@ public class SoftwareUninstallTool : ITool
             BorderThickness = new Thickness(1),
         };
 
-        // 清除 ListView 自身的焦点视觉（消灭外缘白色虚线框）
+        // 清除 ListView 自身的焦点视觉
         listView.FocusVisualStyle = null;
 
         // 自定义 ListView ControlTemplate — 替换默认 Aero2 模板
-        // 结构：Border → ScrollViewer(Focusable=false, VScrollBar=Hidden) → ItemsPresenter
-        // 无任何 Trigger → 鼠标进入时 ScrollBar 不显形、无边框颜色变化 → 消灭光晕
         var lvTemplate = new ControlTemplate(typeof(ListView));
         var lvBorder = new FrameworkElementFactory(typeof(Border));
         lvBorder.SetBinding(Border.BackgroundProperty, new Binding("Background") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
         lvBorder.SetBinding(Border.BorderBrushProperty, new Binding("BorderBrush") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
         lvBorder.SetBinding(Border.BorderThicknessProperty, new Binding("BorderThickness") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
         lvBorder.SetValue(Border.SnapsToDevicePixelsProperty, true);
+        lvBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(8)); // 圆角遮罩
 
         var lvScrollViewer = new FrameworkElementFactory(typeof(ScrollViewer));
         lvScrollViewer.SetValue(ScrollViewer.FocusableProperty, false);
         lvScrollViewer.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Hidden);
         lvScrollViewer.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
-        lvScrollViewer.SetValue(ScrollViewer.CanContentScrollProperty, false); // 像素级滚动，与 e.Delta/3 兼容
+        lvScrollViewer.SetValue(ScrollViewer.CanContentScrollProperty, false);
+        lvScrollViewer.SetValue(UIElement.ClipToBoundsProperty, true);
 
         var itemsPresenter = new FrameworkElementFactory(typeof(ItemsPresenter));
         lvScrollViewer.AppendChild(itemsPresenter);
@@ -155,20 +205,21 @@ public class SoftwareUninstallTool : ITool
         lvTemplate.VisualTree = lvBorder;
         listView.Template = lvTemplate;
 
-        // 选中项样式：覆盖默认高亮蓝色
-        listView.Resources.Add(SystemColors.HighlightBrushKey, new SolidColorBrush(BgHover));
-        listView.Resources.Add(SystemColors.HighlightTextBrushKey, new SolidColorBrush(TextPrimary));
-        listView.Resources.Add(SystemColors.InactiveSelectionHighlightBrushKey, new SolidColorBrush(BgHover));
-        listView.Resources.Add(SystemColors.InactiveSelectionHighlightTextBrushKey, new SolidColorBrush(TextPrimary));
+        // 选中项颜色资源覆盖：改为绿色
+        listView.Resources.Add(SystemColors.HighlightBrushKey, new SolidColorBrush(Accent));
+        listView.Resources.Add(SystemColors.HighlightTextBrushKey, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)));
+        listView.Resources.Add(SystemColors.InactiveSelectionHighlightBrushKey, new SolidColorBrush(Accent));
+        listView.Resources.Add(SystemColors.InactiveSelectionHighlightTextBrushKey, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)));
 
         // ListViewItem 样式：自定义 ControlTemplate + 覆盖默认白色边框和焦点框
         var itemStyle = new Style(typeof(ListViewItem));
         itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgDark)));
+        itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(TextPrimary)));
         itemStyle.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
         itemStyle.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty, null));
 
-        // 自定义 ControlTemplate — 仅含 Border + GridViewRowPresenter，无 FocusVisual 元素
+        // 自定义 ControlTemplate — 仅含 Border + GridViewRowPresenter，无 FocusVisual
         var itemTemplate = new ControlTemplate(typeof(ListViewItem));
         var bd = new FrameworkElementFactory(typeof(Border));
         bd.Name = "Bd";
@@ -186,23 +237,25 @@ public class SoftwareUninstallTool : ITool
         itemTemplate.VisualTree = bd;
         itemStyle.Setters.Add(new Setter(Control.TemplateProperty, itemTemplate));
 
-        // 悬停状态
+        // 悬停状态：保持灰色以示区别
         var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
         hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgHover)));
         hoverTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(hoverTrigger);
 
-        // 选中状态
+        // 选中状态：绿色背景 + 深色文字
         var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
-        selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgHover)));
+        selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Accent)));
+        selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))));
         selectedTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(selectedTrigger);
 
-        // 选中 + 非活动焦点状态
+        // 选中 + 非活动焦点状态：同样绿色
         var multiTrigger = new MultiTrigger();
         multiTrigger.Conditions.Add(new Condition { Property = ListViewItem.IsSelectedProperty, Value = true });
         multiTrigger.Conditions.Add(new Condition { Property = Selector.IsSelectionActiveProperty, Value = false });
-        multiTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgHover)));
+        multiTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Accent)));
+        multiTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))));
         multiTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(multiTrigger);
 
@@ -233,7 +286,6 @@ public class SoftwareUninstallTool : ITool
         headerBorder.AppendChild(contentFactory);
         headerTemplate.VisualTree = headerBorder;
 
-        // 悬浮触发器
         var triggerHover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
         triggerHover.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(BgHover)));
         headerTemplate.Triggers.Add(triggerHover);
@@ -262,7 +314,7 @@ public class SoftwareUninstallTool : ITool
         listView.View = gridView;
         listView.MouseDoubleClick += OnSoftwareDoubleClick;
 
-        // 修复 1：拦截鼠标滚轮事件，重定向到 ListView 内部 ScrollViewer
+        // 修复：拦截鼠标滚轮事件，重定向到 ListView 内部 ScrollViewer
         listView.PreviewMouseWheel += OnListPreviewMouseWheel;
 
         return listView;
@@ -276,6 +328,81 @@ public class SoftwareUninstallTool : ITool
             Width = width,
             DisplayMemberBinding = new Binding(bindingPath)
         };
+    }
+
+    // ===== 排序 =====
+
+    private void ApplySort()
+    {
+        switch (_currentSort)
+        {
+            case SortMode.InstallDate:
+                _loadedSoftware.Sort((a, b) => string.Compare(b.InstallDate, a.InstallDate, StringComparison.Ordinal));
+                break;
+            case SortMode.FileSize:
+                _loadedSoftware.Sort((a, b) => b.EstimatedSize.CompareTo(a.EstimatedSize));
+                break;
+            case SortMode.Alphabetical:
+                _loadedSoftware.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+                break;
+        }
+
+        _allSoftware.Clear();
+        foreach (var s in _loadedSoftware)
+            _allSoftware.Add(s);
+
+        ApplyFilter();
+    }
+
+    // ===== 搜索 =====
+
+    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_searchBox == null || _softwareList == null) return;
+
+        // 更新 placeholder 显隐
+        if (_placeholderText != null)
+            _placeholderText.Visibility = string.IsNullOrEmpty(_searchBox.Text)
+                ? Visibility.Visible : Visibility.Collapsed;
+
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (_searchBox == null || _softwareList == null) return;
+
+        var filter = _searchBox.Text?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(filter))
+        {
+            _softwareList.ItemsSource = _allSoftware;
+        }
+        else
+        {
+            var filtered = _loadedSoftware
+                .Where(sw => sw.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            _softwareList.ItemsSource = new ObservableCollection<InstalledSoftware>(filtered);
+        }
+
+        UpdateStatus();
+    }
+
+    private void UpdateStatus()
+    {
+        if (_statusBlock == null || _softwareList == null) return;
+
+        int total = _loadedSoftware.Count;
+        int showing = _softwareList.ItemsSource switch
+        {
+            ICollection<InstalledSoftware> col => col.Count,
+            _ => total
+        };
+
+        _statusBlock.Text = showing == total
+            ? $"共 {total} 个已安装软件"
+            : $"共 {total} 个，已过滤显示 {showing} 个";
     }
 
     // ===== 修复 1：鼠标滚轮 → 重定向到 ListView 内部 ScrollViewer =====
@@ -293,13 +420,11 @@ public class SoftwareUninstallTool : ITool
 
         if (canScrollDown && !atTop && !atBottom)
         {
-            // 内层可滚动且在范围内 → 在内层滚动
             sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta / 3);
             e.Handled = true;
             return;
         }
 
-        // 到边界或内容不足一屏 → 转发到外层 ContentScrollViewer
         var outerSv = FindParentScrollViewer(_softwareList);
         if (outerSv != null)
             outerSv.ScrollToVerticalOffset(outerSv.VerticalOffset - e.Delta / 2);
@@ -308,7 +433,6 @@ public class SoftwareUninstallTool : ITool
 
     private static ScrollViewer? FindParentScrollViewer(DependencyObject element)
     {
-        // 从元素向上遍历视觉树，找到第一个 ScrollViewer 祖先
         var parent = VisualTreeHelper.GetParent(element);
         while (parent != null)
         {
@@ -338,6 +462,7 @@ public class SoftwareUninstallTool : ITool
             loadingBlock.Visibility = Visibility.Visible;
 
         _errorBlock!.Text = "";
+        _errorBlock.Visibility = Visibility.Collapsed;
         _errorBlock.Foreground = new SolidColorBrush(Danger);
 
         try
@@ -354,11 +479,12 @@ public class SoftwareUninstallTool : ITool
             foreach (var sw in softwareList)
                 _allSoftware.Add(sw);
 
-            _softwareList!.ItemsSource = _allSoftware;
-            UpdateStatus();
+            // 应用当前排序
+            ApplySort();
         }
         catch (Exception ex)
         {
+            _errorBlock.Visibility = Visibility.Visible;
             _errorBlock!.Text = $"⚠️ 读取软件列表失败：{ex.Message}";
         }
         finally
@@ -368,44 +494,7 @@ public class SoftwareUninstallTool : ITool
         }
     }
 
-    // ===== 搜索 =====
-
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
-    {
-        var filter = _searchBox!.Text?.Trim() ?? "";
-
-        if (string.IsNullOrEmpty(filter))
-        {
-            _softwareList!.ItemsSource = _allSoftware;
-        }
-        else
-        {
-            var filtered = _loadedSoftware
-                .Where(sw => sw.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            _softwareList!.ItemsSource = new ObservableCollection<InstalledSoftware>(filtered);
-        }
-
-        UpdateStatus();
-    }
-
-    private void UpdateStatus()
-    {
-        if (_statusBlock == null || _softwareList == null) return;
-
-        int total = _loadedSoftware.Count;
-        int showing = _softwareList.ItemsSource switch
-        {
-            ICollection<InstalledSoftware> col => col.Count,
-            _ => total
-        };
-
-        _statusBlock.Text = showing == total
-            ? $"共 {total} 个已安装软件"
-            : $"共 {total} 个，已过滤显示 {showing} 个";
-    }
-
-    // ===== 修复 3：卸载 → 进程跟踪 + 注册表轮询确认 =====
+    // ===== 卸载 =====
 
     private async void OnSoftwareDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -420,7 +509,6 @@ public class SoftwareUninstallTool : ITool
 
         if (result != MessageBoxResult.Yes) return;
 
-        // 标记为待卸载（UI 上显示灰色表示正在处理）
         _pendingUninstall.Add(software.DisplayName);
 
         bool launched = SoftwareUninstallService.UninstallSoftware(software, out var launchError);
@@ -429,23 +517,24 @@ public class SoftwareUninstallTool : ITool
         {
             _pendingUninstall.Remove(software.DisplayName);
 
-            // 区分 UAC 被拒绝 vs 其他错误
             if (launchError == "UAC_CANCELLED")
             {
+                _errorBlock!.Visibility = Visibility.Visible;
                 _errorBlock!.Text = $"⚠️ 卸载被取消：{software.DisplayName}（用户拒绝了 UAC 提权）";
             }
             else
             {
+                _errorBlock!.Visibility = Visibility.Visible;
                 _errorBlock!.Text = $"⚠️ 启动卸载失败：{launchError}";
             }
             _errorBlock.Foreground = new SolidColorBrush(Danger);
             return;
         }
 
+        _errorBlock!.Visibility = Visibility.Visible;
         _errorBlock!.Text = $"✅ 已启动卸载程序：{software.DisplayName}，正在等待卸载完成...";
         _errorBlock.Foreground = new SolidColorBrush(Success);
 
-        // 后台轮询注册表，确认软件是否真的被卸载
         _pollCts?.Cancel();
         _pollCts = new CancellationTokenSource();
         var token = _pollCts.Token;
@@ -454,15 +543,13 @@ public class SoftwareUninstallTool : ITool
         {
             await PollUntilUninstalled(software, token);
         }
-        catch (OperationCanceledException) { /* 刷新或新卸载操作取消了轮询 */ }
+        catch (OperationCanceledException) { }
     }
 
     private async Task PollUntilUninstalled(InstalledSoftware software, CancellationToken token)
     {
-        // 等待 2 秒让卸载程序启动
         await Task.Delay(2000, token);
 
-        // 每 3 秒轮询一次，最多 120 秒
         for (int i = 0; i < 40; i++)
         {
             token.ThrowIfCancellationRequested();
@@ -472,12 +559,12 @@ public class SoftwareUninstallTool : ITool
 
             if (!stillExists)
             {
-                // 确认已从注册表消失 → 从列表中移除
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     _allSoftware.Remove(software);
                     _loadedSoftware.Remove(software);
                     _pendingUninstall.Remove(software.DisplayName);
+                    _errorBlock!.Visibility = Visibility.Visible;
                     _errorBlock!.Text = $"✅ 卸载成功：{software.DisplayName}";
                     _errorBlock.Foreground = new SolidColorBrush(Success);
                     UpdateStatus();
@@ -488,12 +575,25 @@ public class SoftwareUninstallTool : ITool
             await Task.Delay(3000, token);
         }
 
-        // 超时：软件仍在注册表中 → 警告但不移除
         await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             _pendingUninstall.Remove(software.DisplayName);
+            _errorBlock!.Visibility = Visibility.Visible;
             _errorBlock!.Text = $"⚠️ 卸载可能未完成：{software.DisplayName}（超过等待时间，请点击刷新确认）";
             _errorBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));
         });
+    }
+
+    // ===== 工具方法 =====
+
+    private static Style? FindResourceStyle(string key)
+    {
+        try
+        {
+            if (Application.Current?.TryFindResource(key) is Style style)
+                return style;
+        }
+        catch { }
+        return null;
     }
 }

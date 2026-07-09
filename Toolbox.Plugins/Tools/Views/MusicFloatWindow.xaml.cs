@@ -48,6 +48,33 @@ public partial class MusicFloatWindow : Window
         }
     }
 
+    // ── 透明度遮罩 ──
+    private bool _overlayEnabled;
+
+    // ── 锁定 ──
+    private bool _isLocked;
+
+    /// <summary>
+    /// 切换悬浮窗背景遮罩（45% 透明灰色层）
+    /// </summary>
+    public void SetWindowOpacity(bool enabled)
+    {
+        _overlayEnabled = enabled;
+        if (IsLoaded)
+        {
+            Dispatcher.Invoke(() =>
+                OpacityOverlay.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed);
+        }
+    }
+
+    /// <summary>
+    /// 设置悬浮窗锁定状态
+    /// </summary>
+    public void SetWindowLocked(bool locked)
+    {
+        _isLocked = locked;
+    }
+
     private MusicFloatWindow()
     {
         InitializeComponent();
@@ -69,6 +96,12 @@ public partial class MusicFloatWindow : Window
             var screenHeight = SystemParameters.PrimaryScreenHeight;
             Left = 0;
             Top = (screenHeight - Height) / 2;
+            // Large 模式下强制确保 ContentPanel 顶部偏移和遮罩尺寸正确
+            //（双保险：Loaded 可能在 ApplySizeMode 之后才触发，此处确保值不丢失）
+            if (_sizeMode == FloatSizeMode.Large)
+            {
+                ApplyLargeMargins();
+            }
             OnWindowLocationChanged(null, EventArgs.Empty);
         };
 
@@ -144,12 +177,9 @@ public partial class MusicFloatWindow : Window
             _ = _listener.StartAsync();
         }
         base.Show();
-        // SizeMode 可能在窗口加载前已设置（如从设置页读取的默认大小）
-        // 此时 IsLoaded 刚变为 true，需要补调 ApplySizeMode()
-        if (_sizeMode != FloatSizeMode.Large)
-        {
-            ApplySizeMode();
-        }
+        // 始终调用 ApplySizeMode() 确保遮罩层尺寸被正确初始化
+        //（即使默认 Large 模式也需要设置 OpacityOverlay 的 Width/Height）
+        ApplySizeMode();
     }
 
     /// <summary>
@@ -284,8 +314,9 @@ public partial class MusicFloatWindow : Window
             LayoutLarge.Visibility = Visibility.Visible;
             LayoutCompact.Visibility = Visibility.Collapsed;
             ApplyCoverMetrics(180, 10, 15, 4);
-            UpdateWindowSize(252, 282);
-            RestoreOriginalMargins();
+            UpdateWindowSize(252, 292);
+            ApplyLargeMargins();
+            OpacityOverlay.CornerRadius = new CornerRadius(10);
         }
         else
         {
@@ -295,7 +326,7 @@ public partial class MusicFloatWindow : Window
             LayoutCompact.Visibility = Visibility.Visible;
             LayoutLarge.Visibility = Visibility.Collapsed;
             ApplyCoverMetrics(60, 3, 5, 1.3);
-            UpdateWindowSize(170, 96);
+            UpdateWindowSize(190, 96);
             SetCompactMargins();
         }
         StartOrStopTitleMarquee();
@@ -364,28 +395,57 @@ public partial class MusicFloatWindow : Window
         }
     }
 
-    private void RestoreOriginalMargins()
+    private void ApplyLargeMargins()
     {
-        // CoverGrid: Margin="12,12,12,0"
-        CoverGrid.Margin = new Thickness(12, 12, 12, 0);
-        // TitleCanvas: Margin="12,8,12,0"
-        TitleCanvas.Margin = new Thickness(12, 8, 12, 0);
-        // SongArtist: Margin="12,2,12,12"
-        SongArtist.Margin = new Thickness(12, 2, 12, 12);
+        // 大模式：内容下移 10px 为遮罩顶部圆角留出缓冲区（避免 DWM 裁剪）
+        ContentPanel.Margin = new Thickness(4, 10, 0, 0);
+        // 紧凑间距 — 8px padding, 10px gap
+        CoverGrid.Margin = new Thickness(12, 0, 12, 0);
+        TitleCanvas.Margin = new Thickness(12, 5, 12, 0);
+        SongArtist.Margin = new Thickness(12, 5, 12, 0);
+
+        // 根据实际内容高度计算遮罩层尺寸，确保遮罩底部紧贴内容底部
+        // LayoutLarge = CoverGrid(h:180) + TitleCanvas(gap:5, h:24) + SongArtist(gap:5, text:h)
+        // SongArtist 行高 ≈ FontSize(12) × 行间距系数(≈1.17) ≈ 14
+        const double songArtistEstimatedHeight = 14;
+        double layoutLargeHeight = 0 /*CoverGrid margin top*/
+            + 180 /*CoverGrid*/
+            + 0 /*CoverGrid margin bottom*/
+            + 5 /*TitleCanvas margin top*/
+            + 24 /*TitleCanvas*/
+            + 0 /*TitleCanvas margin bottom*/
+            + 5 /*SongArtist margin top*/
+            + songArtistEstimatedHeight
+            + 10 /*SongArtist margin bottom (下方间距 10px)*/;
+
+        // 遮罩从窗口顶部(y=0)包裹到 ContentPanel 底部
+        // ContentPanel.Margin.Top(10) + layoutLargeHeight(含底部10px间距)
+        double contentBottom = ContentPanel.Margin.Top + layoutLargeHeight;
+        OpacityOverlay.Width = 236;
+        OpacityOverlay.Height = contentBottom;
+        OpacityOverlay.Margin = new Thickness(6, 0, 8, 0);
     }
 
     private void SetCompactMargins()
     {
-        // 紧凑模式：缩小间距以适配更小窗口
-        CoverGrid.Margin = new Thickness(4, 0, 4, 0);
-        TitleCanvas.Margin = new Thickness(0);
-        SongArtist.Margin = new Thickness(0);
+        // 紧凑模式：ContentPanel 偏移 (左10, 右10)，不修改任何工具组件 margin
+        ContentPanel.Margin = new Thickness(10, 0, 10, 0);
+        CoverGrid.Margin = new Thickness(4, 0, 4, 0);   // 原值
+        TitleCanvas.Margin = new Thickness(0);            // 原值
+        SongArtist.Margin = new Thickness(0);             // 原值
+
+        // 紧凑模式遮罩基本属性（左右 Margin 由 ApplyAlignment 根据取向设置）
+        OpacityOverlay.CornerRadius = new CornerRadius(10);
+        OpacityOverlay.Width = 186;
+        OpacityOverlay.Height = 80;
+        LayoutCompact.Margin = new Thickness(10, 18, 0, 0);
     }
 
     // ── 拖拽 ──────────────────────────────────────────────
 
     private void OnDragAreaMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_isLocked) return;
         if (e.LeftButton == MouseButtonState.Pressed)
         {
             DragMove();
@@ -437,6 +497,23 @@ public partial class MusicFloatWindow : Window
             if (!_marqueeTimer.IsEnabled)
                 SongTitle.TextAlignment = talign;
         }
+
+        // 紧凑模式遮罩左右边距按取向设置，确保 10px 间距
+        if (_sizeMode == FloatSizeMode.Compact)
+        {
+            if (isLeft)
+            {
+                // OverlayLeft(4) + 10 = ContentLeft(14) → 间距 10px
+                // OverlayRight(190) - 10 = ContentRight(180) → 间距 10px
+                OpacityOverlay.Margin = new Thickness(4, 8, 0, 0);
+            }
+            else
+            {
+                // 右侧取向：OverlayLeft(0) + 10 = ContentLeft(10) → 间距 10px
+                // OverlayRight(186) - 10 = ContentRight(176) → 间距 10px
+                OpacityOverlay.Margin = new Thickness(0, 8, 4, 0);
+            }
+        }
     }
 
     // ── 歌名滚动 ──────────────────────────────────────────
@@ -452,8 +529,8 @@ public partial class MusicFloatWindow : Window
 
         if (_sizeMode == FloatSizeMode.Compact)
         {
-            // 紧凑模式：窗口宽度 170 - 封面 60 - 间距 12 ≈ 98
-            availableWidth = 170 - 60 - 12;
+            // 文本列宽度 = 窗口(190) - ContentPanel margin(20) - cover slot(68)
+            availableWidth = 190 - 20 - 68;  // = 102
             TitleCanvas.Width = availableWidth;
         }
         else
@@ -496,7 +573,7 @@ public partial class MusicFloatWindow : Window
 
     // ── 动画 ──────────────────────────────────────────────
 
-    internal static void ResetPanelToVisibleState(StackPanel panel)
+    internal static void ResetPanelToVisibleState(StackPanel panel, Thickness? restoreMargin = null)
     {
         if (panel == null) return;
         panel.BeginAnimation(UIElement.OpacityProperty, null);
@@ -505,14 +582,18 @@ public partial class MusicFloatWindow : Window
         transform?.BeginAnimation(TranslateTransform.XProperty, null);
         panel.RenderTransform = new TranslateTransform(0, 0);
         panel.Opacity = 1;
-        panel.Margin = new Thickness(0);
+        panel.Margin = restoreMargin ?? new Thickness(0);
     }
 
     private void PlaySongSwitchAnimation(Action onMidpoint, Action? onPhase2Complete = null)
     {
         var panel = ContentPanel;
 
-        ResetPanelToVisibleState(panel);
+        // 切歌动画重置面板时，需恢复 ContentPanel 的正确 margin（Large 模式偏移：left=4, top=10）
+        var restoreMargin = _sizeMode == FloatSizeMode.Large
+            ? new Thickness(4, 10, 0, 0)
+            : new Thickness(0);
+        ResetPanelToVisibleState(panel, restoreMargin);
 
         bool isLeft = _isOnLeftSide ?? true;
         double phase1Slide = isLeft ? -35 : 35;

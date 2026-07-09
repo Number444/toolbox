@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Toolbox.Helpers;
 using Toolbox.Core.Services;
+using Toolbox.Services;
 
 namespace Toolbox;
 
@@ -65,8 +66,15 @@ Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式（�
                 w.SizeMode = savedMode == "Compact"
                     ? Toolbox.Tools.Views.FloatSizeMode.Compact
                     : Toolbox.Tools.Views.FloatSizeMode.Large;
-                Dispatcher.BeginInvoke(new Action(() => w.Show()),
-                    System.Windows.Threading.DispatcherPriority.Background);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    // 加载悬浮窗独立配置（透明遮罩、锁定位置）
+                    AudioflowSettings.Instance.Load();
+                    w.Show();
+                    // 应用配置
+                    w.SetWindowOpacity(AudioflowSettings.Instance.FloatWindowOpacity);
+                    w.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
         };
 
