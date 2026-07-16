@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel x:Name="ContentPanel"
+                Background="Transparent"
                 Opacity="1"
                 Margin="0">
 
