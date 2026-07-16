@@ -42,22 +42,17 @@ Filename: "{app}\Toolbox.exe"; Description: "Launch Toolbox"; Flags: nowait post
 [Code]
 function IsDotNet9Installed: Boolean;
 var
-  Names: TArrayOfString;
-  i: Integer;
+  ResultCode: Integer;
+  TmpFile: String;
+  Content: AnsiString;
 begin
   Result := False;
-  // 检查 64 位注册表（Inno Setup 默认 32 位安装程序，需用 HKLM64）
-  // .NET 9 Desktop Runtime 在 HKLM\SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App
-  // 下注册已安装的版本号（如 9.0.17、9.0.13 等）
-  if RegGetSubkeyNames(HKLM64, 'SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App', Names) then
+  TmpFile := ExpandConstant('{tmp}') + '\dotnet9chk.txt';
+  if Exec('cmd.exe', '/c "' + ExpandConstant('{commonpf64}') + '\dotnet\dotnet.exe" --list-runtimes > "' + TmpFile + '" 2>nul',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
-    for i := 0 to GetArrayLength(Names) - 1 do
-    begin
-      if (Length(Names[i]) > 3) and (Copy(Names[i], 1, 3) = '9.0') then
-      begin
-        Result := True;
-        Exit;
-      end;
-    end;
+    if LoadStringFromFile(TmpFile, Content) then
+      Result := Pos('Microsoft.WindowsDesktop.App 9.0', Content) > 0;
+    DeleteFile(TmpFile);
   end;
 end;
