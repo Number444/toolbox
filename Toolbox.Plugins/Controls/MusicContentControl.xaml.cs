@@ -205,7 +205,7 @@ public partial class MusicContentControl : UserControl
 
     private void SetCompactMargins()
     {
-        ContentPanel.Margin = new Thickness(10, 0, 10, 0);
+        ContentPanel.Margin = new Thickness(10, 0, 15, 0);
         CoverGrid.Margin = new Thickness(4, 0, 4, 0);
         TitleCanvas.Margin = new Thickness(0);
         SongArtist.Margin = new Thickness(0);
@@ -301,7 +301,7 @@ public partial class MusicContentControl : UserControl
         if (_sizeMode == FloatSizeMode.Compact)
         {
             availableWidth = 190 - 20 - 68; // 窗口 - ContentPanel margin - cover slot
-            TitleCanvas.Width = availableWidth;
+            TitleCanvas.Width = availableWidth - 5;
         }
         else
         {
