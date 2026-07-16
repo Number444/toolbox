@@ -18,13 +18,16 @@ AllowNoIcons=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-; Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"   ; 已注释（语言文件缺失）
+; Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create desktop shortcut"; Flags: checkedonce
 
 [Files]
+; Toolbox 发布文件
 Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; .NET 9 Desktop Runtime 安装包（检查未安装时自动安装）
+Source: "windowsdesktop-runtime-9.0.13-win-x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Check: not IsDotNet9Installed
 
 [Icons]
 Name: "{group}\Toolbox"; Filename: "{app}\Toolbox.exe"; WorkingDir: "{app}"
@@ -32,4 +35,18 @@ Name: "{group}\Uninstall Toolbox"; Filename: "{uninstallexe}"
 Name: "{commondesktop}\Toolbox"; Filename: "{app}\Toolbox.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
+; 优先安装 .NET 运行时，再安装 Toolbox
+Filename: "{tmp}\windowsdesktop-runtime-9.0.13-win-x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "正在安装 .NET 9 Desktop Runtime..."; Check: not IsDotNet9Installed; Flags: runascurrentuser
 Filename: "{app}\Toolbox.exe"; Description: "Launch Toolbox"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsDotNet9Installed: Boolean;
+var
+  FindRec: TFindRec;
+begin
+  Result := FindFirst(
+    ExpandConstant('{commonpf64}') + '\dotnet\shared\Microsoft.WindowsDesktop.App\9.0.*',
+    FindRec);
+  if Result then
+    FindClose(FindRec);
+end;

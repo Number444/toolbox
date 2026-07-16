@@ -19,17 +19,17 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
     private readonly string _settingsDir;
     private string SettingsPath => Path.Combine(_settingsDir, "audioflow.json");
 
-    private bool _floatWindowOpacity;
+    private bool _floatWindowBlurEnabled = true;
     /// <summary>
-    /// 悬浮窗背景透明度 45%
+    /// 悬浮窗 Acrylic 毛玻璃背景开关
     /// </summary>
-    public bool FloatWindowOpacity
+    public bool FloatWindowBlurEnabled
     {
-        get => _floatWindowOpacity;
+        get => _floatWindowBlurEnabled;
         set
         {
-            if (_floatWindowOpacity == value) return;
-            _floatWindowOpacity = value;
+            if (_floatWindowBlurEnabled == value) return;
+            _floatWindowBlurEnabled = value;
             OnPropertyChanged();
             Save();
         }
@@ -72,8 +72,8 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             var data = JsonSerializer.Deserialize<AudioflowData>(json);
             if (data != null)
             {
-                _floatWindowOpacity = data.FloatWindowOpacity;
-                OnPropertyChanged(nameof(FloatWindowOpacity));
+                _floatWindowBlurEnabled = data.FloatWindowBlurEnabled;
+                OnPropertyChanged(nameof(FloatWindowBlurEnabled));
 
                 _lockFloatWindow = data.LockFloatWindow;
                 OnPropertyChanged(nameof(LockFloatWindow));
@@ -86,7 +86,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
     {
         var data = new AudioflowData
         {
-            FloatWindowOpacity = _floatWindowOpacity,
+            FloatWindowBlurEnabled = _floatWindowBlurEnabled,
             LockFloatWindow = _lockFloatWindow
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
@@ -100,7 +100,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
 
     private sealed class AudioflowData
     {
-        public bool FloatWindowOpacity { get; set; }
+        public bool FloatWindowBlurEnabled { get; set; } = true;
         public bool LockFloatWindow { get; set; }
     }
 }

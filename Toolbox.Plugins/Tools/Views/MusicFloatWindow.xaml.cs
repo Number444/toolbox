@@ -8,8 +8,11 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Interop;
+using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Services;
+using Toolbox.Controls;
 
 namespace Toolbox.Tools.Views;
 
@@ -48,23 +51,40 @@ public partial class MusicFloatWindow : Window
         }
     }
 
-    // ── 透明度遮罩 ──
-    private bool _overlayEnabled;
-
     // ── 锁定 ──
     private bool _isLocked;
 
+    // ── 毛玻璃状态 ──
+    private bool _blurEnabled = true;
+
     /// <summary>
-    /// 切换悬浮窗背景遮罩（45% 透明灰色层）
+    /// 开启或关闭 Acrylic 毛玻璃背景模糊效果。
+    /// 开启时：DWM 渲染 Acrylic 效果 + 轻量着色层。
+    /// 关闭时：完全移除 DWM 背景效果，窗口纯透明，只显示封面/歌名/歌手名。
     /// </summary>
-    public void SetWindowOpacity(bool enabled)
+    public void SetBlurEnabled(bool enabled)
     {
-        _overlayEnabled = enabled;
-        if (IsLoaded)
+        _blurEnabled = enabled;
+        if (!IsLoaded) return;
+
+        Dispatcher.Invoke(() =>
         {
-            Dispatcher.Invoke(() =>
-                OpacityOverlay.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed);
-        }
+            if (enabled)
+            {
+                // 开启模糊：重新应用 DWM Acrylic
+                ApplyBackdropEffect();
+                OpacityOverlay.Visibility = Visibility.Collapsed;
+                AcrylicTintOverlay.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                // 关闭模糊：停止 Acrylic，但保留 WindowChrome 透明基础。
+                // 用 OpacityOverlay 覆盖 DWM 在 BackdropType=None 时渲染的默认底色。
+                DwmHelper.DisableAllBackdrops(this);
+                AcrylicTintOverlay.Visibility = Visibility.Collapsed;
+                OpacityOverlay.Visibility = Visibility.Visible;
+            }
+        });
     }
 
     /// <summary>
@@ -103,6 +123,10 @@ public partial class MusicFloatWindow : Window
                 ApplyLargeMargins();
             }
             OnWindowLocationChanged(null, EventArgs.Empty);
+
+            // 初始化 HwndTarget 透明背景 + DWM 基础属性（圆角、深色模式、帧扩展），
+            // 但不在这里应用 Acrylic 效果——由 SetBlurEnabled 统一控制。
+            InitializeBackdropBase();
         };
 
         // 联动关闭：主窗口关闭时也关闭悬浮窗
@@ -350,6 +374,32 @@ public partial class MusicFloatWindow : Window
     {
         Width = width;
         Height = height;
+
+        // 窗口尺寸变化后 WPF 会异步重建 DirectX 交换链，同步设置 HwndTarget.BackgroundColor 太早会被覆盖。
+        // 使用 Loaded 优先级延迟执行，确保交换链重建完成后再设 Transparent + 重新应用毛玻璃。
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            ReapplyHwndTransparency();
+            if (_blurEnabled)
+                ApplyBackdropEffect();
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// 将 HwndTarget 背景色设回 Transparent（交换链重建后必须调用）。
+    /// </summary>
+    private void ReapplyHwndTransparency()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).EnsureHandle();
+            var source = HwndSource.FromHwnd(hwnd);
+            if (source?.CompositionTarget is HwndTarget target)
+            {
+                target.BackgroundColor = Colors.Transparent;
+            }
+        }
+        catch { /* 窗口未完全初始化时忽略 */ }
     }
 
     // ── 元素迁移小工具 ──
@@ -404,26 +454,7 @@ public partial class MusicFloatWindow : Window
         TitleCanvas.Margin = new Thickness(12, 5, 12, 0);
         SongArtist.Margin = new Thickness(12, 5, 12, 0);
 
-        // 根据实际内容高度计算遮罩层尺寸，确保遮罩底部紧贴内容底部
-        // LayoutLarge = CoverGrid(h:180) + TitleCanvas(gap:5, h:24) + SongArtist(gap:5, text:h)
-        // SongArtist 行高 ≈ FontSize(12) × 行间距系数(≈1.17) ≈ 14
-        const double songArtistEstimatedHeight = 14;
-        double layoutLargeHeight = 0 /*CoverGrid margin top*/
-            + 180 /*CoverGrid*/
-            + 0 /*CoverGrid margin bottom*/
-            + 5 /*TitleCanvas margin top*/
-            + 24 /*TitleCanvas*/
-            + 0 /*TitleCanvas margin bottom*/
-            + 5 /*SongArtist margin top*/
-            + songArtistEstimatedHeight
-            + 10 /*SongArtist margin bottom (下方间距 10px)*/;
-
-        // 遮罩从窗口顶部(y=0)包裹到 ContentPanel 底部
-        // ContentPanel.Margin.Top(10) + layoutLargeHeight(含底部10px间距)
-        double contentBottom = ContentPanel.Margin.Top + layoutLargeHeight;
-        OpacityOverlay.Width = 236;
-        OpacityOverlay.Height = contentBottom;
-        OpacityOverlay.Margin = new Thickness(6, 0, 8, 0);
+        // 遮罩改为 XAML 中 Stretch 全窗覆盖，不再需要动态设置 Width/Height/Margin
     }
 
     private void SetCompactMargins()
@@ -434,10 +465,8 @@ public partial class MusicFloatWindow : Window
         TitleCanvas.Margin = new Thickness(0);            // 原值
         SongArtist.Margin = new Thickness(0);             // 原值
 
-        // 紧凑模式遮罩基本属性（左右 Margin 由 ApplyAlignment 根据取向设置）
+        // 紧凑模式遮罩在 XAML 中已是 Stretch 全窗覆盖，只需设 CornerRadius
         OpacityOverlay.CornerRadius = new CornerRadius(10);
-        OpacityOverlay.Width = 186;
-        OpacityOverlay.Height = 80;
         LayoutCompact.Margin = new Thickness(10, 18, 0, 0);
     }
 
@@ -498,22 +527,7 @@ public partial class MusicFloatWindow : Window
                 SongTitle.TextAlignment = talign;
         }
 
-        // 紧凑模式遮罩左右边距按取向设置，确保 10px 间距
-        if (_sizeMode == FloatSizeMode.Compact)
-        {
-            if (isLeft)
-            {
-                // OverlayLeft(4) + 10 = ContentLeft(14) → 间距 10px
-                // OverlayRight(190) - 10 = ContentRight(180) → 间距 10px
-                OpacityOverlay.Margin = new Thickness(4, 8, 0, 0);
-            }
-            else
-            {
-                // 右侧取向：OverlayLeft(0) + 10 = ContentLeft(10) → 间距 10px
-                // OverlayRight(186) - 10 = ContentRight(176) → 间距 10px
-                OpacityOverlay.Margin = new Thickness(0, 8, 4, 0);
-            }
-        }
+        // 紧凑模式：遮罩已在 XAML 中设为 Stretch + Margin 4，无需动态设置
     }
 
     // ── 歌名滚动 ──────────────────────────────────────────
@@ -651,6 +665,70 @@ public partial class MusicFloatWindow : Window
         sbOut.Begin();
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // DWM Acrylic 毛玻璃背景效果
+    // ═══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 基础初始化：HwndTarget 透明背景 + DWM 圆角/深色模式/帧扩展。
+    /// WindowChrome 方案依赖 -1 边距的帧扩展维持窗口透明，
+    /// 因此必须在窗口加载时建立，不能只在启用 Acrylic 时才调用。
+    /// </summary>
+    private void InitializeBackdropBase()
+    {
+        var hwnd = new WindowInteropHelper(this).EnsureHandle();
+
+        // 关键：将 WPF DirectX 交换链背景设为透明
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget is HwndTarget hwndTarget)
+        {
+            hwndTarget.BackgroundColor = Colors.Transparent;
+        }
+
+        // WindowChrome 透明基础：DWM 帧扩展到整个客户区
+        DwmHelper.ExtendFrameIntoClientArea(this);
+        DwmHelper.SetImmersiveDarkMode(this, true);
+        DwmHelper.SetWindowCorners(this, CornerPreference.Round);
+    }
+
+    /// <summary>
+    /// 应用系统级 Acrylic 背景效果（仅基础初始化之上的 Acrylic 部分）。
+    /// 根据操作系统版本自动选择最佳 API。
+    /// </summary>
+    private void ApplyBackdropEffect()
+    {
+        var hwnd = new WindowInteropHelper(this).EnsureHandle();
+
+        // 确保 HwndTarget 背景透明
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget is HwndTarget hwndTarget)
+        {
+            hwndTarget.BackgroundColor = Colors.Transparent;
+        }
+
+        if (DwmHelper.IsWindows11_22H2OrLater())
+        {
+            DwmHelper.ExtendFrameIntoClientArea(this);
+            DwmHelper.SetImmersiveDarkMode(this, true);
+            DwmHelper.SetWindowCorners(this, CornerPreference.Round);
+            DwmHelper.SetBackdrop(this, BackdropType.Acrylic);
+        }
+        else if (DwmHelper.IsWindows10OrLater())
+        {
+            uint tintColor = 0xCC1A1A1A;
+            DwmHelper.EnableAcrylicBlur(this, tintColor);
+            DwmHelper.ExtendFrameIntoClientArea(this);
+        }
+    }
+
+    /// <summary>
+    /// 运行时切换 Acrylic 效果的启用状态（通过 SetBlurEnabled 统一入口）。
+    /// </summary>
+    public void SetAcrylicEnabled(bool enabled)
+    {
+        SetBlurEnabled(enabled);
+    }
+
     // ── 工具类 ──────────────────────────────────────────────
 
     public static class TitleMarquee
@@ -711,5 +789,3 @@ public partial class MusicFloatWindow : Window
         }
     }
 }
-
-public enum FloatSizeMode { Large, Compact }

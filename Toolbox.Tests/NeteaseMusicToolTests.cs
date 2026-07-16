@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Toolbox.Controls;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Views;
 using Xunit;
@@ -532,7 +533,7 @@ public class NeteaseMusicToolTests
     public void MusicFloatWindow_SizeMode_DefaultsToLarge()
     {
         var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
-        Assert.Equal(Toolbox.Tools.Views.FloatSizeMode.Large, window.SizeMode);
+        Assert.Equal(Toolbox.Controls.FloatSizeMode.Large, window.SizeMode);
     }
 
     [Fact]

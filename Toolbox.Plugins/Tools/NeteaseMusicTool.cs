@@ -6,6 +6,7 @@ using Toolbox.Models;
 using Toolbox.Core.Services;
 using Toolbox.Tools.Views;
 using Toolbox.Services;
+using Toolbox.Controls;
 
 namespace Toolbox.Tools;
 
@@ -67,8 +68,7 @@ public class NeteaseMusicTool : ITool
         void UpdateUI()
         {
             isUpdating = true;
-            var w = MusicFloatWindow.Instance;
-            capsuleToggle.IsChecked = w.IsVisible;
+            capsuleToggle.IsChecked = MusicFloatWindowManager.Instance.IsVisible;
             var mode = AppSettings.Instance.MusicFloatSizeMode;
             var modeName = mode == "Compact" ? "紧凑模式" : "大模式";
             modeBtn.Content = BuildModeContent(modeName);
@@ -79,16 +79,16 @@ public class NeteaseMusicTool : ITool
         capsuleToggle.Checked += (s, e) =>
         {
             if (isUpdating) return;
-            var w = MusicFloatWindow.Instance;
             var savedMode = AppSettings.Instance.MusicFloatSizeMode;
-            w.SizeMode = savedMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
-            w.Show();
+            var mode = savedMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
+            MusicFloatWindowManager.Instance.Show(mode,
+                AudioflowSettings.Instance.FloatWindowBlurEnabled);
         };
 
         capsuleToggle.Unchecked += (s, e) =>
         {
             if (isUpdating) return;
-            MusicFloatWindow.Instance.Hide();
+            MusicFloatWindowManager.Instance.Hide();
         };
 
         // 模式按钮 → 切换大小模式
@@ -98,11 +98,8 @@ public class NeteaseMusicTool : ITool
             var newMode = currentMode == "Compact" ? "Large" : "Compact";
             AppSettings.Instance.MusicFloatSizeMode = newMode;
 
-            var w = MusicFloatWindow.Instance;
-            if (w.IsLoaded && w.IsVisible)
-            {
-                w.SizeMode = newMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
-            }
+            var modeEnum = newMode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large;
+            MusicFloatWindowManager.Instance.SetSizeMode(modeEnum);
 
             UpdateUI();
         };
@@ -146,15 +143,15 @@ public class NeteaseMusicTool : ITool
         };
         settingsPanel.Children.Add(settingsTitle);
 
-        // 复选框 1：悬浮窗背景透明度 45%
-        var cbOpacity = new CheckBox
+        // 复选框 1：悬浮窗 Acrylic 毛玻璃背景开关
+        var cbBlur = new CheckBox
         {
             Style = FindResourceStyle("ClassicCheckBoxStyle"),
-            Content = "悬浮窗背景透明度 45%",
+            Content = "毛玻璃模糊背景",
             Margin = new Thickness(0, 0, 0, 6)
         };
-        cbOpacity.SetBinding(ToggleButton.IsCheckedProperty,
-            new System.Windows.Data.Binding("FloatWindowOpacity")
+        cbBlur.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("FloatWindowBlurEnabled")
             {
                 Source = AudioflowSettings.Instance,
                 Mode = System.Windows.Data.BindingMode.TwoWay
@@ -174,7 +171,7 @@ public class NeteaseMusicTool : ITool
                 Mode = System.Windows.Data.BindingMode.TwoWay
             });
 
-        settingsPanel.Children.Add(cbOpacity);
+        settingsPanel.Children.Add(cbBlur);
         settingsPanel.Children.Add(cbLock);
         settingsBorder.Child = settingsPanel;
         root.Children.Add(settingsBorder);
@@ -183,26 +180,19 @@ public class NeteaseMusicTool : ITool
         {
             // 加载后刷新 UI
             UpdateUI();
-
-            // 设置初始透明度/锁定状态
-            var w = MusicFloatWindow.Instance;
-            if (AudioflowSettings.Instance.FloatWindowOpacity)
-                w.SetWindowOpacity(true);
-            if (AudioflowSettings.Instance.LockFloatWindow)
-                w.SetWindowLocked(true);
         };
 
-        // AudioflowSettings 变化时实时同步到窗口
+        // AudioflowSettings 变化时实时同步
         AudioflowSettings.Instance.PropertyChanged += (s, e) =>
         {
-            var w = MusicFloatWindow.Instance;
+            var mgr = MusicFloatWindowManager.Instance;
             switch (e.PropertyName)
             {
-                case nameof(AudioflowSettings.FloatWindowOpacity):
-                    w.SetWindowOpacity(AudioflowSettings.Instance.FloatWindowOpacity);
+                case nameof(AudioflowSettings.FloatWindowBlurEnabled):
+                    mgr.ToggleBlur(AudioflowSettings.Instance.FloatWindowBlurEnabled);
                     break;
                 case nameof(AudioflowSettings.LockFloatWindow):
-                    w.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+                    mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
                     break;
             }
         };

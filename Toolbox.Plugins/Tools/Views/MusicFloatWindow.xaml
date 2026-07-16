@@ -5,7 +5,6 @@
         Width="252"
         Height="292"
         WindowStyle="None"
-        AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
         Topmost="True"
@@ -13,14 +12,42 @@
         WindowStartupLocation="Manual"
         MouseLeftButtonDown="OnDragAreaMouseDown"
         LocationChanged="OnWindowLocationChanged">
+
+    <!--
+        移除 AllowsTransparency="True"，改用 WindowChrome。
+        原因：DWM 的 Acrylic/Mica 系统效果无法在分层窗口（WS_EX_LAYERED）上正常工作。
+        WindowChrome 替代 AllowsTransparency 实现无边框窗口，同时保留非分层窗口，
+        让 DWM 可以正确合成 Acrylic 效果。
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="0"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      NonClientFrameEdges="None"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
     <Grid x:Name="ContentRoot">
-        <!-- 45% 透明灰色遮罩层（作为背景，包裹所有内容） -->
+        <!-- 传统半透明遮罩（不启用 Acrylic 时使用） -->
         <Border x:Name="OpacityOverlay"
                 Background="#731A1A1A"
                 CornerRadius="10"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Top"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Margin="4"
                 Visibility="Collapsed" />
+
+        <!-- Acrylic 轻量着色层（Acrylic 模式启用时覆盖全窗，最小非零 alpha 确保 WPF 不会跳过渲染） -->
+        <Border x:Name="AcrylicTintOverlay"
+                Background="#01FFFFFF"
+                CornerRadius="10"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Margin="4"
+                IsHitTestVisible="False"
+                Visibility="Collapsed" />
+
         <StackPanel x:Name="ContentPanel"
                     Opacity="1"
                     Margin="0">
