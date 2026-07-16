@@ -42,11 +42,16 @@ Filename: "{app}\Toolbox.exe"; Description: "Launch Toolbox"; Flags: nowait post
 [Code]
 function IsDotNet9Installed: Boolean;
 var
-  FindRec: TFindRec;
+  BasePath: String;
 begin
-  Result := FindFirst(
-    ExpandConstant('{commonpf64}') + '\dotnet\shared\Microsoft.WindowsDesktop.App\9.0.*',
-    FindRec);
-  if Result then
-    FindClose(FindRec);
+  // 检查常见的 .NET 9 Desktop Runtime 版本目录
+  // 格式: C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\9.0.xx
+  BasePath := ExpandConstant('{commonpf64}') + '\dotnet\shared\Microsoft.WindowsDesktop.App\';
+  Result := DirExists(BasePath + '9.0.9') or
+            DirExists(BasePath + '9.0.12') or
+            DirExists(BasePath + '9.0.13') or
+            DirExists(BasePath + '9.0.14') or
+            DirExists(BasePath + '9.0.15') or
+            DirExists(BasePath + '9.0.16') or
+            DirExists(BasePath + '9.0.17');
 end;
