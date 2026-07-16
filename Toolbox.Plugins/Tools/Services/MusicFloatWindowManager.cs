@@ -207,7 +207,7 @@ public class MusicFloatWindowManager
     private static void PositionWindow(Window window)
     {
         var screenHeight = SystemParameters.PrimaryScreenHeight;
-        window.Left = 0;
+        window.Left = 20;
         window.Top = (screenHeight - window.Height) / 2;
     }
 
