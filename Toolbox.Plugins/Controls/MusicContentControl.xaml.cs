@@ -197,7 +197,7 @@ public partial class MusicContentControl : UserControl
 
     private void ApplyLargeMargins()
     {
-        ContentPanel.Margin = new Thickness(5, 10, 0, 0);
+        ContentPanel.Margin = new Thickness(5, 10, 5, 0);
         CoverGrid.Margin = new Thickness(5, 0, 5, 0);
         TitleCanvas.Margin = new Thickness(5, 5, 5, 0);
         SongArtist.Margin = new Thickness(5, 5, 5, 12);
@@ -205,11 +205,11 @@ public partial class MusicContentControl : UserControl
 
     private void SetCompactMargins()
     {
-        ContentPanel.Margin = new Thickness(10, 0, 15, 0);
+        ContentPanel.Margin = new Thickness(0, 0, 0, 0);
         CoverGrid.Margin = new Thickness(4, 0, 4, 0);
         TitleCanvas.Margin = new Thickness(0);
         SongArtist.Margin = new Thickness(0);
-        LayoutCompact.Margin = new Thickness(10, 18, 0, 0);
+        LayoutCompact.Margin = new Thickness(11, 18, 11, 0);
     }
 
     /// <summary>当父窗口位置改变时，更新内容对齐方向。</summary>
@@ -300,7 +300,7 @@ public partial class MusicContentControl : UserControl
 
         if (_sizeMode == FloatSizeMode.Compact)
         {
-            availableWidth = 190 - 20 - 68; // 窗口 - ContentPanel margin - cover slot
+            availableWidth = 190 - 0 - 22 - 68; // 窗口 - ContentPanel margin(0) - LayoutCompact margin(22) - cover slot
             TitleCanvas.Width = availableWidth - 5;
         }
         else
@@ -352,7 +352,7 @@ public partial class MusicContentControl : UserControl
         var panel = ContentPanel;
 
         var restoreMargin = _sizeMode == FloatSizeMode.Large
-            ? new Thickness(5, 10, 0, 0)
+            ? new Thickness(5, 10, 5, 0)
             : new Thickness(0);
         ResetPanelToVisibleState(panel, restoreMargin);
 

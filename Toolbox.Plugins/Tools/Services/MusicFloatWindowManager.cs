@@ -86,19 +86,24 @@ public class MusicFloatWindowManager
         if (_activeWindow == null || !_isVisible) return;
 
         // 保存当前状态
-        var savedLeft = _activeWindow.Left;
+        var savedRight = _activeWindow.Left + _activeWindow.Width;
         var savedTop = _activeWindow.Top;
         var savedLocked = _isLocked;
+        var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
 
         // 创建新窗口
         var newWindow = CreateWindow();
-        newWindow.Left = savedLeft;
+        newWindow.Left = _activeWindow.Left;
         newWindow.Top = savedTop;
         SetLocked(newWindow, savedLocked);
 
         // 先显示新窗口再关闭旧窗口，避免闪烁
         newWindow.Show();
         InjectSongInfo(newWindow);
+
+        // 右侧锚定右边缘，宽度可能因 size mode 不同而变
+        if (isRightSide)
+            newWindow.Left = savedRight - newWindow.Width;
 
         _activeWindow.Close();
         _activeWindow = newWindow;
@@ -113,19 +118,24 @@ public class MusicFloatWindowManager
         if (_activeWindow == null || !_isVisible) return;
 
         // 保存当前状态
-        var savedLeft = _activeWindow.Left;
+        var savedRight = _activeWindow.Left + _activeWindow.Width;
         var savedTop = _activeWindow.Top;
         var savedLocked = _isLocked;
+        var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
 
         // 创建同类型新窗口（保持 blur/transparent 不变，只改 SizeMode）
         var newWindow = CreateWindow();
-        newWindow.Left = savedLeft;
+        newWindow.Left = _activeWindow.Left;
         newWindow.Top = savedTop;
         SetLocked(newWindow, savedLocked);
 
         // 先显示新窗口再关闭旧窗口，避免闪烁
         newWindow.Show();
         InjectSongInfo(newWindow);
+
+        // 右侧锚定右边缘，宽窄模式切换时宽度会变（242↔190）
+        if (isRightSide)
+            newWindow.Left = savedRight - newWindow.Width;
 
         _activeWindow.Close();
         _activeWindow = newWindow;
