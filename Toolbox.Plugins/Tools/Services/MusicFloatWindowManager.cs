@@ -49,20 +49,24 @@ public class MusicFloatWindowManager
 
         // 始终创建新窗口（确保正确的窗口类型）
         var newWindow = CreateWindow();
+        PrePositionWindow(newWindow);
         newWindow.Show();
-        PositionWindow(newWindow);
 
         // 注入缓存的歌曲信息
         if (_cachedInfo.Title != null || _cachedInfo.Artist != null)
             GetContentControl(newWindow).UpdateSongInfo(_cachedInfo);
 
         _activeWindow = newWindow;
+        _activeWindow.LocationChanged += OnWindowMoved;
         _isVisible = true;
     }
 
     /// <summary>隐藏当前窗口。</summary>
     public void Hide()
     {
+        SaveWindowPosition();
+        if (_activeWindow != null)
+            _activeWindow.LocationChanged -= OnWindowMoved;
         _activeWindow?.Hide();
         _isVisible = false;
     }
@@ -70,6 +74,9 @@ public class MusicFloatWindowManager
     /// <summary>关闭并清理。</summary>
     public void Close()
     {
+        SaveWindowPosition();
+        if (_activeWindow != null)
+            _activeWindow.LocationChanged -= OnWindowMoved;
         _listener.NowPlayingChanged -= OnNowPlayingChanged;
         _listener.Dispose();
         _activeWindow?.Close();
@@ -91,6 +98,8 @@ public class MusicFloatWindowManager
         var savedLocked = _isLocked;
         var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
 
+        _activeWindow.LocationChanged -= OnWindowMoved;
+
         // 创建新窗口
         var newWindow = CreateWindow();
         newWindow.Left = _activeWindow.Left;
@@ -107,6 +116,7 @@ public class MusicFloatWindowManager
 
         _activeWindow.Close();
         _activeWindow = newWindow;
+        _activeWindow.LocationChanged += OnWindowMoved;
     }
 
     /// <summary>切换大小模式（通过窗口替换，避免在同一窗口内 resize 导致 DWM 渲染问题）。</summary>
@@ -122,6 +132,8 @@ public class MusicFloatWindowManager
         var savedTop = _activeWindow.Top;
         var savedLocked = _isLocked;
         var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
+
+        _activeWindow.LocationChanged -= OnWindowMoved;
 
         // 创建同类型新窗口（保持 blur/transparent 不变，只改 SizeMode）
         var newWindow = CreateWindow();
@@ -139,6 +151,7 @@ public class MusicFloatWindowManager
 
         _activeWindow.Close();
         _activeWindow = newWindow;
+        _activeWindow.LocationChanged += OnWindowMoved;
     }
 
     /// <summary>设置窗口锁定状态。</summary>
@@ -204,11 +217,51 @@ public class MusicFloatWindowManager
             GetContentControl(window).UpdateSongInfo(_cachedInfo);
     }
 
-    private static void PositionWindow(Window window)
+    private void PrePositionWindow(Window window)
     {
-        var screenHeight = SystemParameters.PrimaryScreenHeight;
+        var settings = AudioflowSettings.Instance;
+
+        if (!double.IsNaN(settings.FloatWindowLeft) && !double.IsNaN(settings.FloatWindowTop))
+        {
+            window.Left = settings.FloatWindowLeft;
+            window.Top = settings.FloatWindowTop;
+            return;
+        }
+
+        // 使用已知最终尺寸预设位置，避免 Show() 后在 (0,0) 闪现
+        double h = _sizeMode == FloatSizeMode.Large ? 252 : 96;
         window.Left = 20;
-        window.Top = (screenHeight - window.Height) / 2;
+        window.Top = (SystemParameters.PrimaryScreenHeight - h) / 2;
+    }
+
+    private void SaveWindowPosition()
+    {
+        if (_activeWindow == null) return;
+        var settings = AudioflowSettings.Instance;
+        settings.FloatWindowLeft = _activeWindow.Left;
+        settings.FloatWindowTop = _activeWindow.Top;
+        settings.Save();
+    }
+
+    /// <summary>将悬浮窗复位到默认位置（垂直居中，距左 20 像素）。</summary>
+    public void ResetPosition()
+    {
+        if (_activeWindow == null || !_isVisible) return;
+
+        var screenHeight = SystemParameters.PrimaryScreenHeight;
+        _activeWindow.Left = 20;
+        _activeWindow.Top = (screenHeight - _activeWindow.Height) / 2;
+
+        SaveWindowPosition();
+    }
+
+    /// <summary>监听窗口位置变化，实时保存位置到 audioflow.json。</summary>
+    private void OnWindowMoved(object? sender, EventArgs e)
+    {
+        if (_activeWindow == null) return;
+        var settings = AudioflowSettings.Instance;
+        settings.FloatWindowLeft = _activeWindow.Left;
+        settings.FloatWindowTop = _activeWindow.Top;
     }
 
     private void OnNowPlayingChanged(object? sender, NowPlayingInfo info)

@@ -171,7 +171,7 @@ public partial class MusicContentControl : UserControl
             LayoutCompact.Visibility = Visibility.Visible;
             LayoutLarge.Visibility = Visibility.Collapsed;
             ApplyCoverMetrics(60, 3, 5, 1.3);
-            FireSizeRequired(190, 96);
+            FireSizeRequired(198, 96);
             SetCompactMargins();
         }
         StartOrStopTitleMarquee();
@@ -300,8 +300,8 @@ public partial class MusicContentControl : UserControl
 
         if (_sizeMode == FloatSizeMode.Compact)
         {
-            availableWidth = 190 - 0 - 22 - 68; // 窗口 - ContentPanel margin(0) - LayoutCompact margin(22) - cover slot
-            TitleCanvas.Width = availableWidth - 5;
+            availableWidth = 198 - 0 - 22 - 68; // 窗口(198) - ContentPanel margin(0) - LayoutCompact margin(22) - cover slot
+            TitleCanvas.Width = availableWidth;
         }
         else
         {

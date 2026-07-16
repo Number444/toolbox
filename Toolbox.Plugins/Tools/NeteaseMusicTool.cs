@@ -33,6 +33,8 @@ public class NeteaseMusicTool : ITool
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         // ├─ 胶囊复选框（纯开关）
         var capsuleToggle = new CheckBox
@@ -117,6 +119,20 @@ public class NeteaseMusicTool : ITool
         Grid.SetColumn(spacer2, 3);
         row.Children.Add(modeBtn);
         Grid.SetColumn(modeBtn, 4);
+
+        // 复位位置按钮（与模式按钮同行，大小一致）
+        var resetBtn = new Button
+        {
+            Content = "复位位置",
+            Style = FindResourceStyle("ModeBtnStyle")
+        };
+        resetBtn.Click += (_, _) => MusicFloatWindowManager.Instance.ResetPosition();
+        var spacer3 = new Grid { Width = 8 };
+        row.Children.Add(spacer3);
+        Grid.SetColumn(spacer3, 5);
+        row.Children.Add(resetBtn);
+        Grid.SetColumn(resetBtn, 6);
+
         root.Children.Add(row);
         root.Children.Add(new Grid { Height = 16 }); // 间距
 
@@ -174,6 +190,7 @@ public class NeteaseMusicTool : ITool
         settingsPanel.Children.Add(cbBlur);
         settingsPanel.Children.Add(cbLock);
         settingsBorder.Child = settingsPanel;
+
         root.Children.Add(settingsBorder);
 
         root.Loaded += (_, _) =>

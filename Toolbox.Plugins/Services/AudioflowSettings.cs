@@ -51,6 +51,36 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         }
     }
 
+    private double _floatWindowLeft = double.NaN;
+    /// <summary>
+    /// 悬浮窗 Left 坐标（NaN 表示未保存，使用默认位置）。注意：不自动存盘，由 Manager 统一管理写入时机。
+    /// </summary>
+    public double FloatWindowLeft
+    {
+        get => _floatWindowLeft;
+        set
+        {
+            if (_floatWindowLeft.Equals(value)) return;
+            _floatWindowLeft = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private double _floatWindowTop = double.NaN;
+    /// <summary>
+    /// 悬浮窗 Top 坐标（NaN 表示未保存，使用默认位置）。注意：不自动存盘，由 Manager 统一管理写入时机。
+    /// </summary>
+    public double FloatWindowTop
+    {
+        get => _floatWindowTop;
+        set
+        {
+            if (_floatWindowTop.Equals(value)) return;
+            _floatWindowTop = value;
+            OnPropertyChanged();
+        }
+    }
+
     public AudioflowSettings() : this(
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox"))
     { }
@@ -77,6 +107,18 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
 
                 _lockFloatWindow = data.LockFloatWindow;
                 OnPropertyChanged(nameof(LockFloatWindow));
+
+                if (!double.IsNaN(data.FloatWindowLeft))
+                {
+                    _floatWindowLeft = data.FloatWindowLeft;
+                    OnPropertyChanged(nameof(FloatWindowLeft));
+                }
+
+                if (!double.IsNaN(data.FloatWindowTop))
+                {
+                    _floatWindowTop = data.FloatWindowTop;
+                    OnPropertyChanged(nameof(FloatWindowTop));
+                }
             }
         }
         catch { /* 文件损坏，忽略，保留默认值 */ }
@@ -87,7 +129,9 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         var data = new AudioflowData
         {
             FloatWindowBlurEnabled = _floatWindowBlurEnabled,
-            LockFloatWindow = _lockFloatWindow
+            LockFloatWindow = _lockFloatWindow,
+            FloatWindowLeft = _floatWindowLeft,
+            FloatWindowTop = _floatWindowTop
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(SettingsPath, json);
@@ -102,5 +146,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
     {
         public bool FloatWindowBlurEnabled { get; set; } = true;
         public bool LockFloatWindow { get; set; }
+        public double FloatWindowLeft { get; set; } = double.NaN;
+        public double FloatWindowTop { get; set; } = double.NaN;
     }
 }
