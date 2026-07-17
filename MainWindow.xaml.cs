@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -28,10 +29,9 @@ public partial class MainWindow : Window
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
-            Win32Helper.EnableMicaBackdrop(hwnd);           // 2. Mica 材质
-Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式（强制深色边框）
-            Win32Helper.SetBorderColor(hwnd);               // 4. 压制 DWM 系统边框绘制
-            Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 5. 扩展帧到标题栏
+            EnableAcrylicBackdrop(hwnd);                    // 2. Acrylic 毛玻璃（替代 Mica）
+            Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
+            Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
 
             // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
             var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
@@ -524,5 +524,45 @@ Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式（�
         bool isMaximized = WindowState == WindowState.Maximized;
         MaximizePath.Visibility = isMaximized ? Visibility.Collapsed : Visibility.Visible;
         RestorePath.Visibility = isMaximized ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DWM Acrylic 毛玻璃效果
+    // ═══════════════════════════════════════════════════════════
+
+    private static void EnableAcrylicBackdrop(IntPtr hwnd)
+    {
+        if (System.Environment.OSVersion.Version.Build >= 22000)
+        {
+            // Win11 22H2+: DWMWA_SYSTEMBACKDROP_TYPE = 38, Acrylic = 3
+            int backdrop = 3;
+            DwmSetWindowAttribute(hwnd, 38, ref backdrop, Marshal.SizeOf<int>());
+        }
+        else
+        {
+            // Win10: ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
+            var accent = new ACCENT_POLICY
+            {
+                AccentState = 4,
+                AccentFlags = 2,
+                GradientColor = 0xCC1A1A1A
+            };
+            DwmSetWindowAttribute(hwnd, 19, ref accent, Marshal.SizeOf<ACCENT_POLICY>());
+        }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref ACCENT_POLICY value, int size);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ACCENT_POLICY
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
     }
 }
