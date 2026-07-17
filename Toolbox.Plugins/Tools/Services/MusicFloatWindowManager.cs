@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using Toolbox.Controls;
 using Toolbox.Services;
@@ -31,6 +32,9 @@ public class MusicFloatWindowManager
     /// <summary>当前大小模式。</summary>
     public FloatSizeMode CurrentSizeMode => _sizeMode;
 
+    /// <summary>可见性变化事件，供工具面板同步胶囊开关状态。</summary>
+    public event EventHandler<bool>? VisibilityChanged;
+
     private MusicFloatWindowManager()
     {
         _listener.NowPlayingChanged += OnNowPlayingChanged;
@@ -45,7 +49,7 @@ public class MusicFloatWindowManager
         _blurEnabled = blurEnabled;
 
         if (!_listener.IsListening)
-            _ = _listener.StartAsync();
+            _ = StartListenerSafeAsync();
 
         // 始终创建新窗口（确保正确的窗口类型）
         var newWindow = CreateWindow();
@@ -59,6 +63,7 @@ public class MusicFloatWindowManager
         _activeWindow = newWindow;
         _activeWindow.LocationChanged += OnWindowMoved;
         _isVisible = true;
+        VisibilityChanged?.Invoke(this, true);
     }
 
     /// <summary>隐藏当前窗口。</summary>
@@ -69,6 +74,7 @@ public class MusicFloatWindowManager
             _activeWindow.LocationChanged -= OnWindowMoved;
         _activeWindow?.Hide();
         _isVisible = false;
+        VisibilityChanged?.Invoke(this, false);
     }
 
     /// <summary>关闭并清理。</summary>
@@ -82,6 +88,7 @@ public class MusicFloatWindowManager
         _activeWindow?.Close();
         _activeWindow = null;
         _isVisible = false;
+        VisibilityChanged?.Invoke(this, false);
     }
 
     /// <summary>切换毛玻璃效果（透明 ↔ 毛玻璃窗口）。</summary>
@@ -234,6 +241,19 @@ public class MusicFloatWindowManager
         window.Top = (SystemParameters.PrimaryScreenHeight - h) / 2;
     }
 
+    /// <summary>安全启动 SMTC 监听，记录启动失败异常。</summary>
+    private async Task StartListenerSafeAsync()
+    {
+        try
+        {
+            await _listener.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] SMTC 监听启动失败: {ex.Message}");
+        }
+    }
+
     private void SaveWindowPosition()
     {
         if (_activeWindow == null) return;
@@ -267,7 +287,14 @@ public class MusicFloatWindowManager
     private void OnNowPlayingChanged(object? sender, NowPlayingInfo info)
     {
         _cachedInfo = info;
-        if (_activeWindow != null)
+        if (_activeWindow == null || !_isVisible) return;
+        try
+        {
             GetContentControl(_activeWindow).UpdateSongInfo(info);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] SMTC 回调处理异常: {ex.Message}");
+        }
     }
 }

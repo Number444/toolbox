@@ -37,6 +37,9 @@ public partial class MusicFloatWindow : Window
     private double _marqueeOffset;
     private bool? _isOnLeftSide = null;
 
+    // ── 封面交叉淡入动画追踪 ──
+    private DoubleAnimation? _currentFadeIn;
+
     // ── 双形态 ──
     private FloatSizeMode _sizeMode = FloatSizeMode.Large;
 
@@ -231,8 +234,10 @@ public partial class MusicFloatWindow : Window
 
     private void OnNowPlayingChanged(object? sender, NowPlayingInfo info)
     {
-        Dispatcher.Invoke(() =>
+        Dispatcher.InvokeAsync(() =>
         {
+            // 窗口已关闭时跳过
+            if (_isDisposed) return;
             var isNewSong = NowPlayingInfo.IsSongChanged(_previousInfo, info);
             var isCoverUpdate = !isNewSong
                 && NowPlayingInfo.IsThumbnailChanged(_previousInfo, info);
@@ -241,7 +246,7 @@ public partial class MusicFloatWindow : Window
             {
                 if (info.RefreshVersion < _lastSongChangeVersion)
                 {
-                    _previousInfo = info;
+                    // 直接忽略过期事件，不要污染 _previousInfo 状态
                     return;
                 }
 
@@ -291,6 +296,8 @@ public partial class MusicFloatWindow : Window
     {
         if (thumbnailData == null || thumbnailData.Length == 0)
         {
+            CoverImage.Source = null;
+            CoverImageBack.Source = null;
             return;
         }
 
@@ -304,22 +311,34 @@ public partial class MusicFloatWindow : Window
             bitmap.EndInit();
             bitmap.Freeze();
 
+            // 取消上一个正在进行的淡入动画，避免 Completed 回调错乱
+            if (_currentFadeIn != null)
+            {
+                _currentFadeIn.Completed -= OnFadeInCompleted;
+                CoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+                CoverImage.Opacity = 1;
+            }
+
             CoverImageBack.Source = CoverImage.Source;
             CoverImage.Source = bitmap;
             CoverImage.Opacity = 0;
 
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150));
-            fadeIn.Completed += (_, _) =>
-            {
-                CoverImageBack.Source = null;
-                CoverImage.BeginAnimation(UIElement.OpacityProperty, null);
-                CoverImage.Opacity = 1;
-            };
-            CoverImage.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            _currentFadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150));
+            _currentFadeIn.Completed += OnFadeInCompleted;
+            CoverImage.BeginAnimation(UIElement.OpacityProperty, _currentFadeIn);
         }
         catch
         {
         }
+    }
+
+    private void OnFadeInCompleted(object? sender, EventArgs e)
+    {
+        if (sender != _currentFadeIn) return;
+        CoverImageBack.Source = null;
+        CoverImage.BeginAnimation(UIElement.OpacityProperty, null);
+        CoverImage.Opacity = 1;
+        _currentFadeIn = null;
     }
 
     // ── 双形态核心 ────────────────────────────────────────
@@ -503,7 +522,7 @@ public partial class MusicFloatWindow : Window
             CoverGrid.HorizontalAlignment = halign;
             TitleCanvas.HorizontalAlignment = halign;
             SongArtist.TextAlignment = talign;
-            if (!_marqueeTimer.IsEnabled && SongTitle.Width == 220)
+            if (!_marqueeTimer.IsEnabled && _sizeMode == FloatSizeMode.Large)
             {
                 SongTitle.TextAlignment = talign;
             }
@@ -549,6 +568,7 @@ public partial class MusicFloatWindow : Window
         }
         else
         {
+            TitleCanvas.Width = 220; // 恢复 XAML 初始宽度
             availableWidth = TitleCanvas.Width;
         }
 

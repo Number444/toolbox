@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -21,6 +22,9 @@ public class NeteaseMusicTool : ITool
     public string Description => "读取网易云音乐实时播放信息并在左侧显示悬浮窗";
     public string IconGlyph => "\u266B";
     public string Category => ToolCategory.Media;
+
+    private PropertyChangedEventHandler? _settingsHandler;
+    private EventHandler<bool>? _visibilityHandler;
 
     public UIElement CreateContent()
     {
@@ -197,10 +201,15 @@ public class NeteaseMusicTool : ITool
         {
             // 加载后刷新 UI
             UpdateUI();
+
+            // 订阅可见性变化，实时同步胶囊开关
+            _visibilityHandler = (_, visible) =>
+                capsuleToggle.IsChecked = visible;
+            MusicFloatWindowManager.Instance.VisibilityChanged += _visibilityHandler;
         };
 
         // AudioflowSettings 变化时实时同步
-        AudioflowSettings.Instance.PropertyChanged += (s, e) =>
+        _settingsHandler = (s, e) =>
         {
             var mgr = MusicFloatWindowManager.Instance;
             switch (e.PropertyName)
@@ -211,6 +220,22 @@ public class NeteaseMusicTool : ITool
                 case nameof(AudioflowSettings.LockFloatWindow):
                     mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
                     break;
+            }
+        };
+        AudioflowSettings.Instance.PropertyChanged += _settingsHandler;
+
+        // 工具页销毁时退订，避免处理器泄漏
+        root.Unloaded += (_, _) =>
+        {
+            if (_settingsHandler != null)
+            {
+                AudioflowSettings.Instance.PropertyChanged -= _settingsHandler;
+                _settingsHandler = null;
+            }
+            if (_visibilityHandler != null)
+            {
+                MusicFloatWindowManager.Instance.VisibilityChanged -= _visibilityHandler;
+                _visibilityHandler = null;
             }
         };
 
