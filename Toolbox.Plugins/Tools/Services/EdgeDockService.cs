@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -296,8 +297,15 @@ public class EdgeDockService
         if (State == DockState.Docked)
             DetachFromDock();
 
-        // 启动窗口拖拽
-        _window.DragMove();
+        // 启动窗口拖拽（后台状态下 HWND 可能失效，需保护）
+        try
+        {
+            _window.DragMove();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[EdgeDockService] 触发条 DragMove 失败: {ex.Message}");
+        }
 
         // DragMove 从触发条事件发起，不会触发窗口的 DragMoveCompleted。
         // 手动调用 OnDragCompleted 检测贴边。
@@ -483,11 +491,14 @@ public class EdgeDockService
     private void SetContentVisible(bool visible)
     {
         if (_content != null)
-            _content.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        if (_triggerBar != null)
         {
             // 用 Opacity + IsHitTestVisible 替代 Visibility.Collapsed，
-            // 触发条始终在视觉树中，避免命中测试链断裂导致虚假 MouseLeave
+            // 避免从视觉树移除导致的虚假 MouseLeave 事件和布局重算
+            _content.Opacity = visible ? 1 : 0;
+            _content.IsHitTestVisible = visible;
+        }
+        if (_triggerBar != null)
+        {
             _triggerBar.Opacity = visible ? 0 : 1;
             _triggerBar.IsHitTestVisible = !visible;
         }

@@ -154,7 +154,8 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             FloatWindowTop = _floatWindowTop
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(SettingsPath, json);
+        try { File.WriteAllText(SettingsPath, json); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[AudioflowSettings] 保存失败: {ex.Message}"); }
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

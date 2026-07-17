@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -23,9 +24,9 @@ public partial class DockTriggerBar : UserControl
         // 鼠标左键按下触发拖拽
         MouseLeftButtonDown += (_, e) =>
         {
-            // 阻止事件冒泡到父窗口，避免同时触发窗口 DragMove
             e.Handled = true;
-            DragRequested?.Invoke(this, EventArgs.Empty);
+            try { DragRequested?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex) { Debug.WriteLine($"[DockTriggerBar] DragRequested 异常: {ex.Message}"); }
         };
     }
 

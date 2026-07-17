@@ -324,7 +324,12 @@ public class MusicFloatWindowManager
         if (_activeWindow == null || !_isVisible) return;
         try
         {
-            GetContentControl(_activeWindow).UpdateSongInfo(info);
+            // SMTCListener 事件在后台线程触发，必须 Dispatch 到 UI 线程
+            _activeWindow.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_activeWindow == null) return;
+                GetContentControl(_activeWindow).UpdateSongInfo(info);
+            }));
         }
         catch (Exception ex)
         {

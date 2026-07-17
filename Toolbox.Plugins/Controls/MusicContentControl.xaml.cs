@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -61,8 +63,15 @@ public partial class MusicContentControl : UserControl
             Dispatcher);
         _marqueeTimer.Stop();
 
+        // 控件卸载时停止跑马灯定时器，避免空转
+        Unloaded += (_, _) => _marqueeTimer.Stop();
+
         // 将整个内容区域的鼠标按下事件作为拖拽请求
-        ContentPanel.MouseLeftButtonDown += (_, _) => DragRequested?.Invoke(this, EventArgs.Empty);
+        ContentPanel.MouseLeftButtonDown += (_, _) =>
+        {
+            try { DragRequested?.Invoke(this, EventArgs.Empty); }
+            catch (Exception ex) { Debug.WriteLine($"[MusicContentControl] DragRequested 异常: {ex.Message}"); }
+        };
 
         // 控件加载后必须应用当前 SizeMode 的布局。
         // 因为 Manager.CreateWindow 在窗口 Show 之前就设置了 SizeMode，
@@ -81,6 +90,10 @@ public partial class MusicContentControl : UserControl
     /// </summary>
     public void UpdateSongInfo(NowPlayingInfo info)
     {
+        if (info == null) return;
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+        try
+        {
         Dispatcher.InvokeAsync(() =>
         {
             // 窗口已关闭或控件已卸载时不处理
@@ -126,6 +139,10 @@ public partial class MusicContentControl : UserControl
                 _previousInfo = info;
             }
         });
+        }
+        catch (TaskCanceledException) { /* 进程关闭中 */ }
+        catch (InvalidOperationException) { /* Dispatcher 已关闭 */ }
+        catch (Exception ex) { Debug.WriteLine($"[MusicContentControl] UpdateSongInfo 异常: {ex.Message}"); }
     }
 
     // ── 内容渲染 ──────────────────────────────────────────
@@ -368,12 +385,16 @@ public partial class MusicContentControl : UserControl
 
     private void OnMarqueeTick(object? sender, EventArgs e)
     {
-        _marqueeOffset -= 0.3;
-        var textWidth = SongTitle.ActualWidth;
-        var visibleWidth = TitleCanvas.Width;
-        if (_marqueeOffset < -(textWidth + 30))
-            _marqueeOffset = visibleWidth;
-        TitleTranslate.X = _marqueeOffset;
+        try
+        {
+            _marqueeOffset -= 0.3;
+            var textWidth = SongTitle.ActualWidth;
+            var visibleWidth = TitleCanvas.Width;
+            if (_marqueeOffset < -(textWidth + 30))
+                _marqueeOffset = visibleWidth;
+            TitleTranslate.X = _marqueeOffset;
+        }
+        catch { /* 控件卸载中，忽略 */ }
     }
 
     // ── 动画 ──────────────────────────────────────────────

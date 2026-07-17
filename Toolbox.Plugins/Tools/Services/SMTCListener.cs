@@ -78,7 +78,11 @@ public sealed class SMTCListener : IDisposable
         _session = null;
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        _refreshLock.Dispose();
+    }
 
     // ── 会话管理 ──────────────────────────────────────────
 

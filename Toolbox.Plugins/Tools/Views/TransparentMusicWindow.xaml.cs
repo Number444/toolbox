@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using Toolbox.Controls;
@@ -13,6 +14,7 @@ namespace Toolbox.Tools.Views;
 public partial class TransparentMusicWindow : Window
 {
     private bool _isLocked;
+    private EdgeDockService? _edgeDock;
 
     public TransparentMusicWindow()
     {
@@ -34,7 +36,7 @@ public partial class TransparentMusicWindow : Window
     public event EventHandler? DragMoveCompleted;
 
     /// <summary>由 EdgeDockService 在 Attach 时设置，用于 MouseLeave 缩回检测。</summary>
-    public void SetEdgeDockService(EdgeDockService service) { }
+    public void SetEdgeDockService(EdgeDockService service) => _edgeDock = service;
 
     public void SetWindowLocked(bool locked) => _isLocked = locked;
 
@@ -48,7 +50,14 @@ public partial class TransparentMusicWindow : Window
     {
         if (!_isLocked && Mouse.LeftButton == MouseButtonState.Pressed)
         {
-            DragMove();
+            try
+            {
+                DragMove();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[TransparentMusicWindow] DragMove 失败: {ex.Message}");
+            }
             DragMoveCompleted?.Invoke(this, EventArgs.Empty);
         }
     }

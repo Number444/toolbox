@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -67,7 +68,14 @@ public partial class AcrylicMusicWindow : Window
     {
         if (!_isLocked && Mouse.LeftButton == MouseButtonState.Pressed)
         {
-            DragMove();
+            try
+            {
+                DragMove();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AcrylicMusicWindow] DragMove 失败: {ex.Message}");
+            }
             DragMoveCompleted?.Invoke(this, EventArgs.Empty);
         }
     }

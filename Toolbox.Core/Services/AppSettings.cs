@@ -138,7 +138,8 @@ public sealed class AppSettings : INotifyPropertyChanged
             AutoStart = _autoStart
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(SettingsPath, json);
+        try { File.WriteAllText(SettingsPath, json); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[AppSettings] 保存失败: {ex.Message}"); }
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

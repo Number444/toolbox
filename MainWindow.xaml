@@ -51,9 +51,9 @@
             <RowDefinition Height="28"/>   <!-- 状态栏 -->
         </Grid.RowDefinitions>
 
-        <!-- ▸ 自定义标题栏（Mica 材质透入，含 Win11 风格三按钮） -->
+        <!-- ▸ 自定义标题栏（Acrylic 毛玻璃透入） -->
         <Border Grid.Row="0"
-                Background="{StaticResource BgDarkBrush}"
+                Background="Transparent"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -144,7 +144,7 @@
 
             <!-- 左侧导航（搜索框 + 手风琴分组 + 浮动高亮移动动画 + 自定义滚动条） -->
             <Border Grid.Column="0"
-                    Background="{StaticResource BgSurfaceBrush}">
+                    Background="#992D2D2D">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>   <!-- 搜索框 -->
@@ -157,7 +157,7 @@
 
                     <!-- 搜索框 -->
                     <Border Grid.Row="0" Grid.ColumnSpan="2"
-                            Background="{StaticResource BgSurfaceBrush}"
+                            Background="#662D2D2D"
                             BorderBrush="{StaticResource BorderSubtleBrush}"
                             BorderThickness="0,0,0,1"
                             Padding="8,6">
@@ -177,7 +177,7 @@
                                          FontSize="13"
                                          Height="28"
                                          VerticalContentAlignment="Center"
-                                         Background="#404040"
+                                         Background="#80404040"
                                          Foreground="{StaticResource TextPrimaryBrush}"
                                          BorderThickness="0"
                                          Padding="6,0"
@@ -344,12 +344,14 @@
 
             <!-- 右侧内容区（带自定义滚动条） -->
             <Border Grid.Column="2"
-                    Background="{StaticResource BgCardBrush}">
+                    Background="#66323232">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+
+
                     <ScrollViewer x:Name="ContentScrollViewer"
                                   Grid.Column="0"
                                   VerticalScrollBarVisibility="Hidden"
@@ -384,7 +386,7 @@
                     <!-- 设置叠加层（隐藏） -->
                     <Border x:Name="SettingsLayer"
                             Grid.ColumnSpan="2"
-                            Background="{StaticResource BgCardBrush}"
+                            Background="#4D323232"
                             Visibility="Collapsed">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <local:SettingsView x:Name="SettingsViewControl"/>
@@ -394,9 +396,9 @@
             </Border>
         </Grid>
 
-        <!-- ▸ 状态栏 -->
+        <!-- ▸ 状态栏（Acrylic 毛玻璃透入） -->
         <Border Grid.Row="2"
-                Background="{StaticResource BgDarkBrush}"
+                Background="Transparent"
                 BorderBrush="{StaticResource BorderSubtleBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="14,0">
