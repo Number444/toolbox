@@ -25,6 +25,9 @@ public partial class MusicContentControl : UserControl
     // ── 封面交叉淡入动画追踪 ──
     private DoubleAnimation? _currentFadeIn;
 
+    // ── 切歌动画进行中标记，防止封面空数据时误清旧封面 ──
+    private bool _isSwitchingSong;
+
     // ── 双形态 ──
     private FloatSizeMode _sizeMode = FloatSizeMode.Large;
 
@@ -127,8 +130,12 @@ public partial class MusicContentControl : UserControl
     {
         if (thumbnailData == null || thumbnailData.Length == 0)
         {
-            CoverImage.Source = null;
-            CoverImageBack.Source = null;
+            // 切歌动画期间 SMTC 封面可能尚未就绪，保留旧封面避免闪空
+            if (!_isSwitchingSong)
+            {
+                CoverImage.Source = null;
+                CoverImageBack.Source = null;
+            }
             return;
         }
 
@@ -425,12 +432,14 @@ public partial class MusicContentControl : UserControl
                     t.BeginAnimation(TranslateTransform.XProperty, null);
                 panel.Opacity = 1;
                 panel.RenderTransform = new TranslateTransform(0, 0);
+                _isSwitchingSong = false;
                 onPhase2Complete?.Invoke();
             };
 
             sbIn.Begin();
         };
 
+        _isSwitchingSong = true;
         sbOut.Begin();
     }
 
