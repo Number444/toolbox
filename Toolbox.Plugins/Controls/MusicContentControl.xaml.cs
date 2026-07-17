@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using Toolbox.Tools.Models;
+using Windows.Media.Control;
 
 namespace Toolbox.Controls;
 
@@ -88,6 +89,8 @@ public partial class MusicContentControl : UserControl
             var isNewSong = NowPlayingInfo.IsSongChanged(_previousInfo, info);
             var isCoverUpdate = !isNewSong
                 && NowPlayingInfo.IsThumbnailChanged(_previousInfo, info);
+            var isStatusChanged = !isNewSong
+                && _previousInfo.PlaybackStatus != info.PlaybackStatus;
 
             if (isNewSong)
             {
@@ -102,13 +105,22 @@ public partial class MusicContentControl : UserControl
 
                 PlaySongSwitchAnimation(
                     onMidpoint: () => ApplySongInfo(info),
-                    onPhase2Complete: StartOrStopTitleMarquee);
+                    onPhase2Complete: () =>
+                    {
+                        StartOrStopTitleMarquee();
+                        AnimateCoverForPlaybackStatus(info.PlaybackStatus);
+                    });
             }
             else if (isCoverUpdate)
             {
                 _previousInfo = info;
                 if (info.RefreshVersion >= _lastSongChangeVersion)
                     LoadCoverFromData(info.ThumbnailData);
+            }
+            else if (isStatusChanged)
+            {
+                _previousInfo = info;
+                AnimateCoverForPlaybackStatus(info.PlaybackStatus);
             }
             else
             {
@@ -441,6 +453,29 @@ public partial class MusicContentControl : UserControl
 
         _isSwitchingSong = true;
         sbOut.Begin();
+    }
+
+    // ── 播放状态 → 封面缩放动画 ─────────────────────────
+
+    /// <summary>
+    /// 根据播放状态缩放封面：暂停 → 90%，播放 → 100%，300ms 缓出动画。
+    /// </summary>
+    private void AnimateCoverForPlaybackStatus(
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus? status)
+    {
+        double targetScale = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused
+            ? 0.9 : 1.0;
+
+        double currentScale = CoverScaleTransform.ScaleX;
+        if (Math.Abs(currentScale - targetScale) < 0.001) return;
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = TimeSpan.FromMilliseconds(300);
+
+        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(currentScale, targetScale, duration) { EasingFunction = ease });
+        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(currentScale, targetScale, duration) { EasingFunction = ease });
     }
 
     // ── 工具类 ──────────────────────────────────────────────

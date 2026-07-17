@@ -1,3 +1,5 @@
+using Windows.Media.Control;
+
 namespace Toolbox.Tools.Models;
 
 /// <summary>
@@ -29,6 +31,9 @@ public class NowPlayingInfo
 
     /// <summary>刷新版本号，递增标识每次 SMTC 快照的时序顺序。用于 UI 侧防过期加载覆盖。</summary>
     public int RefreshVersion { get; set; }
+
+    /// <summary>播放状态（Playing / Paused / Stopped 等），来自 SMTC PlaybackInfo。</summary>
+    public GlobalSystemMediaTransportControlsSessionPlaybackStatus? PlaybackStatus { get; set; }
 
     /// <summary>
     /// 是否有有效歌曲（按 Title 是否非空判断）。

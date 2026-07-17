@@ -193,6 +193,7 @@ public sealed class SMTCListener : IDisposable
     {
         var mediaProps = await _session!.TryGetMediaPropertiesAsync();
         var timeline = _session.GetTimelineProperties();
+        var playbackInfo = _session.GetPlaybackInfo();
 
         var info = new NowPlayingInfo
         {
@@ -200,6 +201,7 @@ public sealed class SMTCListener : IDisposable
             Artist = mediaProps?.Artist ?? string.Empty,
             Position = timeline?.Position ?? TimeSpan.Zero,
             Duration = CalcDuration(timeline),
+            PlaybackStatus = playbackInfo?.PlaybackStatus,
             RefreshVersion = version,
         };
 
@@ -257,6 +259,7 @@ public sealed class SMTCListener : IDisposable
     private void RefreshTimelineOnly(int version)
     {
         var timeline = _session!.GetTimelineProperties();
+        var playbackInfo = _session.GetPlaybackInfo();
 
         var info = new NowPlayingInfo
         {
@@ -265,6 +268,7 @@ public sealed class SMTCListener : IDisposable
             Position = timeline?.Position ?? TimeSpan.Zero,
             Duration = CalcDuration(timeline),
             ThumbnailData = CurrentInfo.ThumbnailData, // 保留已有封面，不重读
+            PlaybackStatus = playbackInfo?.PlaybackStatus,
             RefreshVersion = version,
         };
 
