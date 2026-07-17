@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using Toolbox.Controls;
 using Toolbox.Tools.Helpers;
+using Toolbox.Tools.Services;
 
 namespace Toolbox.Tools.Views;
 
@@ -15,6 +16,7 @@ namespace Toolbox.Tools.Views;
 public partial class AcrylicMusicWindow : Window
 {
     private bool _isLocked;
+    private EdgeDockService? _edgeDock;
 
     public AcrylicMusicWindow()
     {
@@ -37,6 +39,13 @@ public partial class AcrylicMusicWindow : Window
         set => MusicContent.SizeMode = value;
     }
 
+    public DockTriggerBar TriggerBar => DockTriggerBar;
+
+    public event EventHandler? DragMoveCompleted;
+
+    /// <summary>由 EdgeDockService 在 Attach 时设置，用于 MouseLeave 缩回检测。</summary>
+    public void SetEdgeDockService(EdgeDockService service) => _edgeDock = service;
+
     public void SetWindowLocked(bool locked) => _isLocked = locked;
 
     private void OnSizeRequired(object? sender, (double Width, double Height) size)
@@ -57,7 +66,10 @@ public partial class AcrylicMusicWindow : Window
     private void OnDragRequested(object? sender, EventArgs e)
     {
         if (!_isLocked && Mouse.LeftButton == MouseButtonState.Pressed)
+        {
             DragMove();
+            DragMoveCompleted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnWindowLocationChanged(object? sender, EventArgs e)

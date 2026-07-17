@@ -182,7 +182,7 @@ public class NeteaseMusicTool : ITool
         {
             Style = FindResourceStyle("ClassicCheckBoxStyle"),
             Content = "锁定悬浮窗位置",
-            Margin = new Thickness(0, 0, 0, 0)
+            Margin = new Thickness(0, 0, 0, 6)
         };
         cbLock.SetBinding(ToggleButton.IsCheckedProperty,
             new System.Windows.Data.Binding("LockFloatWindow")
@@ -191,8 +191,23 @@ public class NeteaseMusicTool : ITool
                 Mode = System.Windows.Data.BindingMode.TwoWay
             });
 
+        // 复选框 3：贴边自动缩入
+        var cbEdgeDock = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "贴边自动缩入",
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        cbEdgeDock.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("EdgeDockEnabled")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+
         settingsPanel.Children.Add(cbBlur);
         settingsPanel.Children.Add(cbLock);
+        settingsPanel.Children.Add(cbEdgeDock);
         settingsBorder.Child = settingsPanel;
 
         root.Children.Add(settingsBorder);
@@ -219,6 +234,11 @@ public class NeteaseMusicTool : ITool
                     break;
                 case nameof(AudioflowSettings.LockFloatWindow):
                     mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+                    break;
+                case nameof(AudioflowSettings.EdgeDockEnabled):
+                    mgr.DockService.Enabled = AudioflowSettings.Instance.EdgeDockEnabled;
+                    if (!mgr.DockService.Enabled)
+                        mgr.DockService.ForceRestore();
                     break;
             }
         };

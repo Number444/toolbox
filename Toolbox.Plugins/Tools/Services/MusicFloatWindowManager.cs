@@ -18,7 +18,11 @@ public class MusicFloatWindowManager
     public static MusicFloatWindowManager Instance => _instance.Value;
 
     private readonly SMTCListener _listener = new();
+    private readonly EdgeDockService _dockService = new();
     private NowPlayingInfo _cachedInfo = new();
+
+    /// <summary>贴边服务，供外部（NeteaseMusicTool）访问。</summary>
+    public EdgeDockService DockService => _dockService;
 
     private Window? _activeWindow;
     private bool _isVisible;
@@ -64,6 +68,11 @@ public class MusicFloatWindowManager
         _activeWindow.LocationChanged += OnWindowMoved;
         _isVisible = true;
         VisibilityChanged?.Invoke(this, true);
+
+        // 启动时检测是否满足贴边条件，自动收起
+        newWindow.Dispatcher.BeginInvoke(
+            new Action(() => _dockService.OnDragCompleted()),
+            System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     /// <summary>隐藏当前窗口。</summary>
@@ -72,6 +81,7 @@ public class MusicFloatWindowManager
         SaveWindowPosition();
         if (_activeWindow != null)
             _activeWindow.LocationChanged -= OnWindowMoved;
+        _dockService.Detach();
         _activeWindow?.Hide();
         _isVisible = false;
         VisibilityChanged?.Invoke(this, false);
@@ -83,6 +93,7 @@ public class MusicFloatWindowManager
         SaveWindowPosition();
         if (_activeWindow != null)
             _activeWindow.LocationChanged -= OnWindowMoved;
+        _dockService.Detach();
         _listener.NowPlayingChanged -= OnNowPlayingChanged;
         _listener.Dispose();
         _activeWindow?.Close();
@@ -106,6 +117,7 @@ public class MusicFloatWindowManager
         var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
 
         _activeWindow.LocationChanged -= OnWindowMoved;
+        _dockService.Detach();
 
         // 创建新窗口
         var newWindow = CreateWindow();
@@ -141,6 +153,7 @@ public class MusicFloatWindowManager
         var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
 
         _activeWindow.LocationChanged -= OnWindowMoved;
+        _dockService.Detach();
 
         // 创建同类型新窗口（保持 blur/transparent 不变，只改 SizeMode）
         var newWindow = CreateWindow();
@@ -197,8 +210,21 @@ public class MusicFloatWindowManager
             ? new AcrylicMusicWindow()
             : new TransparentMusicWindow();
 
-        GetContentControl(window).SizeMode = _sizeMode;
+        var content = GetContentControl(window);
+        content.SizeMode = _sizeMode;
+
+        // 透明窗口：需越界 5px 才触发贴边；毛玻璃窗口：距边缘 10px 即触发
+        _dockService.EdgeThreshold = _blurEnabled ? 10 : -5;
+
+        // 挂载 EdgeDockService
+        _dockService.Attach(window, content, GetTriggerBar(window), OnDragMoveCompleted);
+
         return window;
+    }
+
+    private void OnDragMoveCompleted(object? sender, EventArgs e)
+    {
+        _dockService.OnDragCompleted();
     }
 
     private static MusicContentControl GetContentControl(Window window) =>
@@ -206,6 +232,14 @@ public class MusicFloatWindowManager
         {
             TransparentMusicWindow tw => tw.MusicContent,
             AcrylicMusicWindow aw => aw.MusicContent,
+            _ => throw new InvalidOperationException("Unknown window type")
+        };
+
+    private static DockTriggerBar GetTriggerBar(Window window) =>
+        window switch
+        {
+            TransparentMusicWindow tw => tw.TriggerBar,
+            AcrylicMusicWindow aw => aw.TriggerBar,
             _ => throw new InvalidOperationException("Unknown window type")
         };
 

@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Input;
 using Toolbox.Controls;
+using Toolbox.Tools.Services;
 
 namespace Toolbox.Tools.Views;
 
@@ -28,6 +29,13 @@ public partial class TransparentMusicWindow : Window
         set => MusicContent.SizeMode = value;
     }
 
+    public DockTriggerBar TriggerBar => DockTriggerBar;
+
+    public event EventHandler? DragMoveCompleted;
+
+    /// <summary>由 EdgeDockService 在 Attach 时设置，用于 MouseLeave 缩回检测。</summary>
+    public void SetEdgeDockService(EdgeDockService service) { }
+
     public void SetWindowLocked(bool locked) => _isLocked = locked;
 
     private void OnSizeRequired(object? sender, (double Width, double Height) size)
@@ -39,7 +47,10 @@ public partial class TransparentMusicWindow : Window
     private void OnDragRequested(object? sender, EventArgs e)
     {
         if (!_isLocked && Mouse.LeftButton == MouseButtonState.Pressed)
+        {
             DragMove();
+            DragMoveCompleted?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnWindowLocationChanged(object? sender, EventArgs e)

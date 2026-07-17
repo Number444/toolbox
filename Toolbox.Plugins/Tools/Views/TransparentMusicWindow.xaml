@@ -13,5 +13,13 @@
         ResizeMode="NoResize"
         WindowStartupLocation="Manual">
 
-    <controls:MusicContentControl x:Name="MusicContent" />
+    <Grid>
+        <controls:MusicContentControl x:Name="MusicContent" />
+
+        <!-- 贴边触发条（默认隐藏，Docked 状态时才可见） -->
+        <controls:DockTriggerBar x:Name="DockTriggerBar"
+            Width="14"
+            VerticalAlignment="Stretch"
+            Visibility="Collapsed" />
+    </Grid>
 </Window>

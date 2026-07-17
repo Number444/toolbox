@@ -108,7 +108,6 @@ public partial class MusicContentControl : UserControl
                     onPhase2Complete: () =>
                     {
                         StartOrStopTitleMarquee();
-                        AnimateCoverForPlaybackStatus(info.PlaybackStatus);
                     });
             }
             else if (isCoverUpdate)
@@ -464,18 +463,18 @@ public partial class MusicContentControl : UserControl
         GlobalSystemMediaTransportControlsSessionPlaybackStatus? status)
     {
         double targetScale = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused
-            ? 0.9 : 1.0;
-
-        double currentScale = CoverScaleTransform.ScaleX;
-        if (Math.Abs(currentScale - targetScale) < 0.001) return;
+            ? 0.85 : 1.0;
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(300);
 
+        // 不判断当前 scale——每次状态更新都无条件执行，由调用方（SMTC 事件、窗口打开）保证时序正确
+        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
         CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(currentScale, targetScale, duration) { EasingFunction = ease });
+            new DoubleAnimation(CoverScaleTransform.ScaleX, targetScale, duration) { EasingFunction = ease });
         CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(currentScale, targetScale, duration) { EasingFunction = ease });
+            new DoubleAnimation(CoverScaleTransform.ScaleY, targetScale, duration) { EasingFunction = ease });
     }
 
     // ── 工具类 ──────────────────────────────────────────────
