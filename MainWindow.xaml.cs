@@ -85,9 +85,8 @@ public partial class MainWindow : Window
     {
         double r = 8; // 圆角半径，与 WindowChrome.CornerRadius 和 Border.CornerRadius 保持一致
 
-        // 外矩形（尖角）和内矩形（圆角，填充整个窗口）的差集 = 仅四角，不含四边
         var outerRect = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight));
-        var innerRect = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight), r, r);
+        var innerRect = new RectangleGeometry(new Rect(r, r, ActualWidth - 2 * r, ActualHeight - 2 * r), r, r);
 
         CornerMask.Data = new CombinedGeometry(GeometryCombineMode.Exclude, outerRect, innerRect);
     }
