@@ -40,6 +40,8 @@ public class JunkCleanerTool : ITool
     private CheckBox? _protectRecentCheck;
     private CancellationTokenSource? _cts;
     private bool _isBusy;
+    private enum ActiveOp { None, Scanning, Cleaning }
+    private ActiveOp _activeOp;
     private Border? _statusArea;
     private System.Windows.Shapes.Ellipse? _spinner;
     private TextBlock? _doNotCloseText;
@@ -175,7 +177,7 @@ public class JunkCleanerTool : ITool
             Background = new SolidColorBrush(BgDark),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 8, 10, 8),
-            Margin = new Thickness(0, 6, 0, 4),
+            Margin = new Thickness(0, 6, 0, 12),
             Visibility = Visibility.Collapsed
         };
         var statusStack = new StackPanel();
@@ -253,7 +255,12 @@ public class JunkCleanerTool : ITool
             FontSize = 13,
             Padding = new Thickness(10, 5, 10, 5)
         };
-        _scanButton.Click += async (_, _) => await StartScanAsync();
+        _scanButton.Click += async (_, _) =>
+        {
+            if (_activeOp == ActiveOp.Scanning) { _cts?.Cancel(); return; }
+            if (_isBusy) return;
+            await StartScanAsync();
+        };
 
         _cleanButton = new Button
         {
@@ -263,7 +270,12 @@ public class JunkCleanerTool : ITool
             Margin = new Thickness(8, 0, 0, 0),
             IsEnabled = false
         };
-        _cleanButton.Click += async (_, _) => await StartCleanAsync();
+        _cleanButton.Click += async (_, _) =>
+        {
+            if (_activeOp == ActiveOp.Cleaning) { _cts?.Cancel(); return; }
+            if (_isBusy) return;
+            await StartCleanAsync();
+        };
 
         _protectRecentCheck = new CheckBox
         {
@@ -362,6 +374,7 @@ public class JunkCleanerTool : ITool
     private async Task StartScanAsync()
     {
         if (_isBusy) return;
+        _activeOp = ActiveOp.Scanning;
         SetBusy(true);
         HideError();
         _statusText!.Text = "";
@@ -511,6 +524,7 @@ public class JunkCleanerTool : ITool
         if (!dialog.Confirmed)
             return;
 
+        _activeOp = ActiveOp.Cleaning;
         SetBusy(true);
         HideError();
         _statusText!.Text = "";
@@ -806,7 +820,7 @@ public class JunkCleanerTool : ITool
 
     private void UpdateCleanButton()
     {
-        if (_cleanButton == null) return;
+        if (_cleanButton == null || _isBusy) return;
         long selectedSize = _categories
             .Where(c => c.Check?.IsChecked == true && c.FileCount > 0)
             .Sum(c => c.SizeBytes);
@@ -819,11 +833,28 @@ public class JunkCleanerTool : ITool
     private void SetBusy(bool busy)
     {
         _isBusy = busy;
-        if (_scanButton != null) _scanButton.IsEnabled = !busy;
+        bool scanning = _activeOp == ActiveOp.Scanning;
+        bool cleaning = _activeOp == ActiveOp.Cleaning;
+
+        if (_scanButton != null)
+        {
+            _scanButton.IsEnabled = busy ? scanning : true;
+            _scanButton.Content = busy && scanning ? "✕ 取消扫描" : "🔍 开始扫描";
+        }
+        if (_cleanButton != null)
+        {
+            _cleanButton.IsEnabled = busy ? cleaning : false;
+            if (busy && cleaning)
+                _cleanButton.Content = "✕ 取消清理";
+        }
+
+        if (!busy) _activeOp = ActiveOp.None;
+
         if (busy && _statusArea != null) _statusArea.Visibility = Visibility.Visible;
         if (_spinner != null) _spinner.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         if (_doNotCloseText != null) _doNotCloseText.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        UpdateCleanButton();
+
+        if (!busy) UpdateCleanButton();
     }
 
     private void ReportProgress(string? text)
