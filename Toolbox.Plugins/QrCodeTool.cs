@@ -44,12 +44,13 @@ public class QrCodeTool : ITool
             Margin = new Thickness(0, 0, 0, 12)
         };
 
-        // 二维码图片容器（白色背景确保在深色主题下可见）
+        // 二维码图片容器（深灰圆角背景，与主题融合）
         var imageBorder = new Border
         {
             Width = 200,
             Height = 200,
-            Background = new SolidColorBrush(Colors.White),
+            Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)),
+            CornerRadius = new CornerRadius(8),
             Child = new Image
             {
                 Width = 180,
@@ -64,49 +65,43 @@ public class QrCodeTool : ITool
         };
         _qrImage = (Image)imageBorder.Child;
 
-        // "生成二维码" 按钮
+        // 三个按钮：左对齐竖排，从短到长
         var generateButton = new Button
         {
             Content = "生成二维码",
             FontSize = 14,
-            Padding = new Thickness(10),
-            Height = 36,
+            Padding = new Thickness(14, 6, 14, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-
-        // 按钮行（保存 / 复制）
-        var buttonRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 0, 0, 6)
         };
 
         var saveButton = new Button
         {
             Content = "💾 保存为 PNG",
             FontSize = 14,
-            Padding = new Thickness(10),
-            Height = 36,
-            Margin = new Thickness(0, 0, 8, 0)
+            Padding = new Thickness(14, 6, 14, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 6)
         };
 
         var copyButton = new Button
         {
             Content = "📋 复制到剪贴板",
             FontSize = 14,
-            Padding = new Thickness(10),
-            Height = 36
+            Padding = new Thickness(14, 6, 14, 6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 6)
         };
 
         // 状态文字
         _statusBlock = new TextBlock
         {
             Text = "",
-            FontSize = 13
+            FontSize = 13,
+            Margin = new Thickness(0, 4, 0, 0)
         };
 
-        // 右侧垂直按钮区（生成二维码 / 保存复制 / 状态文字）
+        // 右侧垂直按钮区（左对齐，从短到长排列）
         var rightPanel = new StackPanel
         {
             Orientation = Orientation.Vertical,
@@ -114,9 +109,8 @@ public class QrCodeTool : ITool
             Margin = new Thickness(0, 4, 0, 0)
         };
         rightPanel.Children.Add(generateButton);
-        buttonRow.Children.Add(saveButton);
-        buttonRow.Children.Add(copyButton);
-        rightPanel.Children.Add(buttonRow);
+        rightPanel.Children.Add(saveButton);
+        rightPanel.Children.Add(copyButton);
         rightPanel.Children.Add(_statusBlock);
 
         // 水平容器：左侧图片 + 右侧按钮区
