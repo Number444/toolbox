@@ -191,6 +191,7 @@ public class SoftwareUninstallTool : ITool
         lvBorder.SetBinding(Border.BorderThicknessProperty, new Binding("BorderThickness") { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent) });
         lvBorder.SetValue(Border.SnapsToDevicePixelsProperty, true);
         lvBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(8)); // 圆角遮罩
+        lvBorder.SetValue(Border.PaddingProperty, new Thickness(2, 3, 2, 3)); // 给圆角留出间距
 
         var lvScrollViewer = new FrameworkElementFactory(typeof(ScrollViewer));
         lvScrollViewer.SetValue(ScrollViewer.FocusableProperty, false);
@@ -215,8 +216,8 @@ public class SoftwareUninstallTool : ITool
         var itemStyle = new Style(typeof(ListViewItem));
         itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgDark)));
         itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(TextPrimary)));
-        itemStyle.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
-        itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+        itemStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A))));
+        itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0, 0, 0, 1)));
         itemStyle.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty, null));
 
         // 自定义 ControlTemplate — 仅含 Border + GridViewRowPresenter，无 FocusVisual
@@ -240,14 +241,12 @@ public class SoftwareUninstallTool : ITool
         // 悬停状态：保持灰色以示区别
         var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
         hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgHover)));
-        hoverTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(hoverTrigger);
 
         // 选中状态：绿色背景 + 深色文字
         var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
         selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Accent)));
         selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))));
-        selectedTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(selectedTrigger);
 
         // 选中 + 非活动焦点状态：同样绿色
@@ -256,10 +255,15 @@ public class SoftwareUninstallTool : ITool
         multiTrigger.Conditions.Add(new Condition { Property = Selector.IsSelectionActiveProperty, Value = false });
         multiTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Accent)));
         multiTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))));
-        multiTrigger.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         itemStyle.Triggers.Add(multiTrigger);
 
         listView.Resources.Add(typeof(ListViewItem), itemStyle);
+
+        // 隐式 TextBlock 样式：统一列表内所有文字的内边距和垂直对齐
+        var cellTextStyle = new Style(typeof(TextBlock));
+        cellTextStyle.Setters.Add(new Setter(TextBlock.PaddingProperty, new Thickness(6, 3, 4, 3)));
+        cellTextStyle.Setters.Add(new Setter(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center));
+        listView.Resources.Add(typeof(TextBlock), cellTextStyle);
 
         var gridView = new GridView { AllowsColumnReorder = true };
 
@@ -472,6 +476,8 @@ public class SoftwareUninstallTool : ITool
             foreach (var sw in softwareList)
             {
                 sw.Icon = SoftwareUninstallService.ExtractIcon(sw.DisplayIcon);
+                if (sw.Icon == null)
+                    sw.Icon = CreateDefaultIcon();
             }
 
             _loadedSoftware = softwareList;
@@ -585,6 +591,15 @@ public class SoftwareUninstallTool : ITool
     }
 
     // ===== 工具方法 =====
+
+    private static ImageSource CreateDefaultIcon()
+    {
+        var drawing = new GeometryDrawing(
+            new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)),
+            new Pen(new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x60)), 1),
+            new RectangleGeometry(new Rect(2, 2, 24, 24), 4, 4));
+        return new DrawingImage(drawing);
+    }
 
     private static Style? FindResourceStyle(string key)
     {

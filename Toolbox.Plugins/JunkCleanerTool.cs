@@ -166,7 +166,7 @@ public class JunkCleanerTool : ITool
             Text = "扫描 C 盘常见垃圾文件，按类别勾选后一键清理。清理的文件会先移入回收站，可随时恢复。",
             TextWrapping = TextWrapping.Wrap,
             Foreground = new SolidColorBrush(TextSecondary),
-            Margin = new Thickness(0, 0, 0, 14)
+            Margin = new Thickness(0, 0, 0, 8)
         });
 
         // 状态栏（顶部显眼位置，含进度、结果、加载动画）
@@ -175,7 +175,7 @@ public class JunkCleanerTool : ITool
             Background = new SolidColorBrush(BgDark),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 8, 10, 8),
-            Margin = new Thickness(0, 10, 0, 6),
+            Margin = new Thickness(0, 6, 0, 4),
             Visibility = Visibility.Collapsed
         };
         var statusStack = new StackPanel();
