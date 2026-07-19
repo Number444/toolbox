@@ -330,7 +330,7 @@
                                     SnapsToDevicePixels="True">
                                 <!-- 对勾 -->
                                 <Path x:Name="CheckMark"
-                                      Data="M4,10 L8,14 L16,5"
+                                      Data="M2,10 L6,14 L14,5"
                                       Stroke="#1E1E1E"
                                       StrokeThickness="2.5"
                                       StrokeEndLineCap="Round"
