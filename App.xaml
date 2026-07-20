@@ -113,6 +113,7 @@
                                 Background="{TemplateBinding Background}"
                                 Width="{TemplateBinding Width}"
                                 Height="{TemplateBinding Height}"
+                                CornerRadius="6"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -140,6 +141,7 @@
                                 Background="{TemplateBinding Background}"
                                 Width="{TemplateBinding Width}"
                                 Height="{TemplateBinding Height}"
+                                CornerRadius="6"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -263,9 +265,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
+                        <!-- 圆角 + 内缩：避免 hover/选中背景的方形尖角从弹出层 5px 圆角后方突出 -->
                         <Border x:Name="bd"
                                 Background="{TemplateBinding Background}"
                                 Padding="{TemplateBinding Padding}"
+                                CornerRadius="4"
+                                Margin="2,1"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"

@@ -68,6 +68,32 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _mouseHaloEnabled = true;
+    public bool MouseHaloEnabled
+    {
+        get => _mouseHaloEnabled;
+        set
+        {
+            if (_mouseHaloEnabled == value) return;
+            _mouseHaloEnabled = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private bool _controlGlowEnabled = true;
+    public bool ControlGlowEnabled
+    {
+        get => _controlGlowEnabled;
+        set
+        {
+            if (_controlGlowEnabled == value) return;
+            _controlGlowEnabled = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     private static void SetStartupRegistry(bool enable)
     {
         using var key = Registry.CurrentUser.OpenSubKey(
@@ -123,6 +149,13 @@ public sealed class AppSettings : INotifyPropertyChanged
 
                 _autoStart = data.AutoStart;
                 OnPropertyChanged(nameof(AutoStart));
+
+                // 旧版 settings.json 无此字段（null），默认开启
+                _mouseHaloEnabled = data.MouseHaloEnabled ?? true;
+                OnPropertyChanged(nameof(MouseHaloEnabled));
+
+                _controlGlowEnabled = data.ControlGlowEnabled ?? true;
+                OnPropertyChanged(nameof(ControlGlowEnabled));
             }
         }
         catch { /* 文件损坏，忽略，保留默认值 */ }
@@ -135,7 +168,9 @@ public sealed class AppSettings : INotifyPropertyChanged
             MinimizeOnClose = _minimizeOnClose,
             AutoOpenFloatWindow = _autoOpenFloatWindow,
             MusicFloatSizeMode = _musicFloatSizeMode,
-            AutoStart = _autoStart
+            AutoStart = _autoStart,
+            MouseHaloEnabled = _mouseHaloEnabled,
+            ControlGlowEnabled = _controlGlowEnabled
         };
         var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
         try { File.WriteAllText(SettingsPath, json); }
@@ -153,5 +188,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         public bool AutoOpenFloatWindow { get; set; }
         public string? MusicFloatSizeMode { get; set; }
         public bool AutoStart { get; set; }
+        public bool? MouseHaloEnabled { get; set; }
+        public bool? ControlGlowEnabled { get; set; }
     }
 }

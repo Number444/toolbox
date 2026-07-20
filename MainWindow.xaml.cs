@@ -538,10 +538,28 @@ public partial class MainWindow : Window
     private Point _haloPos;             // 光晕当前位置（插值滞后跟随）
     private double _haloOpacity;        // 当前淡入淡出系数
     private bool _haloInitialized;      // 首次移动时直接吸附，避免从角落滑入
+    private bool _glowTargetsDirty = true;   // 边缘发光目标清单待刷新
+    private DateTime _glowTargetsLastRebuild = DateTime.MinValue;
 
     /// <summary>初始化鼠标光晕：位置插值跟随 + 淡入淡出（呼吸缩放动画在 XAML 中）</summary>
     private void InitHalo()
     {
+        // 布局变化（窗口缩放/工具切换/设置层显隐/分组展开折叠）时标记发光目标待刷新
+        GlowLayer.LayoutUpdated += (_, _) => _glowTargetsDirty = true;
+
+        // 工具切换：立即销毁原界面全部发光（0ms 残留），并在下一帧重建目标清单
+        if (DataContext is ViewModels.MainViewModel vm)
+        {
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(ViewModels.MainViewModel.SelectedTool))
+                    RequestGlowRebuild();
+            };
+        }
+
+        // 设置层显隐切换：同上，立即销毁 + 下一帧重建
+        SettingsLayer.IsVisibleChanged += (_, _) => RequestGlowRebuild();
+
         // 每帧用 Win32 GetCursorPos 轮询光标（原始屏幕坐标，与消息投递和命中测试
         // 完全无关——WPF 的 Mouse.GetPosition 由输入系统维护，鼠标悬停在
         // WindowChrome CaptionHeight 划出的 HTCAPTION 非客户区（顶栏空白处）时
@@ -570,12 +588,36 @@ public partial class MainWindow : Window
 
             _haloPos.X += (_haloTarget.X - _haloPos.X) * 0.12;
             _haloPos.Y += (_haloTarget.Y - _haloPos.Y) * 0.12;
-            _haloOpacity += ((inside ? 1.0 : 0.0) - _haloOpacity) * 0.08;
+            // 鼠标光晕开关：关闭时按"鼠标不在窗口"处理，平滑淡出后保持熄灭
+            bool haloOn = AppSettings.Instance.MouseHaloEnabled;
+            _haloOpacity += (((inside && haloOn) ? 1.0 : 0.0) - _haloOpacity) * 0.08;
 
             HaloTranslate.X = _haloPos.X - HaloEllipse.Width / 2;
             HaloTranslate.Y = _haloPos.Y - HaloEllipse.Height / 2;
             HaloEllipse.Opacity = _haloOpacity;
+
+            // 控件边缘发光开关：关闭时跳过目标重建，并按"鼠标不在窗口"瞬时熄灭
+            bool glowOn = AppSettings.Instance.ControlGlowEnabled;
+
+            // 边缘发光目标清单：节流重建（250ms），避免布局动画期间反复遍历视觉树
+            if (glowOn && _glowTargetsDirty &&
+                (DateTime.UtcNow - _glowTargetsLastRebuild).TotalMilliseconds >= 250)
+            {
+                GlowLayer.RebuildTargets(this);
+                _glowTargetsLastRebuild = DateTime.UtcNow;
+                _glowTargetsDirty = false;
+            }
+            // 传原始光标位置（非插值滞后的 _haloPos），保证移出控件瞬时熄灭（0ms）
+            GlowLayer.UpdateCursor(pt, inside && glowOn);
         };
+    }
+
+    /// <summary>界面/工具切换时立即销毁全部发光（0ms 残留），下一帧重建目标清单</summary>
+    private void RequestGlowRebuild()
+    {
+        GlowLayer.ClearTargets();
+        _glowTargetsDirty = true;
+        _glowTargetsLastRebuild = DateTime.MinValue;
     }
 
     [DllImport("user32.dll")]

@@ -430,9 +430,17 @@
                      Opacity="0"
                      RenderTransformOrigin="0.5,0.5">
                 <Ellipse.Fill>
+                    <!-- 10 个色标的线性径向衰减：alpha 从中心 0x40 到边缘 0x00 等差递减，无生硬折点 -->
                     <RadialGradientBrush>
                         <GradientStop Color="#40FFFFFF" Offset="0"/>
-                        <GradientStop Color="#17FFFFFF" Offset="0.55"/>
+                        <GradientStop Color="#39FFFFFF" Offset="0.11"/>
+                        <GradientStop Color="#32FFFFFF" Offset="0.22"/>
+                        <GradientStop Color="#2BFFFFFF" Offset="0.33"/>
+                        <GradientStop Color="#24FFFFFF" Offset="0.44"/>
+                        <GradientStop Color="#1CFFFFFF" Offset="0.56"/>
+                        <GradientStop Color="#15FFFFFF" Offset="0.67"/>
+                        <GradientStop Color="#0EFFFFFF" Offset="0.78"/>
+                        <GradientStop Color="#07FFFFFF" Offset="0.89"/>
                         <GradientStop Color="#00FFFFFF" Offset="1"/>
                     </RadialGradientBrush>
                 </Ellipse.Fill>
@@ -466,6 +474,11 @@
                 </Ellipse.Triggers>
             </Ellipse>
         </Canvas>
+
+        <!-- ▸ 交互控件边缘发光叠加层（鼠标光源照亮控件边缘，不拦截输入） -->
+        <helpers:EdgeGlowLayer x:Name="GlowLayer"
+                               Grid.RowSpan="3"
+                               IsHitTestVisible="False"/>
     </Grid>
 </Border>
 </Grid>

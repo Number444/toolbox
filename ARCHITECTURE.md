@@ -394,6 +394,8 @@ public static class ToolCategory
 | `AutoOpenFloatWindow` | `bool` | `false` | 启动时自动打开悬浮窗 |
 | `MusicFloatSizeMode` | `string` | `"Large"` | 悬浮窗默认大小（Large / Compact） |
 | `AutoStart` | `bool` | `false` | 开机自动启动（同步 HKCU\...\Run\Toolbox） |
+| `MouseHaloEnabled` | `bool` | `true` | 鼠标跟随光晕开关 |
+| `ControlGlowEnabled` | `bool` | `true` | 控件边缘发光（鼠标照亮）开关 |
 
 持久化：`%LOCALAPPDATA%\Toolbox\settings.json`，JSON 格式，所有属性变更触发 `PropertyChanged` + `Save()`。
 

@@ -71,6 +71,18 @@
                           Style="{StaticResource ToggleSwitchStyle}"
                           IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=AutoStart, Mode=TwoWay}"
                           Margin="0,16,0,0"/>
+
+                <!-- 鼠标光晕（滑块开关） -->
+                <CheckBox Content="鼠标跟随光晕"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=MouseHaloEnabled, Mode=TwoWay}"
+                          Margin="0,16,0,0"/>
+
+                <!-- 控件边缘发光（滑块开关） -->
+                <CheckBox Content="控件边缘发光（鼠标照亮效果）"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=ControlGlowEnabled, Mode=TwoWay}"
+                          Margin="0,16,0,0"/>
             </StackPanel>
         </Border>
 
