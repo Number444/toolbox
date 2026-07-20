@@ -1,147 +1,316 @@
 # Toolbox 项目架构
 
-> 最后更新: 2026-07-05
+> 最后更新: 2026-07-20
 
 ## 目录结构
 
 ```
 Toolbox/
-├── App.xaml (+ .cs)                     WPF 应用程序入口，定义全局深色主题资源（Button / TextBox / ComboBox / CheckBox / WindowButton / ScrollBar 样式）
-├── MainWindow.xaml (+ .cs)              主窗口：自定义标题栏(Win11三按钮) + 左侧导航(动画高亮) + 右侧内容(淡入过渡) + 状态栏 + 设置层
-├── Toolbox.csproj                       主项目文件（WinExe, net9.0-windows10.0.19041.0）
-├── AssemblyInfo.cs                      程序集信息
+├── Toolbox.sln                             解决方案（4 个项目）
+├── Directory.Build.props                   通用 MSBuild 属性
+├── Directory.Build.targets                 通用 MSBuild 目标
+│
+├── App.xaml (+ .cs)                        WPF 应用程序入口：单实例互斥 + 三层全局异常捕获
+├── MainWindow.xaml (+ .cs)                 主窗口：Acrylic 毛玻璃 + 自定义标题栏 + 导航 + 设置浮层
+├── Toolbox.csproj                          主项目文件（WinExe, net9.0-windows10.0.19041.0）
+├── AssemblyInfo.cs                         程序集信息
+├── Toolbox.ico                             应用图标
 │
 ├── Helpers/
-│   ├── CustomScrollBar.cs               自定义迷你滚动条（深色主题，替代系统 ScrollBar）
-│   ├── TransitioningContentControl.cs   内容切换淡入动画控件
-│   └── Win32Helper.cs                   Win11 DWM P/Invoke（圆角、Mica/MicaAlt 材质、帧扩展、暗黑模式）+ WM_NCCALCSIZE/WM_ERASEBKGND 拦截 + WndProc 消息钩子
+│   ├── Win32Helper.cs                      Win32 P/Invoke：圆角/深色模式/单实例互斥/Frame扩展/窗口查找 + WndProc 消息钩子（Acrylic 由 MainWindow.xaml.cs 内联实现）
+│   ├── SystemTrayHelper.cs                 纯 Win32 系统托盘图标（不依赖 WinForms）
+│   ├── CustomScrollBar.cs                  自定义迷你滚动条（深色主题，替代系统 ScrollBar）
+│   └── TransitioningContentControl.cs      内容切换淡入动画控件
 │
 ├── Services/
-│   └── ToolRegistry.cs                  运行时从 plugins/ 目录通过 Assembly.LoadFrom 动态加载插件 DLL
+│   └── ToolRegistry.cs                     工具注册中心：三策略插件加载（单文件发布/plugins目录/调试目录）
 │
 ├── Views/
-│   ├── SettingsView.xaml (+ .cs)        设置页面：3 个 ToggleSwitch（最小化/悬浮窗/自启）+ 悬浮窗大小选择 + 退出按钮
+│   └── SettingsView.xaml (+ .cs)           设置页面：3 个 ToggleSwitch + ComboBox(悬浮窗大小) + 退出按钮
 │
 ├── ViewModels/
-│   └── MainViewModel.cs                 主窗口 ViewModel（工具列表、选中状态、UI 内容缓存、分组与搜索过滤）
+│   └── MainViewModel.cs                    主窗口 ViewModel（工具发现、分组、搜索过滤、UI 缓存）
 │
-├── Toolbox.Core/                        接口库（class library，被主项目 / 插件项目引用）
+├── Toolbox.Core/                           核心抽象层（class library，被主项目 / 插件引用）
 │   ├── Toolbox.Core.csproj
 │   ├── Models/
-│   │   ├── ITool.cs                     工具接口: Name / Description / IconGlyph / CreateContent()
-│   │   ├── ToolGroup.cs                 工具分组模型（IsExpanded / IsHovered / ArrowText 状态）
-│   │   └── ToolCategory.cs              工具分类常量
+│   │   ├── ITool.cs                        工具接口：Name/Description/IconGlyph/Category/CreateContent()
+│   │   ├── ToolGroup.cs                    工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon）
+│   │   └── ToolCategory.cs                 工具分类常量（6 大类）
 │   └── Services/
-│       └── AppSettings.cs               单例应用设置（MinimizeOnClose / AutoOpenFloatWindow / AutoStart / MusicFloatSizeMode）
-│                                        JSON 持久化到 %LOCALAPPDATA%\Toolbox\settings.json，AutoStart 同步注册表
+│       └── AppSettings.cs                  单例全局设置（settings.json）：最小化关闭/自启悬浮窗/悬浮窗尺寸/开机自启
 │
-├── Toolbox.Plugins/                     插件库（class library，独立编译，运行时热加载）
+├── Toolbox.Plugins/                        插件实现层（独立程序集，运行时反射加载）
 │   ├── Toolbox.Plugins.csproj
-│   ├── Directory.Build.props            wpftmp 编译抑制（避免重复编译）
-│   ├── ScreensaverTool.cs               屏保工具（ComboBox 选屏保 + 一键启动）
-│   ├── ShutdownTool.cs                  定时关机工具（快捷按钮 + 自定义分钟 + 取消关机，已合并）
-│   ├── QRCodeTool.cs                    二维码生成工具
-│   ├── NeteaseMusicTool.cs              网易云音乐悬浮窗工具
-│   └── ForceDeleteTool.cs               强制删除文件工具
+│   │
+│   ├── ShutdownTool.cs                     定时关机：6 个快捷按钮 + 自定义分钟 + 取消关机
+│   ├── ScreensaverTool.cs                  系统屏保：ComboBox 选择并启动
+│   ├── RestartExplorerTool.cs              重启资源管理器：结束并重启 explorer.exe
+│   ├── JunkCleanerTool.cs                  C盘垃圾清理：12 类分类扫描，回收站删除，受保护文件跳过
+│   ├── SoftwareUninstallTool.cs            软件卸载管理器：注册表扫描 + 双击卸载 + 轮询检测
+│   ├── QrCodeTool.cs                       二维码生成：文本/URL 实时生成 + 保存 + 复制
+│   ├── QrCodeHelper.cs                     QRCoder 库辅助封装
+│   │
+│   ├── Tools/                              网易云音乐悬浮窗子模块
+│   │   ├── NeteaseMusicTool.cs             工具面板：胶囊开关 + 模式切换 + 毛玻璃/锁定/贴边设置
+│   │   ├── Models/
+│   │   │   └── NowPlayingInfo.cs           当前播放信息模型
+│   │   ├── Services/
+│   │   │   ├── SMTCListener.cs             SMTC 监听器：Windows 原生 API 监听媒体，陈旧封面重试（6 次退避）
+│   │   │   ├── MusicFloatWindowManager.cs  悬浮窗管理器（单例）：创建/切换透明/毛玻璃窗口，生命周期管理
+│   │   │   └── EdgeDockService.cs          贴边自动缩入服务：状态机（Free→Docking→Docked→Expanding→Expanded）
+│   │   └── Views/
+│   │       ├── AcrylicMusicWindow.xaml     毛玻璃悬浮窗（WindowChrome + DWM Acrylic，新架构）
+│   │       └── TransparentMusicWindow.xaml 纯透明悬浮窗（AllowsTransparency=True）
+│   │
+│   ├── Controls/
+│   │   ├── MusicContentControl.xaml        悬浮窗共享内容控件（封面/歌名/大小模式/跑马灯/切歌动画）
+│   │   └── DockTriggerBar.xaml             贴边触发条控件（梯形圆角 + 方向箭头）
+│   │
+│   ├── Services/
+│   │   ├── AudioflowSettings.cs            悬浮窗独立设置（audioflow.json）：毛玻璃/锁定/贴边/窗口位置
+│   │   └── SoftwareUninstallService.cs     已安装软件扫描 + 卸载执行（注册表 + 图标提取 + UAC 提权）
+│   │
+│   ├── Models/
+│   │   ├── InstalledSoftware.cs            已安装软件数据模型
+│   │   └── SortMode.cs                     排序模式枚举 + 扩展方法
+│   │
+│   └── Helpers/
+│       ├── DwmHelper.cs                    DWM 背景效果帮助类（Mica/Acrylic/圆角/深色模式）
+│       └── MonitorHelper.cs                多屏工作区查询（MonitorFromWindow + GetMonitorInfo）
 │
-└── bin/Debug/net9.0-windows/
-    ├── Toolbox.exe                      主程序
-    ├── Toolbox.Core.dll                 接口库
-    └── plugins/
-        └── Toolbox.Plugins.dll          插件 DLL（热插拔，可独立替换）
+├── Toolbox.Tests/                          单元测试项目
+│   ├── Toolbox.Tests.csproj
+│   ├── AppSettingsTests.cs
+│   ├── QrCodeToolTests.cs
+│   ├── SoftwareUninstallToolTests.cs
+│   └── NeteaseMusicToolTests.cs
+│
+├── setup/
+│   ├── ToolboxSetup.iss                    Inno Setup 安装脚本
+│   ├── Toolbox_Setup.exe                   打包好的安装程序
+│   └── publish/                            单文件发布产物
+│
+└── docs/
+    ├── music-float-window-structure.md          悬浮窗结构说明
+    ├── music-float-window-edge-dock-design.md  贴边缩入设计文档
+    ├── 按钮亚克力毛玻璃改造方案.md               主窗口 Acrylic + 按钮毛玻璃方案
+    └── plans/                                  各类功能设计文档
 ```
+
+### 行数概览
+
+| 文件 | 行数 | 说明 |
+|------|:----:|------|
+| App.xaml | 553 | 全局深色主题 + 所有控件样式和模板 |
+| App.xaml.cs | 118 | 单实例互斥 + 三层全局异常捕获 + crash.log |
+| MainWindow.xaml | 425 | 完整的主窗口布局 |
+| MainWindow.xaml.cs | 568 | DWM/Acrylic 内联实现（含 Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 |
+| Win32Helper.cs | 157 | 圆角/Acrylic/深色模式/消息钩子 P/Invoke |
+| SystemTrayHelper.cs | 277 | 纯 Win32 系统托盘 |
+| CustomScrollBar.cs | 318 | 自定义深色滚动条 |
+| TransitioningContentControl.cs | 53 | 淡入过渡控件 |
+| ToolRegistry.cs | 109 | 三策略插件加载 |
+| MainViewModel.cs | 171 | 工具分组 + 搜索过滤 + UI 缓存 |
+| SettingsView.xaml | 87 | 设置页 UI |
+| SettingsView.xaml.cs | 34 | 设置页后置代码 |
+| ITool.cs | 21 | 工具接口（含 Category） |
+| ToolCategory.cs | 16 | 6 大分类常量 |
+| ToolGroup.cs | 66 | 分组模型 |
+| AppSettings.cs | 156 | 全局设置单例 |
+| AudioflowSettings.cs | 173 | 悬浮窗独立设置 |
+| | | |
+| **插件工具** | | |
+| JunkCleanerTool.cs | 1024 | C盘垃圾清理（最大文件） |
+| SoftwareUninstallTool.cs | 613 | 软件卸载管理器 |
+| MusicContentControl.xaml.cs | 550 | 悬浮窗内容控件 |
+| EdgeDockService.cs | 532 | 贴边缩入服务 |
+| SMTCListener.cs | 383 | SMTC 监听器 |
+| MusicFloatWindowManager.cs | 339 | 悬浮窗管理器 |
+| DwmHelper.cs | 296 | DWM 帮助类 |
+| NeteaseMusicTool.cs | 285 | 悬浮窗工具面板 |
+| SoftwareUninstallService.cs | 284 | 卸载服务 |
+| QrCodeTool.cs | 224 | 二维码生成 |
+| ShutdownTool.cs | 215 | 定时关机 |
+| AcrylicMusicWindow.xaml.cs | 146 | 毛玻璃窗口 |
+| ScreensaverTool.cs | 155 | 屏保启动 |
+| DockTriggerBar.xaml.cs | 123 | 贴边触发条 |
+| RestartExplorerTool.cs | 90 | 重启资源管理器 |
+| MonitorHelper.cs | 81 | 多屏辅助 |
+| TransparentMusicWindow.xaml.cs | 71 | 透明窗口 |
 
 ## 项目间依赖关系
 
 ```
-Toolbox ──→ Toolbox.Core          （编译期 ProjectReference，需要 ITool 接口）
-         ──→ plugins/Toolbox.Plugins.dll（运行时 Assembly.LoadFrom，热插拔。主项目不直接引用插件，仅 Compile Remove 排除）
+Toolbox ──→ Toolbox.Core                （编译期 ProjectReference，需要 ITool 接口）
+         ──→ Toolbox.Plugins            （编译期 ProjectReference，单文件发布嵌入）
+         ──→ plugins/Toolbox.Plugins.dll（运行时后备加载，通过 Assembly.LoadFrom）
 
-Toolbox.Plugins ──→ Toolbox.Core  （编译期 ProjectReference，实现 ITool 接口）
+Toolbox.Plugins ──→ Toolbox.Core        （编译期 ProjectReference，实现 ITool）
+
+Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
+               ──→ Toolbox.Plugins      （测试插件层服务）
 ```
 
-**关键设计**：`Toolbox.csproj` 通过 `<Compile Remove>` 排除子项目 `*.cs` 文件，防止 SDK 风格的通配编译导致类型重复。主项目编译时不涉及插件代码，插件 DLL 需独立编译后放入 `plugins/` 目录。
+**关键设计**：Toolbox.csproj 有 Toolbox.Plugins 的 ProjectReference，但插件 DLL 仍通过 `ToolRegistry` 反射扫描加载，而非直接类型引用。单文件发布时 .NET 宿主将嵌入式程序集提取到 temp 目录注册到默认加载上下文。
 
 ## 架构层次说明
 
 ### 层 1：Toolbox.Core（接口定义 + 基础服务层）
-- 定义 `ITool` 接口，作为所有工具的契约
-- 四个成员：`Name`（导航栏显示）、`Description`（描述）、`IconGlyph`（Emoji 图标）、`CreateContent()`（返回 WPF UIElement）
-- `ToolGroup` 分组模型支持导航栏手风琴式展开/折叠
-- `AppSettings` 单例管理所有用户偏好，JSON 持久化 + INotifyPropertyChanged
-- 无 UI 依赖，纯抽象，被 Toolbox 和 Toolbox.Plugins 共同引用
+
+- 定义 `ITool` 接口，6 个成员：`Name` / `Description` / `IconGlyph` / `Category` / `CreateContent()`
+- `Category` 属性（2026-07 新增）将工具按 `ToolCategory` 六大分类分组
+- `ToolGroup` 分组模型支持导航栏手风琴式展开/折叠（IsExpanded/IsHovered/ArrowText/HoverIcon/CategoryColor）
+- `AppSettings` 单例管理全局用户偏好，JSON 持久化到 `%LOCALAPPDATA%\Toolbox\settings.json`
+- 无 UI 依赖，纯抽象，被主项目和插件项目共同引用
 
 ### 层 2：Toolbox.Plugins（工具实现层）
-- 每个工具一个 `.cs` 文件，实现 `ITool` 接口，`CreateContent()` 返回 `UIElement`
-- 独立编译为 class library，DLL 手动部署到 `plugins/` 目录
-- 增删工具 **不修改主项目代码**，重新编译插件 + 重启主程序即可
+
+- 每个工具一个 `.cs` 文件实现 `ITool`，`CreateContent()` 返回 `UIElement`
+- 独立编译为 class library，反射加载
+- **增删工具不修改主项目代码**，仅重新编译插件
+- 已实现 7 个工具 + 1 个完整悬浮窗子模块
+- 子模块（悬浮窗）进一步分层：Views / Controls / Services / Models / Helpers
 - `Directory.Build.props` 处理 `wpftmp` 临时编译项目的重复生成问题
-- 已实现工具：屏保启动、定时关机、二维码生成、网易云音乐悬浮窗、强制删除文件
 
 ### 层 3：Toolbox（主程序层）
-- 启动时通过 `ToolRegistry.DiscoverTools()` 反射扫描 `plugins/Toolbox.Plugins.dll`
-- `MainViewModel` 管理工具列表、分组搜索、选中态、UI 内容缓存
-- UI 布局在 `MainWindow.xaml`：自定义标题栏 → 左侧手风琴导航 + 动画高亮 → 右侧 TransitioningContentControl 淡入过渡 + 状态栏 + 设置浮层
-- Win11 外观：DWM 圆角 (DWMWCP_ROUND)、Mica Alt 材质 (DWMSBT_TABBEDWINDOW，低版本自动降级)、帧扩展 (DwmExtendFrameIntoClientArea)
-- 设置页面 (`SettingsView.xaml`) 作为浮层叠加在内容区上方，通过 `BackRequestedEvent` 气泡事件返回
+
+- 启动时通过 `App.xaml.cs`：单实例互斥（Mutex）→ 全局异常捕获（3 层）→ 加载 AppSettings + AudioflowSettings
+- `MainViewModel` 管理工具列表、分组、搜索过滤、UI 缓存
+- 主窗口 UI：Acrylic 毛玻璃背景 → 自定义标题栏 + 左侧手风琴导航 + 右侧 TransitioningContentControl 淡入过渡 + 设置浮层
+- 关闭按钮支持最小化到系统托盘（纯 Win32，不依赖 WinForms）
+- 启动时根据设置自动打开悬浮窗
+- **v1.1**（状态栏显示）
+
+#### 半透明背景体系（Acrylic 毛玻璃配套，004db07）
+
+所有面板使用带 alpha 通道的半透明色，让 DWM Acrylic 毛玻璃效果从背景透入，形成统一的毛玻璃视觉。
+
+| 区域 | Background | 不透明度 | 说明 |
+|------|-----------|:-------:|------|
+| 标题栏 | `Transparent` | 0% | 完全透明，Acrylic 完全透入 |
+| 状态栏 | `Transparent` | 0% | 同上 |
+| 导航栏 | `#992D2D2D` | ~60% | 半透明暗色表面 |
+| 搜索框区域 | `#662D2D2D` | ~40% | 更透明，突出搜索输入框 |
+| 搜索输入框 | `#80404040` | ~50% | 提亮背景，保持可读性 |
+| 内容区 | `#66323232` | ~40% | 半透明卡片效果 |
+| 设置层 | `#4D323232` | ~30% | 最透明，叠加在内容区上方 |
+| CornerMask | `BgDarkBrush` | 100% | 四角纯色遮盖（不透，堵 DWM 帧扩展漏白） |
+
+### 层 4：Toolbox.Tests（单元测试层）
+
+- xUnit 测试框架
+- 覆盖核心服务（AppSettings）、工具辅助（QRCode）、悬浮窗（NeteaseMusic）、软件卸载（SoftwareUninstall）
 
 ## 关键流程
 
 ### 启动流程
+
 ```
-App.xaml → MainWindow.xaml (DataContext = MainViewModel)
-         → MainWindow 构造函数：
-            1. InitializeComponent()
-            2. Loaded 事件 →
-               - WindowInteropHelper 获取 HWND
-               - Win32Helper.EnableDarkMode(hwnd)            // 3. 沉浸式深色模式
-               - Win32Helper.SetBorderColor(hwnd)             // 4. 压制 DWM 系统边框
-               - Win32Helper.ExtendFrameIntoClientArea(hwnd)  // 5. 扩展帧到标题栏
-               - HwndSource.AddHook(Win32Helper.WndProc)      // 6. WM_NCCALCSIZE + WM_ERASEBKGND 拦截
-               - HwndTarget.BackgroundColor = Transparent     // 7. DirectX 交换链透明
-               - Dispatcher.BeginInvoke: UpdateCornerMask() + InitHighlight()
-            3. StateChanged 事件 → UpdateMaximizeIcon()
-         → MainViewModel 构造函数:
-            ToolRegistry.DiscoverTools()
-              → Assembly.LoadFrom("plugins/Toolbox.Plugins.dll")
-              → 反射扫描 ITool 实现 → 实例化 → 按分类分组
-              → "⚙️ 系统维护" 默认展开，其余折叠
+App.xaml → App.xaml.cs OnStartup:
+  1. 注册三层异常捕获：
+     - DispatcherUnhandledException（UI 线程）
+     - AppDomain.UnhandledException（非 UI 线程）
+     - UnobservedTaskException（Task 异常）
+  2. 创建 Mutex("ToolboxSingleInstanceMutex") 检测单实例
+  3. 已有实例 → ActivateExistingInstance() → Shutdown()
+  4. AppSettings.Instance.Load()
+  5. AudioflowSettings.Instance.Load()
+
+→ MainWindow.xaml (DataContext = MainViewModel):
+  Loaded 事件：
+    1. WindowInteropHelper 获取 HWND
+    2. Win32Helper.EnableRoundedCorners(hwnd)              // 圆角 (DWMWCP_ROUND)
+    3. EnableAcrylicBackdrop(hwnd)                         // Acrylic 毛玻璃（内联实现）
+       - Win11 22H2+: DWMWA_SYSTEMBACKDROP_TYPE=38, Acrylic=3
+       - Win10: ACCENT_ENABLE_ACRYLICBLURBEHIND=4, tint=0x661A1A1A
+    4. Win32Helper.EnableDarkMode(hwnd)                    // 沉浸式深色模式
+    5. Win32Helper.ExtendFrameIntoClientArea(hwnd)         // 帧扩展到标题栏
+    6. HwndSource.AddHook(Win32Helper.WndProc)             // WM_NCCALCSIZE + WM_ERASEBKGND 拦截
+    7. HwndTarget.BackgroundColor = Transparent            // 交换链透明
+    8. Dispatcher.BeginInvoke: UpdateCornerMask() + InitGroupHeights() + InitHighlight()
+    9. 若 AutoOpenFloatWindow → 打开悬浮窗（加载 AudioflowSettings）
+
+→ MainViewModel 构造函数:
+  1. ToolRegistry.DiscoverTools()
+     → TryLoadFromDefaultContext()    // 单文件发布：Assembly.Load("Toolbox.Plugins")
+     → TryLoadFromPluginsDir()        // plugins/Toolbox.Plugins.dll
+     → TryLoadFromBaseDir()           // 调试目录直接加载
+     → 反射扫描 ITool 实现 → 实例化 → 按 Category 分组
+  2. BuildGroups()：按 ToolCategory.All 顺序 + "系统维护"默认展开
+  3. ApplyFilter()：初始化可见分组
+  4. 默认选中第一个工具
 ```
-> **启动步骤 3-7 为完整的三层 Win32/DirectX 拦截链**，用于消除特定机器上的窗口边缘白色线条残留。
+
+> **步骤 3-4 为 Acrylic 毛玻璃链**：步骤 6-7 + 步骤 5 共同构成三层 Win32/DirectX 拦截链，消除特定机器上的窗口边缘白色线条残留。
 
 ### 设置流程
+
 ```
-点击标题栏齿轮按钮 → SettingsLayer.Visibility = Visible
-                   → SettingsView 加载，所有控件绑定 AppSettings.Instance
-                   → ToggleSwitch 通过 Trigger.EnterActions/ExitActions 播放滑块动画
-                   → BackButton → BackRequestedEvent 气泡事件 → MainWindow 隐藏设置层
+点击标题栏齿轮按钮 → ContentScrollViewer 隐藏 → SettingsLayer 显示
+                   → SettingsView 加载，绑定 AppSettings.Instance
+                   → BackButton → BackRequestedEvent → MainWindow 隐藏设置层
+                   → 恢复高亮条位置
 ```
 
 ### 切换工具流程
+
 ```
-点击左侧导航项 (Border) → NavItem_MouseLeftButtonDown
-                         → MainViewModel.SelectedTool = tool
-                         → PropertyChanged("CurrentContent")
-                         → TransitioningContentControl 淡入
-                         → PositionHighlight() 带动画移动高亮条
+点击导航项 (Border) → NavItem_MouseLeftButtonDown
+                    → MainViewModel.SelectedTool = tool
+                    → PropertyChanged → CurrentContent 重新创建（缓存复用）
+                    → TransitioningContentControl 淡入
+                    → PositionHighlight() 高亮条动画移动
 ```
 
-### 更新 / 新增工具流程
-```
-新增:
-  1. Toolbox.Plugins/ 下新建 {ToolName}.cs，实现 ITool
-  2. dotnet build Toolbox.Plugins.csproj  (仅编译插件)
-  3. 将 Toolbox.Plugins.dll 放入主程序 plugins/ 目录
-  4. 重启 Toolbox.exe → 自动发现新工具
+### 分组展开/折叠流程
 
-修改:
-  1. 编辑 Toolbox.Plugins/ 下已有工具 .cs
-  2. dotnet build Toolbox.Plugins.csproj  (< 3 秒)
-  3. 替换 plugins/Toolbox.Plugins.dll
-  4. 重启 Toolbox.exe → 加载新版
+```
+点击分类头 → GroupHeader_MouseLeftButtonDown
+           → ToolGroup.IsExpanded 切换
+           → AnimateGroupHeight()：Height 动画 200ms EaseOut
+           → 折叠时自动切换到下一个可见工具
+           → 动画完成后 ScheduleHighlightReposition() 重定位高亮
 ```
 
-### Inno Setup 安装包发布流程
+### 悬浮窗完整架构
+
+```
+MusicFloatWindowManager (单例)
+├── SMTCListener             监听 Windows SMTC 会话
+│   ├── SemaphoreSlim 串行化   消除并发竞态
+│   ├── 陈旧封面检测           切歌后 SMTC 可能返回旧封面
+│   ├── 6 次退避重试            200/200/400/800/1500/3000ms
+│   ├── Dispose 释放 SemaphoreSlim（004db07 修复）
+│   └── 歌曲身份绑定的重试取消  单纯进度/状态事件不打断封面重试
+│
+├── EdgeDockService          贴边缩入状态机
+│   ├── Free → Docking → Docked → Expanding → Expanded
+│   ├── DispatcherTimer 驱动动画（EaseOutCubic）
+│   ├── DockTriggerBar 触发条悬停展开
+│   ├── SetContentVisible: Opacity + IsHitTestVisible 联动（004db07）
+│   └── EdgeThreshold: 透明窗口 -5px / 毛玻璃窗口 10px
+│
+├── AcrylicMusicWindow       DWM Acrylic 毛玻璃（Win11 22H2+ 原生 API / Win10 备用旧 API）
+│   └── MusicContentControl   共享内容控件（封面/歌名/跑马灯/切歌动画）
+│
+├── TransparentMusicWindow   AllowsTransparency=True，无背景效果
+│   └── MusicContentControl   共享内容控件（同上）
+│
+└── 操作：Show / Hide / Close / ToggleBlur / SetSizeMode / SetWindowLocked
+         窗口创建即实例化，切换背景类型或尺寸时替换窗口（非原地切换）
+```
+
+**窗口替换模式**：切换毛玻璃/透明或大小模式时，保存位置 → 创建新窗口 → 显示新窗口 → 关闭旧窗口，避免 DWM 渲染问题。
+
+**后台闪退全链路防护**（004db07）：
+- `DragMove` / `UpdateSongInfo` / `OnMarqueeTick` 全部包裹 try-catch
+- `MusicContentControl.Unloaded` 停止跑马灯定时器，防止泄漏
+- `SMTCListener` 的 `NowPlayingChanged` 事件在后台线程触发 → `Dispatcher.BeginInvoke` 派发到 UI 线程
+- `AppSettings.Save()` / `AudioflowSettings.Save()` 加 try-catch 兜底
+
+### 发布流程
+
 ```
 dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
   -o setup/publish -p:DebugType=none
@@ -149,107 +318,8 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 → ISCC.exe setup/ToolboxSetup.iss (LZMA2 最高压缩)
 → setup/Toolbox_Setup.exe (~54 MB)
 ```
-- 安装到 `{autopf}\Toolbox`（需管理员权限）
-- 桌面快捷方式可选
-- 安装完成后可选启动 Toolbox
 
-## UI 白色线条修复方案（三层 Win32/DirectX 拦截）
-
-### 根因
-`AllowsTransparency="False"` + `WindowStyle="None"` + `DwmExtendFrameIntoClientArea(-1)` 组合下，三个独立白色来源在窗口外缘叠加：
-1. WPF GDI 非客户区 1px 骨架（`WindowChrome` 无法彻底消除）
-2. 系统默认 `WM_ERASEBKGND` 白色背景底漆
-3. DirectX 交换链默认白色清除色 (`HwndTarget.BackgroundColor`)
-
-在特定 GPU 驱动 + 非整数 DPI 缩放下未被抗锯齿糊掉，合为可见白色线条。
-
-### 解决
-
-| 防御层 | 层面 | 方法 |
-|--------|------|------|
-| 1. `WM_NCCALCSIZE` 拦截 | Win32 消息 | 返回 0，宣告无 NC 区域 |
-| 2. `WM_ERASEBKGND` 拦截 | Win32 消息 | 返回 1，跳过系统默认白色底漆 |
-| 3. `HwndTarget.BackgroundColor = Transparent` | DirectX 交换链 | 禁止渲染目标白色清除 |
-
-实现位置：
-- `Win32Helper.WndProc()` 静态回调 — `MainWindow.xaml.cs` 中通过 `HwndSource.AddHook` 注册
-- `MainWindow.xaml.cs` Loaded 事件 — 直接设置 `HwndTarget.BackgroundColor`
-
-## AppSettings 配置项
-
-| 属性 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `MinimizeOnClose` | `bool` | `true` | 关闭按钮最小化到任务栏 |
-| `AutoOpenFloatWindow` | `bool` | `false` | 启动时自动打开悬浮窗 |
-| `AutoStart` | `bool` | `false` | 开机自动启动 Toolbox（同步 `HKCU\...\Run\Toolbox`） |
-| `MusicFloatSizeMode` | `string` | `"Large"` | 悬浮窗默认大小（Large / Compact） |
-
-持久化：`%LOCALAPPDATA%\Toolbox\settings.json`，JSON 格式。所有属性变更触发 `PropertyChanged` + `Save()`。
-
-## 当前工具列表
-
-| 工具 | 文件名 | 功能 |
-|------|--------|------|
-| 定时关机 | `ShutdownTool.cs` | 6 个快捷时长按钮 (1min~2h) / 自定义分钟输入 / 红色取消关机按钮 |
-| 屏保启动 | `ScreensaverTool.cs` | ComboBox 选择 6 种系统屏保，一键启动 |
-| 二维码生成 | `QRCodeTool.cs` | 文本输入 → 实时生成二维码图片 |
-| 网易云音乐悬浮窗 | `NeteaseMusicTool.cs` | 可拖拽悬浮窗、歌词显示、封面展示 |
-| 强制删除文件 | `ForceDeleteTool.cs` | 文件路径输入 → 强制删除被占用的文件 |
-| 重启资源管理器 | (内嵌) | 一键重启 explorer.exe |
-
-## ITool 接口规范
-
-```csharp
-namespace Toolbox.Models;
-
-public interface ITool
-{
-    string Name { get; }           // 导航栏显示名称
-    string Description { get; }    // 右侧区域描述文字
-    string IconGlyph { get; }     // Emoji 图标字符
-    UIElement CreateContent();     // 创建工具 UI（每次切换缓存复用，而非每次重建）
-}
-```
-
-## 扩展新工具模板
-
-在 `Toolbox.Plugins/` 下新建 `{ToolName}.cs`：
-
-```csharp
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using Toolbox.Models;
-
-namespace Toolbox.Tools;
-
-public class MyNewTool : ITool
-{
-    public string Name => "我的工具";
-    public string Description => "工具功能描述";
-    public string IconGlyph => "🔧";
-
-    public UIElement CreateContent()
-    {
-        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-
-        var desc = new TextBlock
-        {
-            Text = "这里写功能说明",
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-            Margin = new Thickness(0, 0, 0, 20)
-        };
-        panel.Children.Add(desc);
-
-        return panel;
-    }
-}
-```
-
-编译后放入 `plugins/`，重启即可。
-
-## 全局主题资源速查（App.xaml 定义）
+## 全局主题资源（App.xaml 定义）
 
 | 资源 Key | 值 | 用途 |
 |----------|---|------|
@@ -272,44 +342,144 @@ public class MyNewTool : ITool
 |----------|------|
 | `WindowButtonStyle` | 46x38 透明→#3A3A3A 标题栏按钮 |
 | `CloseButtonStyle` | 继承+悬停#E81123 关闭按钮 |
-| `ToggleSwitchStyle` | Win11 风格极简滑块开关（轨道 42x22 + 滑块 18x18 + EnterActions/ExitActions 滑动动画） |
+| `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画） |
 | `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用） |
 | `CustomScrollBar` | 迷你深色滚动条（宽 8px） |
 
-### ToggleSwitch 动画机制
+## 当前工具列表
+
+| 工具 | 文件名 | 分类 | 行数 | 功能 |
+|------|--------|------|:----:|------|
+| 定时关机 | `ShutdownTool.cs` | ⚙️ 系统维护 | 215 | 6 个快捷按钮 + 自定义分钟 + 取消关机 |
+| 屏保启动 | `ScreensaverTool.cs` | ⚙️ 系统维护 | 155 | ComboBox 选择 5 种系统屏保，一键启动 |
+| 重启资源管理器 | `RestartExplorerTool.cs` | ⚙️ 系统维护 | 90 | taskkill + explorer 重启 |
+| C盘垃圾清理 | `JunkCleanerTool.cs` | ⚙️ 系统维护 | 1024 | 12 类分类扫描 + 自定义确认弹窗 + 取消按钮 + 间距微调 |
+| 二维码生成 | `QrCodeTool.cs` | 🌐 网络与开发 | 224 | 深色圆角主题 + 竖排按钮布局，文本/URL 实时生成 + 保存 + 复制 |
+| 软件卸载管理器 | `SoftwareUninstallTool.cs` | 📁 文件管理 | 613 | 注册表扫描 + 图标提取 + 双击卸载 |
+| 网易云音乐悬浮窗 | `NeteaseMusicTool.cs` | 🎵 媒体与娱乐 | 285 | 胶囊开关 + 模式切换 + 悬浮窗设置面板 |
+
+## ITool 接口规范
+
+```csharp
+namespace Toolbox.Models;
+
+public interface ITool
+{
+    string Name { get; }           // 导航栏显示名称
+    string Description { get; }    // 右侧区域描述文字
+    string IconGlyph { get; }      // Emoji 图标字符
+    string Category { get; }       // 分类名称（使用 ToolCategory 常量）
+    UIElement CreateContent();     // 创建工具 UI（缓存复用机制）
+}
+```
+
+`Category` 属性使用预定义常量：
+```csharp
+public static class ToolCategory
+{
+    public const string System  = "⚙️ 系统维护";
+    public const string Network = "🌐 网络与开发";
+    public const string Window  = "🏠 窗口与桌面";
+    public const string Text    = "🔤 文本与数据";
+    public const string File    = "📁 文件管理";
+    public const string Media   = "🎵 媒体与娱乐";
+}
+```
+
+## AppSettings 配置项
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `MinimizeOnClose` | `bool` | `false` | 关闭按钮最小化到任务栏 |
+| `AutoOpenFloatWindow` | `bool` | `false` | 启动时自动打开悬浮窗 |
+| `MusicFloatSizeMode` | `string` | `"Large"` | 悬浮窗默认大小（Large / Compact） |
+| `AutoStart` | `bool` | `false` | 开机自动启动（同步 HKCU\...\Run\Toolbox） |
+
+持久化：`%LOCALAPPDATA%\Toolbox\settings.json`，JSON 格式，所有属性变更触发 `PropertyChanged` + `Save()`。
+
+## AudioflowSettings 配置项
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `FloatWindowBlurEnabled` | `bool` | `true` | 悬浮窗 Acrylic 毛玻璃开关 |
+| `LockFloatWindow` | `bool` | `false` | 锁定悬浮窗移动 |
+| `EdgeDockEnabled` | `bool` | `true` | 贴边自动缩入功能 |
+| `FloatWindowLeft` | `double` | `NaN` | 窗口 X 坐标（NaN=默认位置） |
+| `FloatWindowTop` | `double` | `NaN` | 窗口 Y 坐标（NaN=默认位置） |
+
+持久化：`%LOCALAPPDATA%\Toolbox\audioflow.json`，与 AppSettings 解耦独立保存加载。
+
+## 主窗口 Acrylic 毛玻璃实现
+
+### Acrylic 背景（替代 Mica，004db07）
+
+`MainWindow.xaml.cs` 内联实现（非 Win32Helper），支持两套 API：
+
+- **Win11 22H2+**（Build ≥ 22000）：`DWMWA_SYSTEMBACKDROP_TYPE = 38`，`Acrylic = 3`，原生 DWM API
+- **Win10 降级**：`ACCENT_ENABLE_ACRYLICBLURBEHIND = 4`，`GradientColor = 0x661A1A1A`（40% tint），通过 `DwmSetWindowAttribute(hwnd, 19, ...)` 设置
+
+### CornerMask 四角遮盖（全窗口内矩形方案）
+
+`WindowChrome.CornerRadius = 8` + `Border CornerRadius = 8` + `Margin = "-1"` 实现圆角窗口。DWM 帧扩展导致圆角外区域漏白，用 Path 几何遮盖：
 
 ```
-Trigger.IsChecked=True →
-  EnterActions: DoubleAnimation → Thumb.(UIElement.RenderTransform).(TranslateTransform.X) To="20"
-  ExitActions:  DoubleAnimation → Thumb.(UIElement.RenderTransform).(TranslateTransform.X) To="0"
-  CubicEase EasingMode="EaseOut"，时长 0.2s
+Path.Data = CombinedGeometry(
+  Exclude,
+  RectangleGeometry(0, 0, ActualWidth, ActualHeight),          // 外矩形（尖角）
+  RectangleGeometry(0, 0, ActualWidth, ActualHeight, r, r)     // 内矩形（全窗口圆角）
+)
 ```
 
-**注意**：动画必须绑定在 `Trigger.EnterActions`/`ExitActions` 上，**不能**使用 `EventTrigger`——`EventTrigger` 内的 Storyboard 在 ControlTemplate 名称范围内无法解析 `TargetName`，会导致 `XamlParseException` 进程崩溃。
+关键点：内矩形使用 `(0, 0, FullWidth, FullHeight)` 而非 `(r, r, Width-2r, Height-2r)`，差集结果 = **仅四角**，不含四边，消除四条边黑框。
 
-## 即时预览检查清单
+### UI 白色线条修复方案（三层 Win32/DirectX 拦截）
 
-检查过的文件内容匹配最新代码。如有新增文件/样式请在相应章节更新。
+#### 根因
 
-## 文件行数概览
+`AllowsTransparency="False"` + `WindowStyle="None"` + `DwmExtendFrameIntoClientArea(-1)` 组合下，三个独立白色来源在窗口外缘叠加。
 
-| 文件 | 行数 | 说明 |
-|------|:----:|------|
-| App.xaml | 445 | 全局深色主题 + Button/TextBox/ComboBox/CheckBox(2种)/ScrollBar |
-| MainWindow.xaml | 263 | 标题栏(Win11三按钮) + 左侧导航(手风琴+高亮动画) + 右侧内容(淡入) + 状态栏 + 设置浮层 |
-| MainWindow.xaml.cs | 195 | 窗口初始化(DWM/Mica/三层拦截) + 标题栏拖拽/双击 + 手风琴动画 + 高亮动画 + 设置层显隐 |
-| SettingsView.xaml | 88 | 3 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮 |
-| Win32Helper.cs | 130 | 圆角/Mica/帧扩展/深色模式/边框色 P/Invoke + WM_NCCALCSIZE/WM_ERASEBKGND + WndProc |
-| AppSettings.cs | 120 | 单例设置 + JSON 持久化 + AutoStart 注册表同步 |
-| ShutdownTool.cs | 215 | 快捷按钮 2×3 网格 + 自定义分钟 + 取消关机 |
-| ScreensaverTool.cs | 129 | ComboBox 选屏保 + 路径预览 + 一键启动 |
-| CustomScrollBar.cs | 248 | 自定义迷你滚动条控件 |
-| MainViewModel.cs | 66 | 工具列表 + 分组搜索 + 选中状态 + UI 缓存 |
-| ToolRegistry.cs | 53 | 反射扫描插件 + 优雅降级 |
-| TransitioningContentControl.cs | 46 | 淡入过渡控件 |
-| ITool.cs | 19 | 工具接口定义 |
-| ToolGroup.cs | 28 | 分组模型（IsExpanded/IsHovered/ArrowText） |
-| App.xaml.cs | 10 | 入口 |
-| AssemblyInfo.cs | 9 | 程序集信息 |
+#### 解决
 
-**最大文件 445 行，保持在可控范围内。**
+| 防御层 | 层面 | 方法 |
+|--------|------|------|
+| 1. `WM_NCCALCSIZE` 拦截 | Win32 消息 | 返回 0，宣告无 NC 区域 |
+| 2. `WM_ERASEBKGND` 拦截 | Win32 消息 | 返回 1，跳过系统白色底漆 |
+| 3. `HwndTarget.BackgroundColor = Transparent` | DirectX 交换链 | 禁止渲染目标白色清除 |
+
+实现位置：`Win32Helper.WndProc()` + `MainWindow.xaml.cs` Loaded 事件。
+
+## 扩展新工具模板
+
+在 `Toolbox.Plugins/` 下新建 `{ToolName}.cs`，选择合适分类：
+
+```csharp
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Toolbox.Models;
+
+namespace Toolbox.Tools;
+
+public class MyNewTool : ITool
+{
+    public string Name => "我的工具";
+    public string Description => "工具功能描述";
+    public string IconGlyph => "🔧";
+    public string Category => ToolCategory.System;
+
+    public UIElement CreateContent()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "功能说明",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Margin = new Thickness(0, 0, 0, 20)
+        });
+        return panel;
+    }
+}
+```
+
+编译后放入 `plugins/`，重启即可自动发现。

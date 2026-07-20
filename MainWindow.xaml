@@ -420,6 +420,52 @@
                 </TextBlock>
             </StackPanel>
         </Border>
+
+        <!-- ▸ 鼠标跟随呼吸光晕（不拦截输入，渲染在最顶层，随鼠标轻微延迟移动） -->
+        <Canvas x:Name="HaloLayer"
+                Grid.RowSpan="3"
+                IsHitTestVisible="False">
+            <Ellipse x:Name="HaloEllipse"
+                     Width="140" Height="140"
+                     Opacity="0"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#40FFFFFF" Offset="0"/>
+                        <GradientStop Color="#17FFFFFF" Offset="0.55"/>
+                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="HaloScale" ScaleX="0.9" ScaleY="0.9"/>
+                        <TranslateTransform x:Name="HaloTranslate"/>
+                    </TransformGroup>
+                </Ellipse.RenderTransform>
+                <Ellipse.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                <DoubleAnimation Storyboard.TargetName="HaloScale"
+                                                 Storyboard.TargetProperty="ScaleX"
+                                                 To="1.1" Duration="0:0:1.5">
+                                    <DoubleAnimation.EasingFunction>
+                                        <SineEase EasingMode="EaseInOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                                <DoubleAnimation Storyboard.TargetName="HaloScale"
+                                                 Storyboard.TargetProperty="ScaleY"
+                                                 To="1.1" Duration="0:0:1.5">
+                                    <DoubleAnimation.EasingFunction>
+                                        <SineEase EasingMode="EaseInOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Ellipse.Triggers>
+            </Ellipse>
+        </Canvas>
     </Grid>
 </Border>
 </Grid>

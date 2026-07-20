@@ -78,6 +78,9 @@ public partial class MainWindow : Window
 
         // 窗口状态变更时更新最大化/还原图标
         StateChanged += (_, _) => UpdateMaximizeIcon();
+
+        // 鼠标跟随呼吸光晕
+        InitHalo();
     }
 
     /// <summary>更新四角遮盖形状（全矩形 减 内圆角矩形 = 四个角落区域）</summary>
@@ -525,6 +528,65 @@ public partial class MainWindow : Window
         bool isMaximized = WindowState == WindowState.Maximized;
         MaximizePath.Visibility = isMaximized ? Visibility.Collapsed : Visibility.Visible;
         RestorePath.Visibility = isMaximized ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 鼠标跟随呼吸光晕
+    // ═══════════════════════════════════════════════════════════
+
+    private Point _haloTarget;          // 鼠标目标位置
+    private Point _haloPos;             // 光晕当前位置（插值滞后跟随）
+    private double _haloOpacity;        // 当前淡入淡出系数
+    private bool _haloInitialized;      // 首次移动时直接吸附，避免从角落滑入
+
+    /// <summary>初始化鼠标光晕：位置插值跟随 + 淡入淡出（呼吸缩放动画在 XAML 中）</summary>
+    private void InitHalo()
+    {
+        // 每帧用 Win32 GetCursorPos 轮询光标（原始屏幕坐标，与消息投递和命中测试
+        // 完全无关——WPF 的 Mouse.GetPosition 由输入系统维护，鼠标悬停在
+        // WindowChrome CaptionHeight 划出的 HTCAPTION 非客户区（顶栏空白处）时
+        // 不再更新，会导致光晕误判为"鼠标已离开"而淡出）。
+        // 插值滞后跟随（0.12 ≈ 轻微延迟拖尾），透明度平滑淡入淡出
+        CompositionTarget.Rendering += (_, _) =>
+        {
+            // 窗口尚未完成初始化（视觉未连接到 PresentationSource）时跳过本帧
+            if (PresentationSource.FromVisual(HaloLayer) == null) return;
+            if (!GetCursorPos(out var cursor)) return;
+
+            var pt = HaloLayer.PointFromScreen(new Point(cursor.X, cursor.Y));
+            bool inside = IsActive
+                && pt.X >= 0 && pt.Y >= 0
+                && pt.X <= HaloLayer.ActualWidth && pt.Y <= HaloLayer.ActualHeight;
+
+            if (inside)
+            {
+                _haloTarget = pt;
+                if (!_haloInitialized)
+                {
+                    _haloPos = pt;
+                    _haloInitialized = true;
+                }
+            }
+
+            _haloPos.X += (_haloTarget.X - _haloPos.X) * 0.12;
+            _haloPos.Y += (_haloTarget.Y - _haloPos.Y) * 0.12;
+            _haloOpacity += ((inside ? 1.0 : 0.0) - _haloOpacity) * 0.08;
+
+            HaloTranslate.X = _haloPos.X - HaloEllipse.Width / 2;
+            HaloTranslate.Y = _haloPos.Y - HaloEllipse.Height / 2;
+            HaloEllipse.Opacity = _haloOpacity;
+        };
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
     }
 
     // ═══════════════════════════════════════════════════════════
