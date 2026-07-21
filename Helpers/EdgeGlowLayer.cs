@@ -11,6 +11,8 @@ namespace Toolbox.Helpers;
 /// 1. 仅模拟"控件被鼠标光源照亮"：鼠标靠近时按距离逐渐增强，远离逐渐熄灭，
 ///    接触（hover）时接近过曝；无常亮微发光、无呼吸/脉冲、无环境光晕。
 ///    鼠标移出窗口或失焦瞬时熄灭（0ms）。
+///    描边亮度沿边框按到鼠标的距离线性衰减——只显示被鼠标照亮的部分边框，
+///    背光侧完全熄灭，模拟灯光扫过物体（径向渐变画笔，中心即光标）。
 /// 2. 描边严格贴合控件自身模板边缘的渲染几何（取模板内首个 Border 的边界与圆角，
 ///    如 ComboBox 的 CornerRadius=5 外框），绑定控件本身，不落在父容器/布局面板上。
 /// 3. 界面/工具切换时调用 ClearTargets 立即销毁全部发光，0ms 残留。
@@ -256,6 +258,12 @@ public class EdgeGlowLayer : FrameworkElement
         return false;
     }
 
+    /// 高光环亮度衰减半径系数：以控件长边为基准，保证背光侧边框完全熄灭
+    private const double LitRadiusFactor = 0.9;
+
+    /// <summary>径向渐变色标数量（线性衰减，分段越多越细腻）</summary>
+    private const int GradientStopCount = 10;
+
     protected override void OnRender(DrawingContext dc)
     {
         // 鼠标不在窗口内/窗口失焦：无任何发光（0ms 熄灭）
@@ -279,9 +287,27 @@ public class EdgeGlowLayer : FrameworkElement
             // 被上层界面盖住的控件不透出（发光层位于最顶层，需主动检测遮挡）
             if (IsOccluded(target, bounds)) continue;
 
+            // 只照亮被鼠标照到的部分边框：描边画笔改为以鼠标为中心的径向渐变
+            // （绝对坐标映射，渐变中心即本层坐标系中的光标位置），离鼠标近的边框段亮、
+            // 沿边框向两侧线性衰减，背光侧完全熄灭——模拟灯光扫过物体的局部照亮。
+            // alpha 作为控件级整体强度（随鼠标距离二次衰减）乘到每个色标上。
+            double litRadius = Math.Max(bounds.Width, bounds.Height) * LitRadiusFactor + 24;
+            var brush = new RadialGradientBrush
+            {
+                MappingMode = BrushMappingMode.Absolute,
+                Center = _cursorPos,
+                GradientOrigin = _cursorPos,
+                RadiusX = litRadius,
+                RadiusY = litRadius
+            };
+            for (int i = 0; i < GradientStopCount; i++)
+            {
+                double offset = (double)i / (GradientStopCount - 1);
+                byte a = (byte)(alpha * (1 - offset) * 255);
+                brush.GradientStops.Add(new GradientStop(Color.FromArgb(a, 255, 255, 255), offset));
+            }
             // 单条 1.5px 硬切高光线，圆角逐像素贴合控件模板边缘，无柔光无羽化
-            var pen = new Pen(new SolidColorBrush(Color.FromArgb(
-                (byte)(alpha * 255), 255, 255, 255)), StrokeThickness);
+            var pen = new Pen(brush, StrokeThickness);
             pen.Freeze();
             dc.DrawRoundedRectangle(null, pen, bounds, target.Radius.TopLeft, target.Radius.TopLeft);
         }
