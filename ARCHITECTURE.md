@@ -104,7 +104,7 @@ Toolbox/
 |------|:----:|------|
 | App.xaml | 558 | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6） |
 | App.xaml.cs | 118 | 单实例互斥 + 三层全局异常捕获 + crash.log |
-| MainWindow.xaml | 484 | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
+| MainWindow.xaml | 486 | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
 | MainWindow.xaml.cs | 672 | DWM/Acrylic 内联实现（含 Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 鼠标光晕 + 边缘发光集成 |
 | Win32Helper.cs | 157 | 圆角/Acrylic/深色模式/消息钩子 P/Invoke |
 | | | |
@@ -115,8 +115,8 @@ Toolbox/
 | ToolRegistry.cs | 109 | 三策略插件加载 |
 | | | |
 | **Toolbox.Core** | | |
-| Helpers/EdgeGlowLayer.cs | ~390 | 控件边缘发光引擎（5点采样遮挡检测 + 距离驱动强度 + 模板边界绑定 + 视口 PushClip 裁剪 + TextBox/标记卡片收录），主窗口与插件悬浮窗共用 |
-| Models/GlowCardMarker.cs | ~30 | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
+| Helpers/EdgeGlowLayer.cs | 432 | 控件边缘发光引擎（径向渐变描边 + 5点采样遮挡检测 + 视口 PushClip 裁剪 + TextBox/标记卡片收录），主窗口与插件悬浮窗共用 |
+| Models/GlowCardMarker.cs | 24 | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
 | MainViewModel.cs | 171 | 工具分组 + 搜索过滤 + UI 缓存 |
 | SettingsView.xaml | 99 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮） |
 | SettingsView.xaml.cs | 34 | 设置页后置代码 |
@@ -136,12 +136,12 @@ Toolbox/
 | DwmHelper.cs | 296 | DWM 帮助类 |
 | NeteaseMusicTool.cs | 285 | 悬浮窗工具面板 |
 | SoftwareUninstallService.cs | 284 | 卸载服务 |
-| QrCodeTool.cs | 224 | 二维码生成 |
-| ShutdownTool.cs | 215 | 定时关机 |
+| QrCodeTool.cs | 264 | 深色圆角卡片式 + 竖排按钮，实时生成 + 保存 + 复制 |
+| ShutdownTool.cs | 241 | 卡片式布局 + 主题色统一 + 快捷按钮重排序 |
 | AcrylicMusicWindow.xaml.cs | 146 | 毛玻璃窗口 |
-| ScreensaverTool.cs | 155 | 屏保启动 |
+| ScreensaverTool.cs | 186 | 卡片式布局 + 主题色统一 |
 | DockTriggerBar.xaml.cs | 123 | 贴边触发条 |
-| RestartExplorerTool.cs | 90 | 重启资源管理器 |
+| RestartExplorerTool.cs | 111 | 卡片式布局 + 主题色统一 |
 | MonitorHelper.cs | 81 | 多屏辅助 |
 | TransparentMusicWindow.xaml.cs | 71 | 透明窗口 |
 
@@ -345,13 +345,13 @@ MusicFloatWindowManager (单例)
 
 **核心机制**：
 
-1. **控件识别 → 模板边界提取**：仅 `ButtonBase`（Button/ToggleButton/CheckBox）与 `ComboBox` 可发光。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，描边逐像素贴合控件玻璃边缘。
+1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox` 可发光；卡片容器（`Border`）可显式通过附加属性 `GlowCardMarker.IsGlowCard` opt-in。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，描边逐像素贴合控件玻璃边缘。
 
-2. **距离驱动高光强度**：鼠标靠近时按 `t²` 曲线逐渐增强，接触时接近过曝（0.9）。超出 120px 不发光。
+2. **径向渐变描边**：描边用 `RadialGradientBrush`（`MappingMode=Absolute`，中心=光标位置）。10 段色标，`alpha × (1-offset)^0.6 × 1.3`，近光心一端形成过曝平台，背光侧完全熄灭——模拟灯光扫过物体。`MaxLitRadius=100px`，大卡片照亮弧段不会超过此范围。
 
 3. **遮挡检测**：5 点采样（中心 + 四角 20% 内缩）命中测试。仅在所有采样点都被**非控件元素**覆盖时判定遮挡，支持弹窗/设置层遮罩。`HitTestAt` 使用 `HitTestFilterCallback` 跳过 `IsHitTestVisible=false` 的元素（避免 EdgeGlowLayer 自身拦截命中）。
 
-4. **滚动裁剪**：每个目标记录最近祖先 `ScrollViewer`，每帧实时求交视口矩形。
+4. **视口 PushClip 裁剪**：绘制卡片完整边缘后，`PushClip` 到滚动视口相交区域再裁掉不可见部分——不把视口边缘误当成控件边缘（修复长卡片滚出视口时底部假亮边）。
 
 5. **目标清单管理**：只存元素引用不存坐标——每帧实时重算。`LayoutUpdated` → `_glowTargetsDirty` → 250ms 节流重建。工具切换/设置层显隐 → `ClearTargets()` 0ms 清除。
 
@@ -423,11 +423,11 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 
 | 工具 | 文件名 | 分类 | 行数 | 功能 |
 |------|--------|------|:----:|------|
-| 定时关机 | `ShutdownTool.cs` | ⚙️ 系统维护 | 215 | 6 个快捷按钮 + 自定义分钟 + 取消关机 |
-| 屏保启动 | `ScreensaverTool.cs` | ⚙️ 系统维护 | 155 | ComboBox 选择 5 种系统屏保，一键启动 |
-| 重启资源管理器 | `RestartExplorerTool.cs` | ⚙️ 系统维护 | 90 | taskkill + explorer 重启 |
+| 定时关机 | `ShutdownTool.cs` | ⚙️ 系统维护 | 241 | 卡片式布局 + 快捷按钮重排序 + 自定义分钟 + 取消关机 |
+| 屏保启动 | `ScreensaverTool.cs` | ⚙️ 系统维护 | 186 | ComboBox 选择 5 种系统屏保 + 卡片式布局 |
+| 重启资源管理器 | `RestartExplorerTool.cs` | ⚙️ 系统维护 | 111 | taskkill + explorer 重启 + 卡片式布局 |
 | C盘垃圾清理 | `JunkCleanerTool.cs` | ⚙️ 系统维护 | 1024 | 12 类分类扫描 + 自定义确认弹窗 + 取消按钮 + 间距微调 |
-| 二维码生成 | `QrCodeTool.cs` | 🌐 网络与开发 | 224 | 深色圆角主题 + 竖排按钮布局，文本/URL 实时生成 + 保存 + 复制 |
+| 二维码生成 | `QrCodeTool.cs` | 🌐 网络与开发 | 264 | 深色圆角卡片式 + 竖排按钮，实时生成 + 保存 + 复制 |
 | 软件卸载管理器 | `SoftwareUninstallTool.cs` | 📁 文件管理 | 613 | 注册表扫描 + 图标提取 + 双击卸载 |
 | 网易云音乐悬浮窗 | `NeteaseMusicTool.cs` | 🎵 媒体与娱乐 | 285 | 胶囊开关 + 模式切换 + 悬浮窗设置面板 |
 
