@@ -86,7 +86,12 @@ public sealed class SystemTrayHelper : IDisposable
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private const uint WM_COMMAND = 0x0111;
+    private const uint WM_NULL = 0x0000;
     private const uint MF_STRING = 0x00000000;
     private const uint MF_SEPARATOR = 0x00000800;
 
@@ -223,11 +228,17 @@ public sealed class SystemTrayHelper : IDisposable
         // 获取鼠标位置（纯 Win32，不依赖 WinForms）
         GetCursorPos(out var pt);
 
+        // 经典托盘菜单陷阱（MSDN KB135788）：TrackPopupMenu 依赖属主窗口的
+        // 前台切换来判定"点击外部关闭"。隐藏的属主窗口永远不在前台，
+        // 菜单就不会自动收回——必须先 SetForegroundWindow，结束后补一个 WM_NULL。
+        SetForegroundWindow(hwnd);
+
         var cmd = TrackPopupMenuEx(
             hMenu,
             TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RETURNCMD,
             pt.X, pt.Y, hwnd, IntPtr.Zero);
 
+        PostMessage(hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
         DestroyMenu(hMenu);
 
         if (cmd > 0)

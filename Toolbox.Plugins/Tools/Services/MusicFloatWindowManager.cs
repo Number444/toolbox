@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using Toolbox.Controls;
 using Toolbox.Services;
+using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Services;
 
@@ -115,7 +116,8 @@ public class MusicFloatWindowManager
         var savedRight = _activeWindow.Left + _activeWindow.Width;
         var savedTop = _activeWindow.Top;
         var savedLocked = _isLocked;
-        var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
+        var wa = MonitorHelper.GetMonitorWorkAreaDips(_activeWindow);
+        var isRightSide = _activeWindow.Left > wa.Left + wa.Width / 2;
 
         _activeWindow.LocationChanged -= OnWindowMoved;
         _dockService.Detach();
@@ -151,7 +153,8 @@ public class MusicFloatWindowManager
         var savedRight = _activeWindow.Left + _activeWindow.Width;
         var savedTop = _activeWindow.Top;
         var savedLocked = _isLocked;
-        var isRightSide = _activeWindow.Left > SystemParameters.PrimaryScreenWidth / 2;
+        var wa = MonitorHelper.GetMonitorWorkAreaDips(_activeWindow);
+        var isRightSide = _activeWindow.Left > wa.Left + wa.Width / 2;
 
         _activeWindow.LocationChanged -= OnWindowMoved;
         _dockService.Detach();
@@ -268,15 +271,29 @@ public class MusicFloatWindowManager
 
         if (!double.IsNaN(settings.FloatWindowLeft) && !double.IsNaN(settings.FloatWindowTop))
         {
-            window.Left = settings.FloatWindowLeft;
-            window.Top = settings.FloatWindowTop;
-            return;
+            // 防丢窗口：持久化位置完全落在虚拟屏幕外时（拔副屏/分辨率变小），
+            // 放弃恢复，改用默认位置
+            double w = double.IsNaN(window.Width) ? 242 : window.Width;
+            double h = double.IsNaN(window.Height) ? 252 : window.Height;
+            var saved = new Rect(settings.FloatWindowLeft, settings.FloatWindowTop, w, h);
+            var virtualScreen = new Rect(
+                SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+
+            if (!Rect.Intersect(saved, virtualScreen).IsEmpty)
+            {
+                window.Left = settings.FloatWindowLeft;
+                window.Top = settings.FloatWindowTop;
+                return;
+            }
         }
 
-        // 使用已知最终尺寸预设位置，避免 Show() 后在 (0,0) 闪现
-        double h = _sizeMode == FloatSizeMode.Large ? 252 : 96;
-        window.Left = 20;
-        window.Top = (SystemParameters.PrimaryScreenHeight - h) / 2;
+        // 使用已知最终尺寸预设位置，避免 Show() 后在 (0,0) 闪现。
+        // 基于主屏工作区定位（避开任务栏），多显示器下也安全。
+        double defaultH = _sizeMode == FloatSizeMode.Large ? 252 : 96;
+        var workArea = SystemParameters.WorkArea;
+        window.Left = workArea.Left + 20;
+        window.Top = workArea.Top + (workArea.Height - defaultH) / 2;
     }
 
     /// <summary>安全启动 SMTC 监听，记录启动失败异常。</summary>
@@ -294,21 +311,22 @@ public class MusicFloatWindowManager
 
     private void SaveWindowPosition()
     {
-        if (_activeWindow == null) return;
+        // 贴边/动画状态下窗口坐标位于屏幕边缘外，不应作为用户位置持久化
+        if (_activeWindow == null || _dockService.State != DockState.Free) return;
         var settings = AudioflowSettings.Instance;
         settings.FloatWindowLeft = _activeWindow.Left;
         settings.FloatWindowTop = _activeWindow.Top;
         settings.Save();
     }
 
-    /// <summary>将悬浮窗复位到默认位置（垂直居中，距左 20 像素）。</summary>
+    /// <summary>将悬浮窗复位到默认位置（所在显示器工作区垂直居中，距左 20 像素）。</summary>
     public void ResetPosition()
     {
         if (_activeWindow == null || !_isVisible) return;
 
-        var screenHeight = SystemParameters.PrimaryScreenHeight;
-        _activeWindow.Left = 20;
-        _activeWindow.Top = (screenHeight - _activeWindow.Height) / 2;
+        var wa = MonitorHelper.GetMonitorWorkAreaDips(_activeWindow);
+        _activeWindow.Left = wa.Left + 20;
+        _activeWindow.Top = wa.Top + (wa.Height - _activeWindow.Height) / 2;
 
         SaveWindowPosition();
     }
@@ -317,6 +335,8 @@ public class MusicFloatWindowManager
     private void OnWindowMoved(object? sender, EventArgs e)
     {
         if (_activeWindow == null) return;
+        // 贴边缩入/展开动画会瞬间把窗口推到屏幕外，这些坐标不是用户意图，跳过
+        if (_dockService.State != DockState.Free) return;
         var settings = AudioflowSettings.Instance;
         settings.FloatWindowLeft = _activeWindow.Left;
         settings.FloatWindowTop = _activeWindow.Top;
@@ -333,6 +353,9 @@ public class MusicFloatWindowManager
 
             if (enabled)
             {
+                // 若正处于贴边缩入状态（内容隐藏只露触发条），先还原窗口，
+                // 否则穿透下无法悬停展开，窗口会永远保持"一条缝"的外观
+                _dockService.ForceRestore();
                 _dockService.Detach(); // 穿透下贴边无效，主动断开
             }
             else if (AudioflowSettings.Instance.EdgeDockEnabled)

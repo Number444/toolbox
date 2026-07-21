@@ -83,8 +83,9 @@ public partial class AcrylicMusicWindow : Window
 
     private void OnWindowLocationChanged(object? sender, EventArgs e)
     {
-        var screenWidth = SystemParameters.PrimaryScreenWidth;
-        var isLeft = Left <= screenWidth / 2.0;
+        // 按窗口所在显示器的中心判断左右侧（多显示器安全）
+        var wa = MonitorHelper.GetMonitorWorkAreaDips(this);
+        var isLeft = Left <= wa.Left + wa.Width / 2.0;
         MusicContent.SetAlignmentFromParent(isLeft);
     }
 

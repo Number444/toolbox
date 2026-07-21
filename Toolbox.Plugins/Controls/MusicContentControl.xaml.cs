@@ -66,6 +66,13 @@ public partial class MusicContentControl : UserControl
         // 控件卸载时停止跑马灯定时器，避免空转
         Unloaded += (_, _) => _marqueeTimer.Stop();
 
+        // 窗口隐藏 / 贴边缩入导致内容不可见时停止跑马灯，重新可见时按需恢复
+        IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is true) StartOrStopTitleMarquee();
+            else _marqueeTimer.Stop();
+        };
+
         // 将整个内容区域的鼠标按下事件作为拖拽请求
         ContentPanel.MouseLeftButtonDown += (_, _) =>
         {

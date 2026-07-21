@@ -38,6 +38,29 @@ internal static class MonitorHelper
             SystemParameters.WorkArea.Height);
     }
 
+    /// <summary>
+    /// 获取指定窗口所在屏幕的 WorkingArea（DIP 坐标，可直接与 Window.Left/Top 比较）。
+    /// </summary>
+    public static Rect GetMonitorWorkAreaDips(Window window)
+    {
+        var phys = GetMonitorWorkArea(window);
+        var (dpiX, dpiY) = GetDpiScale(window);
+        return new Rect(
+            phys.Left / dpiX,
+            phys.Top / dpiY,
+            phys.Width / dpiX,
+            phys.Height / dpiY);
+    }
+
+    private static (double ScaleX, double ScaleY) GetDpiScale(Window window)
+    {
+        var source = PresentationSource.FromVisual(window);
+        if (source?.CompositionTarget == null) return (1.0, 1.0);
+        return (
+            source.CompositionTarget.TransformToDevice.M11,
+            source.CompositionTarget.TransformToDevice.M22);
+    }
+
     // ── Win32 ──
 
     [DllImport("user32.dll")]
