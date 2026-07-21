@@ -184,6 +184,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 - 启动时通过 `App.xaml.cs`：单实例互斥（Mutex）→ 全局异常捕获（3 层）→ 加载 AppSettings + AudioflowSettings
 - `MainViewModel` 管理工具列表、分组、搜索过滤、UI 缓存
 - 主窗口 UI：Acrylic 毛玻璃背景 → 自定义标题栏 + 左侧手风琴导航 + 右侧 TransitioningContentControl 淡入过渡 + 设置浮层 + Canvas HaloLayer + EdgeGlowLayer
+- 工具标题区间距收紧：描述→分隔线 10px，分隔线→内容 12px（紧贴内容）
 - 关闭按钮支持最小化到系统托盘（纯 Win32，不依赖 WinForms）
 - 启动时根据设置自动打开悬浮窗
 - **v1.1**（状态栏显示）
@@ -200,7 +201,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 | 搜索框区域 | `#662D2D2D` | ~40% | 更透明，突出搜索输入框 |
 | 搜索输入框 | `#80404040` | ~50% | 提亮背景，保持可读性 |
 | 内容区 | `#66323232` | ~40% | 半透明卡片效果 |
-| 设置层 | `#4D323232` | ~30% | 最透明，叠加在内容区上方 |
+| 设置层 | `#99323232` | ~60% | 模态浮层最暗档，压住下层保证可读性 |
 | CornerMask | `BgDarkBrush` | 100% | 四角纯色遮盖（不透，堵 DWM 帧扩展漏白） |
 
 ### 层 4：Toolbox.Tests（单元测试层）
@@ -334,7 +335,7 @@ MusicFloatWindowManager (单例)
 
 ### 层 2 — EdgeGlowLayer（控件边缘发光叠加层）
 
-**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`，`FrameworkElement` 子类，在 `MainWindow.xaml` 最顶层及插件悬浮窗 `MusicContentControl` 内渲染。
+**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`（432 行），`FrameworkElement` 子类。当前仅主窗口 `MainWindow.xaml` 中使用；位于 Core 的意图是让插件未来可复用（悬浮窗的接入因理解错误已回退，暂未共用）。
 
 **基本参数**：
 - `GlowRadius = 120px`（发光影响范围）
@@ -345,13 +346,14 @@ MusicFloatWindowManager (单例)
 
 **核心机制**：
 
-1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox` 可发光；卡片容器（`Border`）可显式通过附加属性 `GlowCardMarker.IsGlowCard` opt-in。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，描边逐像素贴合控件玻璃边缘。
+1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `models:GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 7 处：ShutdownTool(2) / RestartExplorer(1) / Screensaver(1) / QrCode(2) / JunkCleaner 主列表 / 设置页卡片 / NeteaseMusicTool 设置卡片。
+   递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，若四角半径不同（如标题栏按钮 0,0,6,6），用 `StreamGeometry` 逐角构造异径圆角矩形描边，逐像素贴合控件玻璃边缘。
 
 2. **径向渐变描边**：描边用 `RadialGradientBrush`（`MappingMode=Absolute`，中心=光标位置）。10 段色标，`alpha × (1-offset)^0.6 × 1.3`，近光心一端形成过曝平台，背光侧完全熄灭——模拟灯光扫过物体。`MaxLitRadius=100px`，大卡片照亮弧段不会超过此范围。
 
 3. **遮挡检测**：5 点采样（中心 + 四角 20% 内缩）命中测试。仅在所有采样点都被**非控件元素**覆盖时判定遮挡，支持弹窗/设置层遮罩。`HitTestAt` 使用 `HitTestFilterCallback` 跳过 `IsHitTestVisible=false` 的元素（避免 EdgeGlowLayer 自身拦截命中）。
 
-4. **视口 PushClip 裁剪**：绘制卡片完整边缘后，`PushClip` 到滚动视口相交区域再裁掉不可见部分——不把视口边缘误当成控件边缘（修复长卡片滚出视口时底部假亮边）。
+4. **长卡片滚出视口修复**：`PushClip` 裁剪到滚动视口相交区域，`PushOpacityMask` 叠加 32px 渐隐遮罩让被滚出一侧边缘没入视口前淡出，避免视口边缘被误当成控件边缘画出假亮边/侧边透出。
 
 5. **目标清单管理**：只存元素引用不存坐标——每帧实时重算。`LayoutUpdated` → `_glowTargetsDirty` → 250ms 节流重建。工具切换/设置层显隐 → `ClearTargets()` 0ms 清除。
 
@@ -413,11 +415,11 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 
 | 样式 Key | 说明 |
 |----------|------|
-| `WindowButtonStyle` | 46x38 透明→#3A3A3A 标题栏按钮 |
+| `WindowButtonStyle` | 46x38 透明→#3A3A3A 标题栏按钮，内 Border CornrRadius=0,0,6,6（异径圆角） |
 | `CloseButtonStyle` | 继承+悬停#E81123 关闭按钮 |
 | `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画） |
 | `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用） |
-| `CustomScrollBar` | 迷你深色滚动条（宽 8px） |
+| `CustomScrollBar` | 深色滚动条（容器 12px，滑块 10px 圆角 5px，#33FFFFFF 20% 白色高光） |
 
 ## 当前工具列表
 
