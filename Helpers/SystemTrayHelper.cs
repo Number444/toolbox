@@ -33,11 +33,6 @@ public sealed class SystemTrayHelper : IDisposable
     private const uint NIF_ICON = 0x00000002;
     private const uint NIF_TIP = 0x00000004;
 
-    private const uint TPM_RIGHTBUTTON = 0x0002;
-    private const uint TPM_LEFTALIGN = 0x0000;
-    private const uint TPM_BOTTOMALIGN = 0x0020;
-    private const uint TPM_RETURNCMD = 0x0100;
-
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NOTIFYICONDATAW
     {
@@ -69,34 +64,6 @@ public sealed class SystemTrayHelper : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr DestroyIcon(IntPtr hIcon);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr CreatePopupMenu();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AppendMenuW(IntPtr hMenu, uint uFlags, uint uIDNewItem, string lpNewItem);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint TrackPopupMenuEx(IntPtr hMenu, uint uFlags, int x, int y, IntPtr hWnd, IntPtr lptpm);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyMenu(IntPtr hMenu);
-
-    [DllImport("user32.dll")]
-    private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    private const uint WM_COMMAND = 0x0111;
-    private const uint WM_NULL = 0x0000;
-    private const uint MF_STRING = 0x00000000;
-    private const uint MF_SEPARATOR = 0x00000800;
-
-    private IntPtr _hIcon = IntPtr.Zero;
-
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
@@ -105,6 +72,8 @@ public sealed class SystemTrayHelper : IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
+
+    private IntPtr _hIcon = IntPtr.Zero;
 
     private SystemTrayHelper() { }
 
@@ -192,22 +161,7 @@ public sealed class SystemTrayHelper : IDisposable
                     break;
 
                 case WM_RBUTTONUP:
-                    ShowContextMenu(hwnd);
-                    handled = true;
-                    break;
-            }
-        }
-        else if (msg == WM_COMMAND)
-        {
-            var menuItemId = (uint)(wParam.ToInt64() & 0xFFFF);
-            switch (menuItemId)
-            {
-                case 1: // 显示
-                    _onDoubleClick?.Invoke();
-                    handled = true;
-                    break;
-                case 2: // 退出
-                    _onExitClick?.Invoke();
+                    ShowContextMenu();
                     handled = true;
                     break;
             }
@@ -216,35 +170,28 @@ public sealed class SystemTrayHelper : IDisposable
         return IntPtr.Zero;
     }
 
-    private void ShowContextMenu(IntPtr hwnd)
+    private void ShowContextMenu()
     {
-        var hMenu = CreatePopupMenu();
-        if (hMenu == IntPtr.Zero) return;
-
-        AppendMenuW(hMenu, MF_STRING, 1, "显示 Toolbox");
-        AppendMenuW(hMenu, MF_SEPARATOR, 0, string.Empty);
-        AppendMenuW(hMenu, MF_STRING, 2, "退出");
-
-        // 获取鼠标位置（纯 Win32，不依赖 WinForms）
         GetCursorPos(out var pt);
 
-        // 经典托盘菜单陷阱（MSDN KB135788）：TrackPopupMenu 依赖属主窗口的
-        // 前台切换来判定"点击外部关闭"。隐藏的属主窗口永远不在前台，
-        // 菜单就不会自动收回——必须先 SetForegroundWindow，结束后补一个 WM_NULL。
-        SetForegroundWindow(hwnd);
+        // 物理像素 → DIP（托盘回调窗口的 DPI 即系统 DPI）
+        double dpi = _hwndSource?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        var pos = new Point(pt.X / dpi, pt.Y / dpi);
 
-        var cmd = TrackPopupMenuEx(
-            hMenu,
-            TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RETURNCMD,
-            pt.X, pt.Y, hwnd, IntPtr.Zero);
-
-        PostMessage(hwnd, WM_NULL, IntPtr.Zero, IntPtr.Zero);
-        DestroyMenu(hMenu);
-
-        if (cmd > 0)
+        Core.Controls.ThemedMenuWindow.ShowAt(pos, new[]
         {
-            PostMessage(hwnd, WM_COMMAND, (IntPtr)cmd, IntPtr.Zero);
-        }
+            new Core.Controls.ThemedMenuWindow.Item
+            {
+                Text = "显示 Toolbox",
+                Action = () => _onDoubleClick?.Invoke()
+            },
+            Core.Controls.ThemedMenuWindow.Item.Separator(),
+            new Core.Controls.ThemedMenuWindow.Item
+            {
+                Text = "退出",
+                Action = () => _onExitClick?.Invoke()
+            },
+        });
     }
 
     private IntPtr LoadAppIcon()

@@ -225,6 +225,21 @@ public class NeteaseMusicTool : ITool
             });
         settingsPanel.Children.Add(cbClickThrough);
 
+        // 复选框 5：悬停播放控制
+        var cbPlaybackControls = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "悬停封面显示播放控制",
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        cbPlaybackControls.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("ShowPlaybackControls")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        settingsPanel.Children.Add(cbPlaybackControls);
+
         settingsBorder.Child = settingsPanel;
 
         root.Children.Add(settingsBorder);

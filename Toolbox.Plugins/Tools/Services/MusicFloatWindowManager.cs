@@ -6,6 +6,7 @@ using Toolbox.Services;
 using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Services;
+using Windows.Media.Control;
 
 namespace Toolbox.Tools.Views;
 
@@ -36,6 +37,23 @@ public class MusicFloatWindowManager
 
     /// <summary>当前大小模式。</summary>
     public FloatSizeMode CurrentSizeMode => _sizeMode;
+
+    /// <summary>
+    /// 实时读取 SMTC 会话的播放状态（供悬浮窗图标延迟重同步）。
+    /// 缓存快照可能携带过渡态旧值，延迟重同步必须读实时状态，拿不到再回退缓存。
+    /// </summary>
+    public GlobalSystemMediaTransportControlsSessionPlaybackStatus? GetLivePlaybackStatus()
+    {
+        try
+        {
+            return _listener.CurrentSession?.GetPlaybackInfo()?.PlaybackStatus
+                ?? _cachedInfo.PlaybackStatus;
+        }
+        catch
+        {
+            return _cachedInfo.PlaybackStatus;
+        }
+    }
 
     /// <summary>可见性变化事件，供工具面板同步胶囊开关状态。</summary>
     public event EventHandler<bool>? VisibilityChanged;
@@ -184,6 +202,50 @@ public class MusicFloatWindowManager
         _isLocked = locked;
         if (_activeWindow != null)
             SetLocked(_activeWindow, locked);
+    }
+
+    // ── 播放控制（转发到 SMTC 会话）─────────────────────
+
+    /// <summary>播放/暂停切换（悬浮窗悬停按钮、右键菜单用）。</summary>
+    public async void TogglePlayPause()
+    {
+        try
+        {
+            var session = _listener.CurrentSession;
+            if (session != null) await session.TryTogglePlayPauseAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 播放/暂停失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>下一首。</summary>
+    public async void SkipNext()
+    {
+        try
+        {
+            var session = _listener.CurrentSession;
+            if (session != null) await session.TrySkipNextAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 下一首失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>上一首。</summary>
+    public async void SkipPrevious()
+    {
+        try
+        {
+            var session = _listener.CurrentSession;
+            if (session != null) await session.TrySkipPreviousAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 上一首失败: {ex.Message}");
+        }
     }
 
     /// <summary>设置窗口位置（预留扩展方法）。</summary>
@@ -345,7 +407,23 @@ public class MusicFloatWindowManager
     /// <summary>悬浮窗设置项变更回调。</summary>
     private void OnFloatSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AudioflowSettings.ClickThroughEnabled))
+        // 这些设置也可从悬浮窗右键菜单修改，Manager 自行响应，
+        // 不依赖 NeteaseMusicTool 面板是否已创建（面板侧的处理为幂等重复，无害）
+        if (e.PropertyName == nameof(AudioflowSettings.FloatWindowBlurEnabled))
+        {
+            ToggleBlur(AudioflowSettings.Instance.FloatWindowBlurEnabled);
+        }
+        else if (e.PropertyName == nameof(AudioflowSettings.LockFloatWindow))
+        {
+            SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+        }
+        else if (e.PropertyName == nameof(AudioflowSettings.EdgeDockEnabled))
+        {
+            _dockService.Enabled = AudioflowSettings.Instance.EdgeDockEnabled;
+            if (!_dockService.Enabled)
+                _dockService.ForceRestore();
+        }
+        else if (e.PropertyName == nameof(AudioflowSettings.ClickThroughEnabled))
         {
             var enabled = AudioflowSettings.Instance.ClickThroughEnabled;
             SetClickThrough(_activeWindow, enabled);

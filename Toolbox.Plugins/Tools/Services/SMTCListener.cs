@@ -57,10 +57,23 @@ public sealed class SMTCListener : IDisposable
         if (_manager != null) return;
 
         _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-        SubscribeToSession(_manager.GetCurrentSession());
+        // 必须过滤目标应用（网易云），不能直接用 GetCurrentSession()——
+        // 它返回的是"当前会话"，可能是浏览器等任意媒体源
+        SubscribeToSession(FindTargetSession());
 
         // 订阅会话列表变化，当网易云音乐启动/关闭时重新匹配
         _manager.SessionsChanged += OnSessionsChanged;
+    }
+
+    /// <summary>在所有会话中查找目标应用（网易云音乐）的会话，未找到返回 null。</summary>
+    private GlobalSystemMediaTransportControlsSession? FindTargetSession()
+    {
+        if (_manager == null) return null;
+        foreach (var s in _manager.GetSessions())
+        {
+            if (IsTargetSession(s)) return s;
+        }
+        return null;
     }
 
     /// <summary>
@@ -90,14 +103,11 @@ public sealed class SMTCListener : IDisposable
     {
         if (_isClosing) return;
 
-        // 尝试在当前所有会话中匹配网易云音乐
-        foreach (var s in sender.GetSessions())
+        var target = FindTargetSession();
+        if (target != null)
         {
-            if (IsTargetSession(s))
-            {
-                SubscribeToSession(s);
-                return;
-            }
+            SubscribeToSession(target);
+            return;
         }
 
         // 没有找到目标会话 → 清除信息

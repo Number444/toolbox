@@ -83,6 +83,22 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _showPlaybackControls = true;
+    /// <summary>
+    /// 悬停封面时浮出播放控制按钮（上一首/播放暂停/下一首）
+    /// </summary>
+    public bool ShowPlaybackControls
+    {
+        get => _showPlaybackControls;
+        set
+        {
+            if (_showPlaybackControls == value) return;
+            _showPlaybackControls = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     private double _floatWindowLeft = double.NaN;
     /// <summary>
     /// 悬浮窗 Left 坐标（NaN 表示未保存，使用默认位置）。注意：不自动存盘，由 Manager 统一管理写入时机。
@@ -146,6 +162,9 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
                 _clickThroughEnabled = data.ClickThroughEnabled;
                 OnPropertyChanged(nameof(ClickThroughEnabled));
 
+                _showPlaybackControls = data.ShowPlaybackControls;
+                OnPropertyChanged(nameof(ShowPlaybackControls));
+
                 if (!double.IsNaN(data.FloatWindowLeft))
                 {
                     _floatWindowLeft = data.FloatWindowLeft;
@@ -170,6 +189,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             LockFloatWindow = _lockFloatWindow,
             EdgeDockEnabled = _edgeDockEnabled,
             ClickThroughEnabled = _clickThroughEnabled,
+            ShowPlaybackControls = _showPlaybackControls,
             FloatWindowLeft = _floatWindowLeft,
             FloatWindowTop = _floatWindowTop
         };
@@ -189,6 +209,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         public bool LockFloatWindow { get; set; }
         public bool EdgeDockEnabled { get; set; } = true;
         public bool ClickThroughEnabled { get; set; }
+        public bool ShowPlaybackControls { get; set; } = true;
         public double FloatWindowLeft { get; set; } = double.NaN;
         public double FloatWindowTop { get; set; } = double.NaN;
     }

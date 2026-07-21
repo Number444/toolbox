@@ -1,14 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using Toolbox.Core.Controls;
+using Toolbox.Core.Services;
+using Toolbox.Services;
 using Toolbox.Tools.Models;
+using Toolbox.Tools.Views;
 using Windows.Media.Control;
 
 namespace Toolbox.Controls;
@@ -74,11 +80,51 @@ public partial class MusicContentControl : UserControl
         };
 
         // 将整个内容区域的鼠标按下事件作为拖拽请求
-        ContentPanel.MouseLeftButtonDown += (_, _) =>
+        ContentPanel.MouseLeftButtonDown += (_, e) =>
         {
+            // 点击播放控制按钮时不触发窗口拖拽
+            if (e.OriginalSource is DependencyObject src && IsWithin(src, PlaybackControls))
+                return;
             try { DragRequested?.Invoke(this, EventArgs.Empty); }
             catch (Exception ex) { Debug.WriteLine($"[MusicContentControl] DragRequested 异常: {ex.Message}"); }
         };
+
+        // 右键菜单：悬浮窗控制收口（游戏模式下窗口穿透，此事件本就不会触发）
+        ContentPanel.MouseRightButtonUp += (_, e) =>
+        {
+            if (AudioflowSettings.Instance.ClickThroughEnabled) return;
+            e.Handled = true;
+            ShowFloatContextMenu();
+        };
+
+        // 悬停触发播放控制：统一在根容器做 MouseMove 区域判定。
+        // 覆盖层是根容器的子元素，鼠标移到覆盖层上不会误判为"离开"，
+        // 避免"弹出→遮住触发区→收起→再弹出"的闪烁循环
+        RootGrid.MouseMove += (_, e) =>
+        {
+            if (_sizeMode == FloatSizeMode.Compact)
+            {
+                ShowPlaybackControlsIfAllowed(); // 紧凑模式：整个窗口都是触发范围
+                return;
+            }
+            var pos = e.GetPosition(CoverGrid);
+            if (pos.X >= 0 && pos.Y >= 0
+                && pos.X <= CoverGrid.ActualWidth && pos.Y <= CoverGrid.ActualHeight)
+                ShowPlaybackControlsIfAllowed();
+            else
+                HidePlaybackControls();
+        };
+        RootGrid.MouseLeave += (_, _) => HidePlaybackControls();
+        WirePlaybackButton(BtnPrev, MusicFloatWindowManager.Instance.SkipPrevious,
+            Color.FromArgb(0x26, 0x00, 0x00, 0x00));
+        WirePlaybackButton(BtnPlayPause, MusicFloatWindowManager.Instance.TogglePlayPause,
+            Color.FromArgb(0xFF, 0x1A, 0x1A, 0x1A));
+        WirePlaybackButton(BtnNext, MusicFloatWindowManager.Instance.SkipNext,
+            Color.FromArgb(0x26, 0x00, 0x00, 0x00));
+
+        // 设置面板/右键菜单关闭播放控制时，若按钮正浮出则立即隐藏
+        AudioflowSettings.Instance.PropertyChanged += OnAudioflowSettingChanged;
+        Unloaded += (_, _) => AudioflowSettings.Instance.PropertyChanged -= OnAudioflowSettingChanged;
 
         // 控件加载后必须应用当前 SizeMode 的布局。
         // 因为 Manager.CreateWindow 在窗口 Show 之前就设置了 SizeMode，
@@ -121,6 +167,17 @@ public partial class MusicContentControl : UserControl
                 }
 
                 _lastSongChangeVersion = info.RefreshVersion;
+                if (_previousInfo.PlaybackStatus == null)
+                {
+                    // 首次同步：直接用快照状态初始化播放/暂停图标
+                    UpdatePlayPauseGlyph(info.PlaybackStatus);
+                }
+                else
+                {
+                    // 切歌快照可能携带过渡态的过期播放状态（SMTC 切换瞬时读数不可靠），
+                    // 延迟 70ms 等状态稳定后，用 Manager 缓存的最新信息重同步图标
+                    ScheduleGlyphSync();
+                }
                 _previousInfo = info;
 
                 PlaySongSwitchAnimation(
@@ -139,6 +196,10 @@ public partial class MusicContentControl : UserControl
             else if (isStatusChanged)
             {
                 _previousInfo = info;
+                // 图标刷新与封面状态动画同路径：以 PlaybackInfoChanged 事件为准，
+                // 70ms 后再按最新缓存状态复核一次
+                UpdatePlayPauseGlyph(info.PlaybackStatus);
+                ScheduleGlyphSync();
                 AnimateCoverForPlaybackStatus(info.PlaybackStatus);
             }
             else
@@ -228,6 +289,10 @@ public partial class MusicContentControl : UserControl
             ApplyCoverMetrics(180, 10, 15, 4);
             FireSizeRequired(242, 252);
             ApplyLargeMargins();
+            // 大模式：播放控制移回封面内部，随封面移动，对齐天然正确
+            MovePlaybackControlsTo(CoverGrid);
+            PlaybackControls.VerticalAlignment = VerticalAlignment.Center;
+            PlaybackControls.Margin = new Thickness(0);
         }
         else
         {
@@ -239,9 +304,22 @@ public partial class MusicContentControl : UserControl
             ApplyCoverMetrics(60, 3, 5, 1.3);
             FireSizeRequired(198, 96);
             SetCompactMargins();
+            // 紧凑模式：播放控制移到根容器，整窗居中（封面只有 60px 放不下）
+            MovePlaybackControlsTo(RootGrid);
+            PlaybackControls.VerticalAlignment = VerticalAlignment.Center;
+            PlaybackControls.Margin = new Thickness(0);
         }
         StartOrStopTitleMarquee();
         ApplyAlignment(_isOnLeftSide ?? true);
+    }
+
+    /// <summary>把播放控制覆盖层移动到指定父容器（大模式=封面内，紧凑模式=根容器）。</summary>
+    private void MovePlaybackControlsTo(Panel newParent)
+    {
+        if (PlaybackControls.Parent == newParent) return;
+        if (PlaybackControls.Parent is Panel oldParent)
+            oldParent.Children.Remove(PlaybackControls);
+        newParent.Children.Add(PlaybackControls);
     }
 
     private void FireSizeRequired(double width, double height)
@@ -394,11 +472,14 @@ public partial class MusicContentControl : UserControl
     {
         try
         {
-            _marqueeOffset -= 0.3;
+            _marqueeOffset -= 0.45; // 滚动速度（px/40ms）
             var textWidth = SongTitle.ActualWidth;
             var visibleWidth = TitleCanvas.Width;
-            if (_marqueeOffset < -(textWidth + 30))
-                _marqueeOffset = visibleWidth;
+            if (_marqueeOffset < -(textWidth + 24))
+            {
+                // 从右边缘渐隐区内重新进入，缩短完全空白的间隔
+                _marqueeOffset = Math.Max(visibleWidth - 12, 40);
+            }
             TitleTranslate.X = _marqueeOffset;
         }
         catch { /* 控件卸载中，忽略 */ }
@@ -496,13 +577,179 @@ public partial class MusicContentControl : UserControl
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(300);
 
-        // 不判断当前 scale——每次状态更新都无条件执行，由调用方（SMTC 事件、窗口打开）保证时序正确
-        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-        CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        // 先读当前动画中的实时值作为起点，再启动新动画（BeginAnimation 会直接替换旧动画）。
+        // 不能先 BeginAnimation(null) 清动画——那会把 scale 瞬间弹回基准值 1.0，造成"闪现"
+        double fromX = CoverScaleTransform.ScaleX;
+        double fromY = CoverScaleTransform.ScaleY;
+
         CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(CoverScaleTransform.ScaleX, targetScale, duration) { EasingFunction = ease });
+            new DoubleAnimation(fromX, targetScale, duration) { EasingFunction = ease });
         CoverScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(CoverScaleTransform.ScaleY, targetScale, duration) { EasingFunction = ease });
+            new DoubleAnimation(fromY, targetScale, duration) { EasingFunction = ease });
+    }
+
+    // ── 播放控制按钮 & 右键菜单 ─────────────────────────
+
+    /// <summary>播放控制当前是否处于浮出状态（防止 MouseMove 反复重启动画）。</summary>
+    private bool _controlsShown;
+
+    private void ShowPlaybackControlsIfAllowed()
+    {
+        if (_controlsShown) return; // 已浮出，避免 MouseMove 反复重启动画
+        if (!AudioflowSettings.Instance.ShowPlaybackControls) return;
+        if (AudioflowSettings.Instance.ClickThroughEnabled) return; // 游戏模式不浮出
+        _controlsShown = true;
+        PlaybackControls.IsHitTestVisible = true;
+        FadeTo(PlaybackControls, 1);
+        SlideTo(PlaybackControls, 0);
+    }
+
+    private void HidePlaybackControls()
+    {
+        if (!_controlsShown) return;
+        _controlsShown = false;
+        PlaybackControls.IsHitTestVisible = false;
+        FadeTo(PlaybackControls, 0);
+        SlideTo(PlaybackControls, 8);
+    }
+
+    private static void FadeTo(UIElement element, double targetOpacity)
+    {
+        element.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(targetOpacity, TimeSpan.FromMilliseconds(150)));
+    }
+
+    /// <summary>浮出/收起时伴随轻微纵向滑动，增加层次感。</summary>
+    private static void SlideTo(UIElement element, double targetY)
+    {
+        if (element.RenderTransform is not TranslateTransform translate)
+        {
+            translate = new TranslateTransform(0, targetY);
+            element.RenderTransform = translate;
+        }
+        translate.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(targetY, TimeSpan.FromMilliseconds(150)));
+    }
+
+    /// <summary>绑定播放按钮：悬停高亮 + 点击缩放反馈 + 执行动作。</summary>
+    private void WirePlaybackButton(Border btn, Action action, Color hoverBackground)
+    {
+        var normalBrush = btn.Background;
+        var hoverBrush = new SolidColorBrush(hoverBackground);
+        btn.MouseEnter += (_, _) => btn.Background = hoverBrush;
+        btn.MouseLeave += (_, _) => btn.Background = normalBrush;
+        btn.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            ClickFeedback(btn);
+            action();
+        };
+    }
+
+    /// <summary>点击反馈：瞬间缩到 0.82 再弹性回 1。</summary>
+    private static void ClickFeedback(Border btn)
+    {
+        if (btn.RenderTransform is not ScaleTransform scale)
+        {
+            scale = new ScaleTransform(1, 1);
+            btn.RenderTransform = scale;
+            btn.RenderTransformOrigin = new Point(0.5, 0.5);
+        }
+
+        var anim = new DoubleAnimation(0.82, 1, TimeSpan.FromMilliseconds(180))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+    }
+
+    /// <summary>判断元素是否位于某祖先元素的视觉树内。</summary>
+    private static bool IsWithin(DependencyObject child, DependencyObject ancestor)
+    {
+        for (var d = child; d != null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (d == ancestor) return true;
+        }
+        return false;
+    }
+
+    /// <summary>图标延迟重同步定时器（一次性）。</summary>
+    private System.Windows.Threading.DispatcherTimer? _glyphSyncTimer;
+
+    /// <summary>
+    /// 延迟 70ms 后重同步播放/暂停图标。
+    /// 必须实时读取 SMTC 会话状态——缓存快照本身可能就是携带过渡态旧值的那条。
+    /// 连续触发时重置计时。
+    /// </summary>
+    private void ScheduleGlyphSync()
+    {
+        _glyphSyncTimer?.Stop();
+        _glyphSyncTimer = new System.Windows.Threading.DispatcherTimer(
+            TimeSpan.FromMilliseconds(70),
+            System.Windows.Threading.DispatcherPriority.Normal,
+            (_, _) =>
+            {
+                _glyphSyncTimer?.Stop();
+                UpdatePlayPauseGlyph(MusicFloatWindowManager.Instance.GetLivePlaybackStatus());
+            },
+            Dispatcher);
+        _glyphSyncTimer.Start();
+    }
+
+    /// <summary>设置变更回调：播放控制被关闭时立即收起重出的按钮。</summary>
+    private void OnAudioflowSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AudioflowSettings.ShowPlaybackControls)
+            && !AudioflowSettings.Instance.ShowPlaybackControls)
+            HidePlaybackControls();
+    }
+
+    private void UpdatePlayPauseGlyph(GlobalSystemMediaTransportControlsSessionPlaybackStatus? status)
+    {
+        var isPlaying = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+        PlayIcon.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
+        PauseIcon.Visibility = isPlaying ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>悬浮窗右键菜单：集中锁定/大小/毛玻璃/游戏模式/复位等控制。</summary>
+    private void ShowFloatContextMenu()
+    {
+        var settings = AudioflowSettings.Instance;
+        var isCompact = AppSettings.Instance.MusicFloatSizeMode == "Compact";
+
+        var items = new List<ThemedMenuWindow.Item>
+        {
+            new() { Text = "锁定位置", IsChecked = settings.LockFloatWindow,
+                Action = () => settings.LockFloatWindow = !settings.LockFloatWindow },
+            new() { Text = "贴边自动缩入", IsChecked = settings.EdgeDockEnabled,
+                Action = () => settings.EdgeDockEnabled = !settings.EdgeDockEnabled },
+            new() { Text = "毛玻璃背景", IsChecked = settings.FloatWindowBlurEnabled,
+                Action = () => settings.FloatWindowBlurEnabled = !settings.FloatWindowBlurEnabled },
+            new() { Text = "游戏模式（鼠标穿透）", IsChecked = settings.ClickThroughEnabled,
+                Action = () => settings.ClickThroughEnabled = !settings.ClickThroughEnabled },
+            new() { Text = "悬停播放控制", IsChecked = settings.ShowPlaybackControls,
+                Action = () => settings.ShowPlaybackControls = !settings.ShowPlaybackControls },
+            ThemedMenuWindow.Item.Separator(),
+            new() { Text = "大模式", IsChecked = !isCompact, Action = () => SwitchSizeMode("Large") },
+            new() { Text = "紧凑模式", IsChecked = isCompact, Action = () => SwitchSizeMode("Compact") },
+            ThemedMenuWindow.Item.Separator(),
+            new() { Text = "复位位置", Action = MusicFloatWindowManager.Instance.ResetPosition },
+        };
+
+        // PointToScreen 返回物理像素，TransformFromDevice 转回 DIP（菜单位置用）
+        var pt = PointToScreen(Mouse.GetPosition(this));
+        if (PresentationSource.FromVisual(this)?.CompositionTarget is { } target)
+            pt = target.TransformFromDevice.Transform(pt);
+
+        ThemedMenuWindow.ShowAt(pt, items);
+    }
+
+    private static void SwitchSizeMode(string mode)
+    {
+        AppSettings.Instance.MusicFloatSizeMode = mode;
+        MusicFloatWindowManager.Instance.SetSizeMode(
+            mode == "Compact" ? FloatSizeMode.Compact : FloatSizeMode.Large);
     }
 
     // ── 工具类 ──────────────────────────────────────────────
