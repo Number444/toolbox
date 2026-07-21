@@ -31,6 +31,18 @@ public sealed class ThemedMenuWindow : Window
     /// <summary>关闭流程已开始标记——防止 Deactivated 在 Close 期间重入调用 Close。</summary>
     private bool _closeInitiated;
 
+    /// <summary>卡片四周留给投影的透明边距（px）。
+    /// 投影需要外扩空间，否则会被窗口方形边界切成圆角外的半透明尖角。</summary>
+    private const double ShadowMargin = 16;
+
+    /// <summary>统一关闭入口（带重入守卫）。</summary>
+    private void InitiateClose()
+    {
+        if (_closeInitiated) return;
+        _closeInitiated = true;
+        Close();
+    }
+
     private ThemedMenuWindow(IEnumerable<Item> items)
     {
         WindowStyle = WindowStyle.None;
@@ -52,6 +64,8 @@ public sealed class ThemedMenuWindow : Window
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(4),
+            // 透明边距：给投影留出外扩空间，避免被窗口边界切成尖角
+            Margin = new Thickness(ShadowMargin),
             Effect = new DropShadowEffect
             {
                 BlurRadius = 20,
@@ -64,21 +78,27 @@ public sealed class ThemedMenuWindow : Window
 
         // 点击菜单外部 → 窗口失焦 → 自动收回
         // （Close 过程中也会触发 Deactivated，必须守卫重入，否则 VerifyNotClosing 崩溃）
-        Deactivated += (_, _) =>
-        {
-            if (_closeInitiated) return;
-            _closeInitiated = true;
-            Close();
-        };
-        KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+        Deactivated += (_, _) => InitiateClose();
+        KeyDown += (_, e) => { if (e.Key == Key.Escape) InitiateClose(); };
+
+        // 透明边距（投影区域）上的点击视为"点击外部"。
+        // 菜单项在 MouseLeftButtonDown 标记 Handled，不会冒泡到这里
+        MouseLeftButtonDown += (_, _) => InitiateClose();
+        MouseRightButtonDown += (_, _) => InitiateClose();
     }
 
-    private static Border BuildSeparator() => new()
+    private static Border BuildSeparator()
     {
-        Height = 1,
-        Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)),
-        Margin = new Thickness(6, 4, 6, 4)
-    };
+        var separator = new Border
+        {
+            Height = 1,
+            Background = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF)),
+            Margin = new Thickness(6, 4, 6, 4)
+        };
+        // 吞掉 Down，避免冒泡到窗口被当作"点击外部"关闭菜单
+        separator.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        return separator;
+    }
 
     private Border BuildRow(Item item)
     {
@@ -116,6 +136,9 @@ public sealed class ThemedMenuWindow : Window
             Child = grid
         };
 
+        // 吞掉 Down，避免冒泡到窗口被当作"点击外部"关闭菜单
+        row.MouseLeftButtonDown += (_, e) => e.Handled = true;
+
         if (item.IsEnabled)
         {
             var hoverBrush = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF));
@@ -124,8 +147,7 @@ public sealed class ThemedMenuWindow : Window
             row.MouseLeftButtonUp += (_, e) =>
             {
                 e.Handled = true;
-                _closeInitiated = true;
-                Close();
+                InitiateClose();
                 // 菜单关闭后再执行动作，避免动作里的窗口切换干扰 Close
                 Dispatcher.BeginInvoke(new Action(() => item.Action?.Invoke()));
             };
@@ -135,15 +157,16 @@ public sealed class ThemedMenuWindow : Window
     }
 
     /// <summary>
-    /// 在指定屏幕坐标（DIP）弹出菜单，自动夹紧到主屏工作区内
-    ///（光标靠近屏幕底边时向上翻）。
+    /// 在指定屏幕坐标（DIP）弹出菜单，卡片左上角对齐光标，
+    /// 自动夹紧到主屏工作区内（光标靠近屏幕底边时向上翻）。
     /// </summary>
     public static void ShowAt(Point screenPosDip, IEnumerable<Item> items)
     {
         var menu = new ThemedMenuWindow(items)
         {
-            Left = screenPosDip.X,
-            Top = screenPosDip.Y
+            // 窗口含透明边距，向左上偏移使卡片（而非窗口）对齐光标
+            Left = screenPosDip.X - ShadowMargin,
+            Top = screenPosDip.Y - ShadowMargin
         };
         menu.Show();
         menu.Activate(); // 必须激活，后续失焦（点击外部）才能触发 Deactivated 收回
@@ -151,12 +174,17 @@ public sealed class ThemedMenuWindow : Window
         menu.Dispatcher.BeginInvoke(new Action(() =>
         {
             var wa = SystemParameters.WorkArea;
-            if (menu.Left + menu.ActualWidth > wa.Right)
-                menu.Left = wa.Right - menu.ActualWidth;
-            if (menu.Top + menu.ActualHeight > wa.Bottom)
-                menu.Top = screenPosDip.Y - menu.ActualHeight;
-            if (menu.Left < wa.Left) menu.Left = wa.Left;
-            if (menu.Top < wa.Top) menu.Top = wa.Top;
+            double cardWidth = menu.ActualWidth - ShadowMargin * 2;
+            double cardHeight = menu.ActualHeight - ShadowMargin * 2;
+
+            if (menu.Left + ShadowMargin + cardWidth > wa.Right)
+                menu.Left = wa.Right - cardWidth - ShadowMargin;
+            if (menu.Top + ShadowMargin + cardHeight > wa.Bottom)
+                menu.Top = screenPosDip.Y - cardHeight - ShadowMargin; // 卡片底边贴光标上方
+            if (menu.Left + ShadowMargin < wa.Left)
+                menu.Left = wa.Left - ShadowMargin;
+            if (menu.Top + ShadowMargin < wa.Top)
+                menu.Top = wa.Top - ShadowMargin;
         }), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 }
