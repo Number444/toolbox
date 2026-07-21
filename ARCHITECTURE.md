@@ -17,7 +17,6 @@ Toolbox/
 ├── Toolbox.ico                             应用图标
 │
 ├── Helpers/
-│   ├── EdgeGlowLayer.cs                    控件边缘发光叠加层（FrameworkElement 子类，OnRender 绘制 1.5px 高光线）
 │   ├── Win32Helper.cs                      Win32 P/Invoke：圆角/深色模式/单实例互斥/Frame扩展/窗口查找 + WndProc 消息钩子（Acrylic 由 MainWindow.xaml.cs 内联实现）
 │   ├── SystemTrayHelper.cs                 纯 Win32 系统托盘图标（不依赖 WinForms）
 │   ├── CustomScrollBar.cs                  自定义迷你滚动条（深色主题，替代系统 ScrollBar）
@@ -110,11 +109,14 @@ Toolbox/
 | Win32Helper.cs | 157 | 圆角/Acrylic/深色模式/消息钩子 P/Invoke |
 | | | |
 | **主程序 Helpers** | | |
-| EdgeGlowLayer.cs | 298 | 控件边缘发光引擎（5点采样遮挡检测 + 距离驱动强度 + 模板边界绑定 + 滚动裁剪） |
 | SystemTrayHelper.cs | 277 | 纯 Win32 系统托盘 |
 | CustomScrollBar.cs | 318 | 自定义深色滚动条 |
 | TransitioningContentControl.cs | 53 | 淡入过渡控件 |
 | ToolRegistry.cs | 109 | 三策略插件加载 |
+| | | |
+| **Toolbox.Core** | | |
+| Helpers/EdgeGlowLayer.cs | ~390 | 控件边缘发光引擎（5点采样遮挡检测 + 距离驱动强度 + 模板边界绑定 + 视口 PushClip 裁剪 + TextBox/标记卡片收录），主窗口与插件悬浮窗共用 |
+| Models/GlowCardMarker.cs | ~30 | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
 | MainViewModel.cs | 171 | 工具分组 + 搜索过滤 + UI 缓存 |
 | SettingsView.xaml | 99 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮） |
 | SettingsView.xaml.cs | 34 | 设置页后置代码 |
@@ -332,13 +334,14 @@ MusicFloatWindowManager (单例)
 
 ### 层 2 — EdgeGlowLayer（控件边缘发光叠加层）
 
-**位置**：`Helpers/EdgeGlowLayer.cs`（298 行），`FrameworkElement` 子类，在 `MainWindow.xaml` 最顶层渲染。
+**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`，`FrameworkElement` 子类，在 `MainWindow.xaml` 最顶层及插件悬浮窗 `MusicContentControl` 内渲染。
 
 **基本参数**：
 - `GlowRadius = 120px`（发光影响范围）
-- `MaxAlpha = 0.9`（hover 峰值不透明度）
-- `StrokeThickness = 1.5px`（硬切高光线）
-- 强度公式：`t = 1 - d/120` → `alpha = t² × 0.9`
+- `MaxAlpha = 1.0`（hover 峰值不透明度，完全过曝）
+- `StrokeThickness = 2px`（硬切高光线）
+- `MaxLitRadius = 100px`（照亮半径上限，亮弧大小贴合鼠标光晕）
+- 强度公式：`t = 1 - d/120` → `alpha = t² × 1.0`；沿边框亮度 = `alpha × (1-offset)^0.6 × 1.3`（径向渐变画笔，中心即光标，只照亮朝向鼠标的弧段）
 
 **核心机制**：
 

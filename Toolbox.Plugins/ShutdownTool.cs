@@ -213,7 +213,8 @@ public class ShutdownTool : ITool
         return panel;
     }
 
-    /// <summary>构建分组卡片：深灰圆角容器 + 组标题 + 内容（与 C盘清理/二维码工具的卡片风格一致）</summary>
+    /// <summary>构建分组卡片：深灰圆角容器 + 组标题 + 内容（与 C盘清理/二维码工具的卡片风格一致）。
+    /// 卡片带 GlowCardMarker 标记，纳入鼠标光照发光目标</summary>
     private static Border BuildCard(string title, UIElement content)
     {
         var inner = new StackPanel();
@@ -227,12 +228,14 @@ public class ShutdownTool : ITool
         });
         inner.Children.Add(content);
 
-        return new Border
+        var card = new Border
         {
             Background = new SolidColorBrush(BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner
         };
+        GlowCardMarker.SetIsGlowCard(card, true);
+        return card;
     }
 }

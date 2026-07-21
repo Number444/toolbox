@@ -31,7 +31,7 @@
     <Grid x:Name="ContentRoot">
         <!-- 传统半透明遮罩（不启用 Acrylic 时使用） -->
         <Border x:Name="OpacityOverlay"
-                Background="#731A1A1A"
+                Background="#801A1A1A"
                 CornerRadius="10"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"

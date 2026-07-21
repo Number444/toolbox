@@ -5,6 +5,7 @@
         xmlns:m="clr-namespace:Toolbox.Models"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:helpers="clr-namespace:Toolbox.Helpers"
+        xmlns:corehelpers="clr-namespace:Toolbox.Core.Helpers;assembly=Toolbox.Core"
         xmlns:local="clr-namespace:Toolbox.Views"
         Title="🧰 Toolbox"
         Height="500" Width="780"
@@ -332,7 +333,7 @@
                         </Grid>
                     </ScrollViewer>
                     <helpers:CustomScrollBar Grid.Row="1" Grid.Column="1"
-                                             Width="8"
+                                             Width="12"
                                              TargetScrollViewer="{Binding ElementName=NavScrollViewer}"/>
                 </Grid>
             </Border>
@@ -368,25 +369,26 @@
                             <TextBlock Text="{Binding SelectedToolDescription}"
                                        FontSize="13"
                                        Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,0,20"/>
+                                       Margin="0,0,0,10"/>
 
                             <!-- 分隔线 -->
                             <Rectangle Height="1"
                                        Fill="{StaticResource BorderSubtleBrush}"
-                                       Margin="0,0,0,20"/>
+                                       Margin="0,0,0,12"/>
 
                             <!-- 动态工具内容（带淡入过渡动画） -->
                             <helpers:TransitioningContentControl Content="{Binding CurrentContent}"/>
                         </StackPanel>
                     </ScrollViewer>
                     <helpers:CustomScrollBar Grid.Column="1"
-                                             Width="8"
+                                             Width="12"
                                              TargetScrollViewer="{Binding ElementName=ContentScrollViewer}"/>
 
                     <!-- 设置叠加层（隐藏） -->
+                    <!-- 设置叠加层：模态浮层取最暗档（60%），压住下层内容保证可读性 -->
                     <Border x:Name="SettingsLayer"
                             Grid.ColumnSpan="2"
-                            Background="#4D323232"
+                            Background="#99323232"
                             Visibility="Collapsed">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <local:SettingsView x:Name="SettingsViewControl"/>
@@ -476,7 +478,7 @@
         </Canvas>
 
         <!-- ▸ 交互控件边缘发光叠加层（鼠标光源照亮控件边缘，不拦截输入） -->
-        <helpers:EdgeGlowLayer x:Name="GlowLayer"
+        <corehelpers:EdgeGlowLayer x:Name="GlowLayer"
                                Grid.RowSpan="3"
                                IsHitTestVisible="False"/>
     </Grid>

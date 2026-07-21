@@ -149,6 +149,7 @@ public class NeteaseMusicTool : ITool
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10, 12, 10)
         };
+        GlowCardMarker.SetIsGlowCard(settingsBorder, true); // 纳入鼠标光照发光目标
 
         var settingsPanel = new StackPanel();
 

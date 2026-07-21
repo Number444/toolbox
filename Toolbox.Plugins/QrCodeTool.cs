@@ -12,6 +12,14 @@ namespace Toolbox.Tools;
 /// </summary>
 public class QrCodeTool : ITool
 {
+    // 与全局主题（App.xaml）及其它工具一致的配色常量
+    private static readonly Color BgCard = Color.FromRgb(0x2D, 0x2D, 0x2D);
+    private static readonly Color BgDark = Color.FromRgb(0x1C, 0x1C, 0x1C);
+    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
+    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
+    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
+    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
+
     private Image? _qrImage;
     private byte[]? _currentPngBytes;
     private TextBlock? _statusBlock;
@@ -31,11 +39,11 @@ public class QrCodeTool : ITool
         {
             Text = "输入文本或 URL，自动生成二维码。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Foreground = new SolidColorBrush(TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
-        // 单行输入框
+        // ====== 输入卡片：输入框 + 生成按钮 ======
         var inputBox = new TextBox
         {
             Height = 34,
@@ -44,12 +52,28 @@ public class QrCodeTool : ITool
             Margin = new Thickness(0, 0, 0, 12)
         };
 
-        // 二维码图片容器（深灰圆角背景，与主题融合）
+        var generateButton = new Button
+        {
+            Content = "生成二维码",
+            FontSize = 14,
+            Padding = new Thickness(14, 6, 14, 6),
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+
+        var inputCard = BuildCard("输入");
+        var inputInner = (StackPanel)inputCard.Child;
+        inputInner.Children.Add(inputBox);
+        inputInner.Children.Add(generateButton);
+        inputCard.Margin = new Thickness(0, 0, 0, 12);
+
+        // ====== 结果卡片：二维码图 + 保存/复制按钮 ======
+
+        // 二维码图片容器（深底圆角，与卡片底色拉开层次）
         var imageBorder = new Border
         {
             Width = 200,
             Height = 200,
-            Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)),
+            Background = new SolidColorBrush(BgDark),
             CornerRadius = new CornerRadius(8),
             Child = new Image
             {
@@ -65,16 +89,6 @@ public class QrCodeTool : ITool
         };
         _qrImage = (Image)imageBorder.Child;
 
-        // 三个按钮：左对齐竖排，从短到长
-        var generateButton = new Button
-        {
-            Content = "生成二维码",
-            FontSize = 14,
-            Padding = new Thickness(14, 6, 14, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 6)
-        };
-
         var saveButton = new Button
         {
             Content = "💾 保存为 PNG",
@@ -89,16 +103,7 @@ public class QrCodeTool : ITool
             Content = "📋 复制到剪贴板",
             FontSize = 14,
             Padding = new Thickness(14, 6, 14, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 6)
-        };
-
-        // 状态文字
-        _statusBlock = new TextBlock
-        {
-            Text = "",
-            FontSize = 13,
-            Margin = new Thickness(0, 4, 0, 0)
+            HorizontalAlignment = HorizontalAlignment.Left
         };
 
         // 右侧垂直按钮区（左对齐，从短到长排列）
@@ -108,19 +113,27 @@ public class QrCodeTool : ITool
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 4, 0, 0)
         };
-        rightPanel.Children.Add(generateButton);
         rightPanel.Children.Add(saveButton);
         rightPanel.Children.Add(copyButton);
-        rightPanel.Children.Add(_statusBlock);
 
         // 水平容器：左侧图片 + 右侧按钮区
         var horizontalRow = new StackPanel
         {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 12)
+            Orientation = Orientation.Horizontal
         };
         horizontalRow.Children.Add(imageBorder);
         horizontalRow.Children.Add(rightPanel);
+
+        var resultCard = BuildCard("结果");
+        ((StackPanel)resultCard.Child).Children.Add(horizontalRow);
+
+        // 状态文字（固定在底部）
+        _statusBlock = new TextBlock
+        {
+            Text = "",
+            FontSize = 13,
+            Margin = new Thickness(0, 12, 0, 0)
+        };
 
         // 内部生成方法
         void DoGenerate()
@@ -145,12 +158,12 @@ public class QrCodeTool : ITool
 
                 _qrImage!.Source = bitmap;
                 _statusBlock!.Text = $"✅ 已生成 ({inputBox.Text.Length} 字符)";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0xA0, 0x20));
+                _statusBlock.Foreground = new SolidColorBrush(Success);
             }
             catch (Exception ex)
             {
                 _statusBlock!.Text = $"❌ 生成失败：{ex.Message}";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x40, 0x40));
+                _statusBlock.Foreground = new SolidColorBrush(Danger);
             }
         }
 
@@ -175,7 +188,7 @@ public class QrCodeTool : ITool
             if (_currentPngBytes == null)
             {
                 _statusBlock!.Text = "⚠️ 请先生成二维码";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x40, 0x40));
+                _statusBlock.Foreground = new SolidColorBrush(Danger);
                 return;
             }
 
@@ -189,7 +202,7 @@ public class QrCodeTool : ITool
             {
                 File.WriteAllBytes(dialog.FileName, _currentPngBytes);
                 _statusBlock!.Text = $"✅ 已保存到 {dialog.FileName}";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0xA0, 0x20));
+                _statusBlock.Foreground = new SolidColorBrush(Success);
             }
         };
 
@@ -199,7 +212,7 @@ public class QrCodeTool : ITool
             if (_qrImage!.Source == null)
             {
                 _statusBlock!.Text = "⚠️ 请先生成二维码";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x40, 0x40));
+                _statusBlock.Foreground = new SolidColorBrush(Danger);
                 return;
             }
 
@@ -207,19 +220,45 @@ public class QrCodeTool : ITool
             {
                 Clipboard.SetImage((BitmapSource)_qrImage.Source);
                 _statusBlock!.Text = "✅ 已复制到剪贴板";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0xA0, 0x20));
+                _statusBlock.Foreground = new SolidColorBrush(Success);
             }
             catch (Exception ex)
             {
                 _statusBlock!.Text = $"❌ 复制失败：{ex.Message}";
-                _statusBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x40, 0x40));
+                _statusBlock.Foreground = new SolidColorBrush(Danger);
             }
         };
 
         panel.Children.Add(desc);
-        panel.Children.Add(inputBox);
-        panel.Children.Add(horizontalRow);  // 图片左 + 按钮右
+        panel.Children.Add(inputCard);
+        panel.Children.Add(resultCard);
+        panel.Children.Add(_statusBlock);
 
         return panel;
+    }
+
+    /// <summary>构建分组卡片：深灰圆角容器 + 组标题，内容随后追加；
+    /// 卡片带 GlowCardMarker 标记，纳入鼠标光照发光目标</summary>
+    private static Border BuildCard(string title)
+    {
+        var inner = new StackPanel();
+        inner.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(TextPrimary),
+            Margin = new Thickness(0, 0, 0, 10)
+        });
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(BgCard),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12),
+            Child = inner
+        };
+        GlowCardMarker.SetIsGlowCard(card, true);
+        return card;
     }
 }

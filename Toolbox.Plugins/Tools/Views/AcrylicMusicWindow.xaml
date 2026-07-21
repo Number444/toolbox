@@ -23,7 +23,7 @@
 
     <Grid x:Name="ContentRoot">
         <Border x:Name="OpacityOverlay"
-                Background="#731A1A1A"
+                Background="#801A1A1A"
                 CornerRadius="10"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"

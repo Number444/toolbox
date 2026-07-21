@@ -316,6 +316,7 @@ public class JunkCleanerTool : ITool
         foreach (var cat in _categories)
             categoryPanel.Children.Add(BuildCategoryRow(cat));
         listBorder.Child = categoryPanel;
+        GlowCardMarker.SetIsGlowCard(listBorder, true); // 纳入鼠标光照发光目标
         root.Children.Add(listBorder);
 
         UpdateCleanButton();

@@ -12,6 +12,14 @@ namespace Toolbox.Tools;
 /// </summary>
 public class ScreensaverTool : ITool
 {
+    // 与全局主题（App.xaml）及其它工具一致的配色常量
+    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
+    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
+    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
+    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
+    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
+    private static readonly Color Warning = Color.FromRgb(0xE0, 0xA0, 0x30);
+
     public string Name => "系统屏保";
     public string Description => "选择并启动 Windows 内置屏保，仅保留稳定的屏保方案。";
     public string Category => Toolbox.Models.ToolCategory.System;
@@ -35,15 +43,17 @@ public class ScreensaverTool : ITool
         {
             Text = "选择系统屏保并启动。部分屏保名称可能因系统版本而异。",
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 20)
+            Foreground = new SolidColorBrush(TextSecondary),
+            Margin = new Thickness(0, 0, 0, 16)
         };
 
-        // 结果反馈
+        // 结果反馈（固定在底部）
         var resultBlock = new TextBlock
         {
             Text = "",
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 0, 16)
+            FontSize = 13,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 12, 0, 0)
         };
 
         // ComboBox 选择屏保
@@ -52,7 +62,7 @@ public class ScreensaverTool : ITool
             Width = 260,
             Height = 34,
             FontSize = 14,
-            Margin = new Thickness(0, 0, 0, 16),
+            Margin = new Thickness(0, 0, 0, 12),
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
@@ -68,8 +78,7 @@ public class ScreensaverTool : ITool
             FontSize = 14,
             Padding = new Thickness(12),
             Height = 42,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 12)
+            HorizontalAlignment = HorizontalAlignment.Left
         };
 
         launchButton.Click += (_, _) =>
@@ -97,12 +106,12 @@ public class ScreensaverTool : ITool
                             CreateNoWindow = true
                         });
                         resultBlock.Text = "✅ 空白屏保已启动";
-                        resultBlock.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0xA0, 0x20));
+                        resultBlock.Foreground = new SolidColorBrush(Success);
                     }
                     else
                     {
                         resultBlock.Text = "⚠️ 未找到空白屏保文件";
-                        resultBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));
+                        resultBlock.Foreground = new SolidColorBrush(Warning);
                     }
                     return;
                 }
@@ -123,7 +132,7 @@ public class ScreensaverTool : ITool
                     });
 
                     resultBlock.Text = $"✅ {scrName}.scr 已启动";
-                    resultBlock.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0xA0, 0x20));
+                    resultBlock.Foreground = new SolidColorBrush(Success);
                 }
                 else
                 {
@@ -136,19 +145,40 @@ public class ScreensaverTool : ITool
                     });
 
                     resultBlock.Text = $"⚠️ 未找到 {scrName}.scr，已打开屏保设置";
-                    resultBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));
+                    resultBlock.Foreground = new SolidColorBrush(Warning);
                 }
             }
             catch (Exception ex)
             {
                 resultBlock.Text = $"❌ 启动失败：{ex.Message}";
-                resultBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0x40, 0x40));
+                resultBlock.Foreground = new SolidColorBrush(Danger);
             }
         };
 
+        // 卡片：下拉框 + 启动按钮
+        var inner = new StackPanel();
+        inner.Children.Add(new TextBlock
+        {
+            Text = "选择屏保",
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(TextPrimary),
+            Margin = new Thickness(0, 0, 0, 10)
+        });
+        inner.Children.Add(combo);
+        inner.Children.Add(launchButton);
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(BgDark),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12),
+            Child = inner
+        };
+        GlowCardMarker.SetIsGlowCard(card, true);
+
         panel.Children.Add(desc);
-        panel.Children.Add(combo);
-        panel.Children.Add(launchButton);
+        panel.Children.Add(card);
         panel.Children.Add(resultBlock);
 
         return panel;

@@ -113,7 +113,7 @@
                                 Background="{TemplateBinding Background}"
                                 Width="{TemplateBinding Width}"
                                 Height="{TemplateBinding Height}"
-                                CornerRadius="6"
+                                CornerRadius="0,0,6,6"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -141,7 +141,7 @@
                                 Background="{TemplateBinding Background}"
                                 Width="{TemplateBinding Width}"
                                 Height="{TemplateBinding Height}"
-                                CornerRadius="6"
+                                CornerRadius="0,0,6,6"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -291,17 +291,17 @@
 
     <!-- ====== CustomScrollBar 自定义滚动条样式 ====== -->
         <Style TargetType="helpers:CustomScrollBar">
-            <Setter Property="Width" Value="8"/>
+            <Setter Property="Width" Value="12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="helpers:CustomScrollBar">
                         <Border Background="Transparent"
                                 SnapsToDevicePixels="True">
-                            <!-- Thumb 轨道区：6px 条居中于 8px 的 Width -->
+                            <!-- Thumb 轨道区：10px 条居中于 12px 的 Width（白色高光最浅档 20%） -->
                             <Border x:Name="ThumbElement"
-                                    Background="#21FFFFFF"
-                                    CornerRadius="3"
-                                    Width="6"
+                                    Background="#33FFFFFF"
+                                    CornerRadius="5"
+                                    Width="10"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Top"
                                     SnapsToDevicePixels="True"/>
