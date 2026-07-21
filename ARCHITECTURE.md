@@ -1,6 +1,6 @@
 # Toolbox 项目架构
 
-> 最后更新: 2026-07-20
+> 最后更新: 2026-07-21
 
 ## 目录结构
 
@@ -17,6 +17,7 @@ Toolbox/
 ├── Toolbox.ico                             应用图标
 │
 ├── Helpers/
+│   ├── EdgeGlowLayer.cs                    控件边缘发光叠加层（FrameworkElement 子类，OnRender 绘制 1.5px 高光线）
 │   ├── Win32Helper.cs                      Win32 P/Invoke：圆角/深色模式/单实例互斥/Frame扩展/窗口查找 + WndProc 消息钩子（Acrylic 由 MainWindow.xaml.cs 内联实现）
 │   ├── SystemTrayHelper.cs                 纯 Win32 系统托盘图标（不依赖 WinForms）
 │   ├── CustomScrollBar.cs                  自定义迷你滚动条（深色主题，替代系统 ScrollBar）
@@ -26,7 +27,7 @@ Toolbox/
 │   └── ToolRegistry.cs                     工具注册中心：三策略插件加载（单文件发布/plugins目录/调试目录）
 │
 ├── Views/
-│   └── SettingsView.xaml (+ .cs)           设置页面：3 个 ToggleSwitch + ComboBox(悬浮窗大小) + 退出按钮
+│   └── SettingsView.xaml (+ .cs)           设置页面：5 个 ToggleSwitch（最小化/自启悬浮窗/自启/鼠标光晕/控件边缘发光）+ ComboBox(悬浮窗大小) + 退出按钮
 │
 ├── ViewModels/
 │   └── MainViewModel.cs                    主窗口 ViewModel（工具发现、分组、搜索过滤、UI 缓存）
@@ -102,22 +103,25 @@ Toolbox/
 
 | 文件 | 行数 | 说明 |
 |------|:----:|------|
-| App.xaml | 553 | 全局深色主题 + 所有控件样式和模板 |
+| App.xaml | 558 | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6） |
 | App.xaml.cs | 118 | 单实例互斥 + 三层全局异常捕获 + crash.log |
-| MainWindow.xaml | 425 | 完整的主窗口布局 |
-| MainWindow.xaml.cs | 568 | DWM/Acrylic 内联实现（含 Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 |
+| MainWindow.xaml | 484 | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
+| MainWindow.xaml.cs | 672 | DWM/Acrylic 内联实现（含 Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 鼠标光晕 + 边缘发光集成 |
 | Win32Helper.cs | 157 | 圆角/Acrylic/深色模式/消息钩子 P/Invoke |
+| | | |
+| **主程序 Helpers** | | |
+| EdgeGlowLayer.cs | 298 | 控件边缘发光引擎（5点采样遮挡检测 + 距离驱动强度 + 模板边界绑定 + 滚动裁剪） |
 | SystemTrayHelper.cs | 277 | 纯 Win32 系统托盘 |
 | CustomScrollBar.cs | 318 | 自定义深色滚动条 |
 | TransitioningContentControl.cs | 53 | 淡入过渡控件 |
 | ToolRegistry.cs | 109 | 三策略插件加载 |
 | MainViewModel.cs | 171 | 工具分组 + 搜索过滤 + UI 缓存 |
-| SettingsView.xaml | 87 | 设置页 UI |
+| SettingsView.xaml | 99 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮） |
 | SettingsView.xaml.cs | 34 | 设置页后置代码 |
 | ITool.cs | 21 | 工具接口（含 Category） |
 | ToolCategory.cs | 16 | 6 大分类常量 |
 | ToolGroup.cs | 66 | 分组模型 |
-| AppSettings.cs | 156 | 全局设置单例 |
+| AppSettings.cs | 193 | 全局设置单例（新增：MouseHaloEnabled / ControlGlowEnabled 光晕开关） |
 | AudioflowSettings.cs | 173 | 悬浮窗独立设置 |
 | | | |
 | **插件工具** | | |
@@ -177,7 +181,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 
 - 启动时通过 `App.xaml.cs`：单实例互斥（Mutex）→ 全局异常捕获（3 层）→ 加载 AppSettings + AudioflowSettings
 - `MainViewModel` 管理工具列表、分组、搜索过滤、UI 缓存
-- 主窗口 UI：Acrylic 毛玻璃背景 → 自定义标题栏 + 左侧手风琴导航 + 右侧 TransitioningContentControl 淡入过渡 + 设置浮层
+- 主窗口 UI：Acrylic 毛玻璃背景 → 自定义标题栏 + 左侧手风琴导航 + 右侧 TransitioningContentControl 淡入过渡 + 设置浮层 + Canvas HaloLayer + EdgeGlowLayer
 - 关闭按钮支持最小化到系统托盘（纯 Win32，不依赖 WinForms）
 - 启动时根据设置自动打开悬浮窗
 - **v1.1**（状态栏显示）
@@ -230,6 +234,9 @@ App.xaml → App.xaml.cs OnStartup:
     7. HwndTarget.BackgroundColor = Transparent            // 交换链透明
     8. Dispatcher.BeginInvoke: UpdateCornerMask() + InitGroupHeights() + InitHighlight()
     9. 若 AutoOpenFloatWindow → 打开悬浮窗（加载 AudioflowSettings）
+
+  MainWindow 构造函数末尾：
+    10. InitHalo() — 初始化鼠标光晕系统 + EdgeGlowLayer 集成（CompositionTarget.Rendering 逐帧轮询）
 
 → MainViewModel 构造函数:
   1. ToolRegistry.DiscoverTools()
@@ -308,6 +315,69 @@ MusicFloatWindowManager (单例)
 - `MusicContentControl.Unloaded` 停止跑马灯定时器，防止泄漏
 - `SMTCListener` 的 `NowPlayingChanged` 事件在后台线程触发 → `Dispatcher.BeginInvoke` 派发到 UI 线程
 - `AppSettings.Save()` / `AudioflowSettings.Save()` 加 try-catch 兜底
+
+## 双层鼠标光晕系统（b3b7122）
+
+### 层 1 — HaloLayer（鼠标跟随呼吸光晕）
+
+**位置**：`MainWindow.xaml` → `<Canvas x:Name="HaloLayer">` + `MainWindow.xaml.cs` → `InitHalo()`
+
+| 组件 | 细节 |
+|------|------|
+| **渲染元素** | `Ellipse` 140×140px，`RadialGradientBrush` 10 个色标等差衰减（中心 `#40FFFFFF` → 边缘 `#00FFFFFF`） |
+| **呼吸动画** | XAML `EventTrigger.Loaded` → `Storyboard` 循环驱动 `ScaleTransform` 0.9↔1.1，`SineEase` 1.5s |
+| **位置跟随** | `GetCursorPos`（Win32）逐帧读取 → `PointFromScreen` 转换 → `lerp(0.12)` 插值滞后 |
+| **淡入淡出** | `_haloOpacity` 系数 0.08 平滑过渡，移出窗口缓出 |
+| **数据源选择** | 用 `GetCursorPos` 而非 `Mouse.GetPosition`——后者在 `HTCAPTION` 非客户区不更新 |
+
+### 层 2 — EdgeGlowLayer（控件边缘发光叠加层）
+
+**位置**：`Helpers/EdgeGlowLayer.cs`（298 行），`FrameworkElement` 子类，在 `MainWindow.xaml` 最顶层渲染。
+
+**基本参数**：
+- `GlowRadius = 120px`（发光影响范围）
+- `MaxAlpha = 0.9`（hover 峰值不透明度）
+- `StrokeThickness = 1.5px`（硬切高光线）
+- 强度公式：`t = 1 - d/120` → `alpha = t² × 0.9`
+
+**核心机制**：
+
+1. **控件识别 → 模板边界提取**：仅 `ButtonBase`（Button/ToggleButton/CheckBox）与 `ComboBox` 可发光。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，描边逐像素贴合控件玻璃边缘。
+
+2. **距离驱动高光强度**：鼠标靠近时按 `t²` 曲线逐渐增强，接触时接近过曝（0.9）。超出 120px 不发光。
+
+3. **遮挡检测**：5 点采样（中心 + 四角 20% 内缩）命中测试。仅在所有采样点都被**非控件元素**覆盖时判定遮挡，支持弹窗/设置层遮罩。`HitTestAt` 使用 `HitTestFilterCallback` 跳过 `IsHitTestVisible=false` 的元素（避免 EdgeGlowLayer 自身拦截命中）。
+
+4. **滚动裁剪**：每个目标记录最近祖先 `ScrollViewer`，每帧实时求交视口矩形。
+
+5. **目标清单管理**：只存元素引用不存坐标——每帧实时重算。`LayoutUpdated` → `_glowTargetsDirty` → 250ms 节流重建。工具切换/设置层显隐 → `ClearTargets()` 0ms 清除。
+
+**配套样式变更**（App.xaml）：
+- Button / ToggleButton 模板 Border → `CornerRadius="6"`
+- ComboBoxItem 模板 → `CornerRadius="4"` + `Margin="2,1"`（圆角与弹出层适配）
+
+### 设置开关
+
+`AppSettings` 新增两个 `bool` 属性（默认 `true`），在 `SettingsView.xaml` 中以 ToggleSwitch 呈现：
+- `MouseHaloEnabled`：鼠标跟随光晕开关
+- `ControlGlowEnabled`：控件边缘发光开关
+
+### 主窗口光晕初始化流程
+
+```csharp
+MainWindow 构造函数末尾:
+  InitHalo()
+
+InitHalo():
+  1. GlowLayer.LayoutUpdated → _glowTargetsDirty = true
+  2. MainViewModel.PropertyChanged(SelectedTool) → RequestGlowRebuild()
+  3. SettingsLayer.IsVisibleChanged → RequestGlowRebuild()
+  4. CompositionTarget.Rendering 逐帧轮询:
+     a. GetCursorPos() 读取光标
+     b. HaloLayer 位置插值 + 淡入淡出
+     c. GlowLayer 目标重建（250ms 节流）
+     d. GlowLayer.UpdateCursor(pt, inside)
+```
 
 ### 发布流程
 
@@ -395,7 +465,7 @@ public static class ToolCategory
 | `MusicFloatSizeMode` | `string` | `"Large"` | 悬浮窗默认大小（Large / Compact） |
 | `AutoStart` | `bool` | `false` | 开机自动启动（同步 HKCU\...\Run\Toolbox） |
 | `MouseHaloEnabled` | `bool` | `true` | 鼠标跟随光晕开关 |
-| `ControlGlowEnabled` | `bool` | `true` | 控件边缘发光（鼠标照亮）开关 |
+| `ControlGlowEnabled` | `bool` | `true` | 控件边缘发光（鼠标照亮效果）开关 |
 
 持久化：`%LOCALAPPDATA%\Toolbox\settings.json`，JSON 格式，所有属性变更触发 `PropertyChanged` + `Save()`。
 
