@@ -42,6 +42,7 @@ public class MusicFloatWindowManager
     private MusicFloatWindowManager()
     {
         _listener.NowPlayingChanged += OnNowPlayingChanged;
+        AudioflowSettings.Instance.PropertyChanged += OnFloatSettingChanged;
     }
 
     // ── 公开操作 ──────────────────────────────────────────
@@ -219,6 +220,9 @@ public class MusicFloatWindowManager
         // 挂载 EdgeDockService
         _dockService.Attach(window, content, GetTriggerBar(window), OnDragMoveCompleted);
 
+        // 应用当前点击穿透状态（游戏模式）
+        SetClickThrough(window, AudioflowSettings.Instance.ClickThroughEnabled);
+
         return window;
     }
 
@@ -316,6 +320,38 @@ public class MusicFloatWindowManager
         var settings = AudioflowSettings.Instance;
         settings.FloatWindowLeft = _activeWindow.Left;
         settings.FloatWindowTop = _activeWindow.Top;
+    }
+
+    /// <summary>悬浮窗设置项变更回调。</summary>
+    private void OnFloatSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AudioflowSettings.ClickThroughEnabled))
+        {
+            var enabled = AudioflowSettings.Instance.ClickThroughEnabled;
+            SetClickThrough(_activeWindow, enabled);
+            if (_activeWindow == null || !_isVisible) return;
+
+            if (enabled)
+            {
+                _dockService.Detach(); // 穿透下贴边无效，主动断开
+            }
+            else if (AudioflowSettings.Instance.EdgeDockEnabled)
+            {
+                // 关闭穿透时恢复贴边挂载（Attach 内部自带 Detach，可安全重挂）
+                _dockService.Attach(_activeWindow, GetContentControl(_activeWindow),
+                    GetTriggerBar(_activeWindow), OnDragMoveCompleted);
+            }
+        }
+    }
+
+    private static void SetClickThrough(Window? window, bool enabled)
+    {
+        if (window == null) return;
+        switch (window)
+        {
+            case AcrylicMusicWindow aw: aw.SetClickThrough(enabled); break;
+            case TransparentMusicWindow tw: tw.SetClickThrough(enabled); break;
+        }
     }
 
     private void OnNowPlayingChanged(object? sender, NowPlayingInfo info)

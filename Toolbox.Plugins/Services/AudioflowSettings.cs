@@ -67,6 +67,22 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _clickThroughEnabled;
+    /// <summary>
+    /// 游戏模式：开启后鼠标穿透悬浮窗，不会切出全屏游戏。
+    /// </summary>
+    public bool ClickThroughEnabled
+    {
+        get => _clickThroughEnabled;
+        set
+        {
+            if (_clickThroughEnabled == value) return;
+            _clickThroughEnabled = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     private double _floatWindowLeft = double.NaN;
     /// <summary>
     /// 悬浮窗 Left 坐标（NaN 表示未保存，使用默认位置）。注意：不自动存盘，由 Manager 统一管理写入时机。
@@ -127,6 +143,9 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
                 _edgeDockEnabled = data.EdgeDockEnabled;
                 OnPropertyChanged(nameof(EdgeDockEnabled));
 
+                _clickThroughEnabled = data.ClickThroughEnabled;
+                OnPropertyChanged(nameof(ClickThroughEnabled));
+
                 if (!double.IsNaN(data.FloatWindowLeft))
                 {
                     _floatWindowLeft = data.FloatWindowLeft;
@@ -150,6 +169,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             FloatWindowBlurEnabled = _floatWindowBlurEnabled,
             LockFloatWindow = _lockFloatWindow,
             EdgeDockEnabled = _edgeDockEnabled,
+            ClickThroughEnabled = _clickThroughEnabled,
             FloatWindowLeft = _floatWindowLeft,
             FloatWindowTop = _floatWindowTop
         };
@@ -168,6 +188,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         public bool FloatWindowBlurEnabled { get; set; } = true;
         public bool LockFloatWindow { get; set; }
         public bool EdgeDockEnabled { get; set; } = true;
+        public bool ClickThroughEnabled { get; set; }
         public double FloatWindowLeft { get; set; } = double.NaN;
         public double FloatWindowTop { get; set; } = double.NaN;
     }

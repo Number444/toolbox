@@ -209,6 +209,22 @@ public class NeteaseMusicTool : ITool
         settingsPanel.Children.Add(cbBlur);
         settingsPanel.Children.Add(cbLock);
         settingsPanel.Children.Add(cbEdgeDock);
+
+        // 复选框 4：游戏模式（点击穿透）
+        var cbClickThrough = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "游戏模式（鼠标穿透，不可点击）",
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        cbClickThrough.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("ClickThroughEnabled")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        settingsPanel.Children.Add(cbClickThrough);
+
         settingsBorder.Child = settingsPanel;
 
         root.Children.Add(settingsBorder);

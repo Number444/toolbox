@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -142,5 +143,107 @@ public partial class AcrylicMusicWindow : Window
                 target.BackgroundColor = Colors.Transparent;
         }
         catch { }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 点击穿透（游戏模式）
+    // ═══════════════════════════════════════════════════════════
+
+    private bool _isClickThrough;
+    private bool _clickThroughHookRegistered;
+    private const int WM_NCHITTEST = 0x0084;
+    private const int WM_MOUSEACTIVATE = 0x0021;
+    private static readonly IntPtr HTTRANSPARENT = new(-1);
+    private static readonly IntPtr MA_NOACTIVATE = new(3);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        // HWND 在此时创建完毕，是注册钩子和修改扩展样式的最早可靠时机
+        EnsureClickThroughHook();
+        ApplyClickThroughStyles();
+    }
+
+    /// <summary>
+    /// 开启/关闭鼠标点击穿透（游戏模式）。开启后鼠标事件直接落到下层窗口（游戏），
+    /// 悬浮窗变成纯信息展示，不可拖拽、不可交互、不可被激活。
+    /// </summary>
+    public void SetClickThrough(bool enabled)
+    {
+        _isClickThrough = enabled;
+        EnsureClickThroughHook();
+        ApplyClickThroughStyles();
+    }
+
+    /// <summary>钩子只注册一次，消息处理内部用 _isClickThrough 门控。</summary>
+    private void EnsureClickThroughHook()
+    {
+        if (_clickThroughHookRegistered) return;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return; // 窗口未 Show 前无 HWND，等 OnSourceInitialized
+        HwndSource.FromHwnd(hwnd)?.AddHook(WndProcClickThrough);
+        _clickThroughHookRegistered = true;
+    }
+
+    private IntPtr WndProcClickThrough(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (!_isClickThrough) return IntPtr.Zero;
+
+        // 命中测试透明：点击穿透到下层窗口
+        if (msg == WM_NCHITTEST)
+        {
+            handled = true;
+            return HTTRANSPARENT;
+        }
+
+        // 兜底：即使点击意外落在本窗口，也拒绝激活（防止抢前台导致游戏鼠标脱捕）
+        if (msg == WM_MOUSEACTIVATE)
+        {
+            handled = true;
+            return MA_NOACTIVATE;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    // ── Win32 扩展样式 ──────────────────────────────────────
+    // HTTRANSPARENT 只保证点击"穿过去"；WS_EX_NOACTIVATE 保证窗口任何
+    // 情况下都不会被激活——后者才是防止游戏丢失前台、鼠标脱捕的根治。
+    // 本窗口非 layered（DWM Acrylic 渲染路径），不能用 WS_EX_TRANSPARENT。
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    /// <summary>按 _isClickThrough 切换 WS_EX_NOACTIVATE 扩展样式。</summary>
+    private void ApplyClickThroughStyles()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return; // 等 OnSourceInitialized
+
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        int newStyle = _isClickThrough
+            ? exStyle | WS_EX_NOACTIVATE
+            : exStyle & ~WS_EX_NOACTIVATE;
+        if (newStyle == exStyle) return;
+
+        SetWindowLong(hwnd, GWL_EXSTYLE, newStyle);
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
