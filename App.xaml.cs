@@ -45,6 +45,9 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         AppSettings.Instance.Load();
         AudioflowSettings.Instance.Load();
+
+        // 全局替换 TextBox 默认系统右键菜单为主题菜单
+        Helpers.TextBoxContextMenuHelper.Register();
     }
 
     // ── 异常处理 ──────────────────────────────────────────
