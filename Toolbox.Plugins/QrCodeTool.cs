@@ -12,14 +12,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class QrCodeTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具一致的配色常量
-    private static readonly Color BgCard = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color BgDark = Color.FromRgb(0x1C, 0x1C, 0x1C);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     private Image? _qrImage;
     private byte[]? _currentPngBytes;
     private TextBlock? _statusBlock;
@@ -39,7 +32,7 @@ public class QrCodeTool : ITool
         {
             Text = "输入文本或 URL，自动生成二维码。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
@@ -73,7 +66,7 @@ public class QrCodeTool : ITool
         {
             Width = 200,
             Height = 200,
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Child = new Image
             {
@@ -158,12 +151,12 @@ public class QrCodeTool : ITool
 
                 _qrImage!.Source = bitmap;
                 _statusBlock!.Text = $"✅ 已生成 ({inputBox.Text.Length} 字符)";
-                _statusBlock.Foreground = new SolidColorBrush(Success);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
             }
             catch (Exception ex)
             {
                 _statusBlock!.Text = $"❌ 生成失败：{ex.Message}";
-                _statusBlock.Foreground = new SolidColorBrush(Danger);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         }
 
@@ -188,7 +181,7 @@ public class QrCodeTool : ITool
             if (_currentPngBytes == null)
             {
                 _statusBlock!.Text = "⚠️ 请先生成二维码";
-                _statusBlock.Foreground = new SolidColorBrush(Danger);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
                 return;
             }
 
@@ -200,9 +193,17 @@ public class QrCodeTool : ITool
 
             if (dialog.ShowDialog() == true)
             {
-                File.WriteAllBytes(dialog.FileName, _currentPngBytes);
-                _statusBlock!.Text = $"✅ 已保存到 {dialog.FileName}";
-                _statusBlock.Foreground = new SolidColorBrush(Success);
+                try
+                {
+                    File.WriteAllBytes(dialog.FileName, _currentPngBytes);
+                    _statusBlock!.Text = $"✅ 已保存到 {dialog.FileName}";
+                    _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+                }
+                catch (Exception ex)
+                {
+                    _statusBlock!.Text = $"❌ 保存失败：{ex.Message}";
+                    _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
+                }
             }
         };
 
@@ -212,7 +213,7 @@ public class QrCodeTool : ITool
             if (_qrImage!.Source == null)
             {
                 _statusBlock!.Text = "⚠️ 请先生成二维码";
-                _statusBlock.Foreground = new SolidColorBrush(Danger);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
                 return;
             }
 
@@ -220,12 +221,12 @@ public class QrCodeTool : ITool
             {
                 Clipboard.SetImage((BitmapSource)_qrImage.Source);
                 _statusBlock!.Text = "✅ 已复制到剪贴板";
-                _statusBlock.Foreground = new SolidColorBrush(Success);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
             }
             catch (Exception ex)
             {
                 _statusBlock!.Text = $"❌ 复制失败：{ex.Message}";
-                _statusBlock.Foreground = new SolidColorBrush(Danger);
+                _statusBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };
 
@@ -247,13 +248,13 @@ public class QrCodeTool : ITool
             Text = title,
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(0, 0, 0, 10)
         });
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgCard),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

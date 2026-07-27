@@ -13,13 +13,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class ShutdownTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具（JunkCleanerTool 等）一致的画刷配色
-    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     public string Name => "定时关机";
     public string Description => "设置指定时间后自动关机，或取消已计划的关机任务";
     public string Category => Toolbox.Models.ToolCategory.System;
@@ -34,7 +28,7 @@ public class ShutdownTool : ITool
         {
             Text = "选择预设时长快速关机，或输入自定义分钟数。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
@@ -86,15 +80,23 @@ public class ShutdownTool : ITool
             {
                 minuteInput.Text = minutes.ToString();
                 int seconds = minutes * 60;
-                Process.Start(new ProcessStartInfo
+                try
                 {
-                    FileName = "shutdown",
-                    Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
-                    UseShellExecute = true,
-                    CreateNoWindow = true
-                });
-                resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
-                resultBlock.Foreground = new SolidColorBrush(Success);
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "shutdown",
+                        Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
+                        UseShellExecute = true,
+                        CreateNoWindow = true
+                    });
+                    resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+                }
+                catch (Exception ex)
+                {
+                    resultBlock.Text = $"❌ 操作失败：{ex.Message}";
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
+                }
             };
 
             quickGrid.Children.Add(btn);
@@ -114,7 +116,7 @@ public class ShutdownTool : ITool
             Text = "分钟数：",
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 14,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(0, 0, 8, 0)
         };
 
@@ -131,20 +133,28 @@ public class ShutdownTool : ITool
             if (int.TryParse(minuteInput.Text, out int minutes) && minutes > 0)
             {
                 int seconds = minutes * 60;
-                Process.Start(new ProcessStartInfo
+                try
                 {
-                    FileName = "shutdown",
-                    Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
-                    UseShellExecute = true,
-                    CreateNoWindow = true
-                });
-                resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
-                resultBlock.Foreground = new SolidColorBrush(Success);
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "shutdown",
+                        Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
+                        UseShellExecute = true,
+                        CreateNoWindow = true
+                    });
+                    resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+                }
+                catch (Exception ex)
+                {
+                    resultBlock.Text = $"❌ 操作失败：{ex.Message}";
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
+                }
             }
             else
             {
                 resultBlock.Text = "⚠️ 请输入有效的正整数";
-                resultBlock.Foreground = new SolidColorBrush(Danger);
+                resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };
 
@@ -155,7 +165,7 @@ public class ShutdownTool : ITool
             FontSize = 14,
             Padding = new Thickness(10),
             Margin = new Thickness(8, 0, 0, 0),
-            Background = new SolidColorBrush(Danger),
+            Background = new SolidColorBrush(ThemeColors.Danger),
             Foreground = Brushes.White
         };
 
@@ -174,7 +184,7 @@ public class ShutdownTool : ITool
                 if (proc == null)
                 {
                     resultBlock.Text = "❌ 无法启动 shutdown 进程";
-                    resultBlock.Foreground = new SolidColorBrush(Danger);
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
                     return;
                 }
 
@@ -183,18 +193,18 @@ public class ShutdownTool : ITool
                 if (proc.ExitCode == 0)
                 {
                     resultBlock.Text = "✅ 已取消所有定时关机任务";
-                    resultBlock.Foreground = new SolidColorBrush(Success);
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
                 }
                 else
                 {
                     resultBlock.Text = "⚠️ 没有找到可取消的定时关机任务";
-                    resultBlock.Foreground = new SolidColorBrush(Danger);
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
                 }
             }
             catch (Exception ex)
             {
                 resultBlock.Text = $"❌ 操作失败：{ex.Message}";
-                resultBlock.Foreground = new SolidColorBrush(Danger);
+                resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };
 
@@ -223,14 +233,14 @@ public class ShutdownTool : ITool
             Text = title,
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(0, 0, 0, 10)
         });
         inner.Children.Add(content);
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

@@ -15,14 +15,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class PasswordGeneratorTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具一致的配色常量
-    private static readonly Color BgCard = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color BgDark = Color.FromRgb(0x1C, 0x1C, 0x1C);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     // 可选字符集
     private const string UpperChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private const string LowerChars = "abcdefghijklmnopqrstuvwxyz";
@@ -62,7 +55,7 @@ public class PasswordGeneratorTool : ITool
         {
             Text = "输入名字作为种子，根据所选长度和字符集确定性生成密码；同一名字、同一选项永远得到同一密码。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
@@ -123,7 +116,7 @@ public class PasswordGeneratorTool : ITool
         // ====== 结果卡片：密码展示（等宽字体）+ 复制按钮 ======
         var passwordBorder = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(10, 8, 10, 8),
             Margin = new Thickness(0, 0, 0, 12)
@@ -133,7 +126,7 @@ public class PasswordGeneratorTool : ITool
             Text = "（尚未生成）",
             FontFamily = new FontFamily("Consolas"),
             FontSize = 18,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             TextWrapping = TextWrapping.Wrap
         };
         passwordBorder.Child = _passwordBlock;
@@ -162,7 +155,7 @@ public class PasswordGeneratorTool : ITool
             Text = "历史记录（⚠️ 密码以明文保存在本机 passwords.json，请勿在共享电脑上使用）",
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
             VerticalAlignment = VerticalAlignment.Center
@@ -221,11 +214,11 @@ public class PasswordGeneratorTool : ITool
             var pwd = _passwordBlock!.Tag as string;
             if (string.IsNullOrEmpty(pwd))
             {
-                SetStatus("⚠️ 请先生成密码", Danger);
+                SetStatus("⚠️ 请先生成密码", ThemeColors.Danger);
                 return;
             }
             if (TryCopyToClipboard(pwd))
-                SetStatus("✅ 已复制到剪贴板", Success);
+                SetStatus("✅ 已复制到剪贴板", ThemeColors.Success);
         };
 
         panel.Children.Add(desc);
@@ -248,7 +241,7 @@ public class PasswordGeneratorTool : ITool
         var name = _nameBox!.Text.Trim();
         if (string.IsNullOrEmpty(name))
         {
-            SetStatus("⚠️ 请输入名字", Danger);
+            SetStatus("⚠️ 请输入名字", ThemeColors.Danger);
             return;
         }
 
@@ -260,7 +253,7 @@ public class PasswordGeneratorTool : ITool
         if (_symbolCheck!.IsChecked == true) charset.Append(SymbolChars);
         if (charset.Length == 0)
         {
-            SetStatus("⚠️ 请至少勾选一个字符集", Danger);
+            SetStatus("⚠️ 请至少勾选一个字符集", ThemeColors.Danger);
             return;
         }
 
@@ -268,7 +261,7 @@ public class PasswordGeneratorTool : ITool
         var password = GeneratePassword(name, charset.ToString(), length);
 
         _passwordBlock!.Text = password;
-        _passwordBlock.Foreground = new SolidColorBrush(TextPrimary);
+        _passwordBlock.Foreground = new SolidColorBrush(ThemeColors.TextPrimary);
         _passwordBlock.Tag = password; // 复制按钮从这里取真实密码
 
         // 追加历史记录并保存
@@ -281,7 +274,7 @@ public class PasswordGeneratorTool : ITool
         SaveHistory();
         RefreshHistoryPanel();
 
-        SetStatus($"✅ 已生成（{length} 位）", Success);
+        SetStatus($"✅ 已生成（{length} 位）", ThemeColors.Success);
     }
 
     /// <summary>
@@ -315,7 +308,7 @@ public class PasswordGeneratorTool : ITool
         IsChecked = true,
         Style = FindResourceStyle("ClassicCheckBoxStyle"),
         FontSize = 13,
-        Foreground = new SolidColorBrush(TextPrimary),
+        Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
         VerticalContentAlignment = VerticalAlignment.Center,
         Margin = new Thickness(0, 0, 16, 0)
     };
@@ -359,7 +352,7 @@ public class PasswordGeneratorTool : ITool
         }
         catch (Exception ex)
         {
-            SetStatus($"❌ 历史记录保存失败：{ex.Message}", Danger);
+            SetStatus($"❌ 历史记录保存失败：{ex.Message}", ThemeColors.Danger);
         }
     }
 
@@ -374,7 +367,7 @@ public class PasswordGeneratorTool : ITool
             {
                 Text = "暂无记录",
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextSecondary)
+                Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
             });
             return;
         }
@@ -390,7 +383,7 @@ public class PasswordGeneratorTool : ITool
             {
                 Text = $"没有名字包含“{_historyFilter}”的记录",
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextSecondary)
+                Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
             });
             return;
         }
@@ -409,7 +402,7 @@ public class PasswordGeneratorTool : ITool
             {
                 Text = record.Name,
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
+                Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
@@ -420,7 +413,7 @@ public class PasswordGeneratorTool : ITool
                 Text = record.Password,
                 FontFamily = new FontFamily("Consolas"),
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
+                Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
                 VerticalAlignment = VerticalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap
             };
@@ -430,7 +423,7 @@ public class PasswordGeneratorTool : ITool
             {
                 Text = record.Time,
                 FontSize = 12,
-                Foreground = new SolidColorBrush(TextSecondary),
+                Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(12, 0, 8, 0)
             };
@@ -446,7 +439,7 @@ public class PasswordGeneratorTool : ITool
             copyBtn.Click += (_, _) =>
             {
                 if (TryCopyToClipboard(record.Password))
-                    SetStatus($"✅ 已复制 {record.Name} 的密码", Success);
+                    SetStatus($"✅ 已复制 {record.Name} 的密码", ThemeColors.Success);
             };
             Grid.SetColumn(copyBtn, 3);
 
@@ -484,7 +477,7 @@ public class PasswordGeneratorTool : ITool
         _history.Remove(record);
         SaveHistory();
         RefreshHistoryPanel();
-        SetStatus($"✅ 已删除 {record.Name} 的记录", Success);
+        SetStatus($"✅ 已删除 {record.Name} 的记录", ThemeColors.Success);
     }
 
     /// <summary>清空全部历史记录（弹确认弹窗，确认后写回 JSON 并刷新列表）</summary>
@@ -492,7 +485,7 @@ public class PasswordGeneratorTool : ITool
     {
         if (_history.Count == 0)
         {
-            SetStatus("⚠️ 历史记录为空", Danger);
+            SetStatus("⚠️ 历史记录为空", ThemeColors.Danger);
             return;
         }
 
@@ -506,7 +499,7 @@ public class PasswordGeneratorTool : ITool
         _history.Clear();
         SaveHistory();
         RefreshHistoryPanel();
-        SetStatus("✅ 已清空全部历史记录", Success);
+        SetStatus("✅ 已清空全部历史记录", ThemeColors.Success);
     }
 
     /// <summary>复制文本到剪贴板，失败时给出状态提示</summary>
@@ -519,7 +512,7 @@ public class PasswordGeneratorTool : ITool
         }
         catch (Exception ex)
         {
-            SetStatus($"❌ 复制失败：{ex.Message}", Danger);
+            SetStatus($"❌ 复制失败：{ex.Message}", ThemeColors.Danger);
             return false;
         }
     }
@@ -538,7 +531,7 @@ public class PasswordGeneratorTool : ITool
         Text = title,
         FontSize = 14,
         FontWeight = FontWeights.SemiBold,
-        Foreground = new SolidColorBrush(TextPrimary),
+        Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
         TextWrapping = TextWrapping.Wrap,
         Margin = new Thickness(0, 0, 0, 10)
     });
@@ -551,7 +544,7 @@ public class PasswordGeneratorTool : ITool
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgCard),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

@@ -225,11 +225,12 @@ namespace Toolbox.Tools.Helpers
         /// 将窗口客户区扩展到整个窗口（Aero Glass 风格，配合 SetWindowCompositionAttribute 使用）。
         /// 在 Windows 10 上调用 EnableAcrylicBlur 后，建议同时调用此方法以获得最佳效果。
         /// </summary>
-        public static void ExtendFrameIntoClientArea(Window window)
+        /// <returns>DWM 调用成功返回 true</returns>
+        public static bool ExtendFrameIntoClientArea(Window window)
         {
             var hwnd = new WindowInteropHelper(window).EnsureHandle();
             var margins = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
-            DwmExtendFrameIntoClientArea(hwnd, ref margins);
+            return DwmExtendFrameIntoClientArea(hwnd, ref margins) == 0;
         }
 
         /// <summary>
@@ -237,13 +238,15 @@ namespace Toolbox.Tools.Helpers
         /// 清理 Win11 的 SYSTEMBACKDROP 和 Win10 的 ACCENT_POLICY。
         /// 注意：不撤销 ExtendFrameIntoClientArea，因为 WindowChrome 方案依赖它维持窗口透明。
         /// </summary>
-        public static void DisableAllBackdrops(Window window)
+        /// <returns>所有清理调用均成功返回 true</returns>
+        public static bool DisableAllBackdrops(Window window)
         {
             var hwnd = new WindowInteropHelper(window).EnsureHandle();
+            bool ok = true;
 
             // Win11 22H2+: 设置 BackdropType.None
             if (IsWindows11_22H2OrLater())
-                SetBackdrop(window, BackdropType.None);
+                ok = SetBackdrop(window, BackdropType.None) && ok;
 
             // Win10 / 旧版 Win11: 清除 ACCENT_POLICY（AccentState = 0 = disabled）
             var accent = new ACCENT_POLICY { AccentState = 0, AccentFlags = 0, GradientColor = 0, AnimationId = 0 };
@@ -257,12 +260,14 @@ namespace Toolbox.Tools.Helpers
                     Data = accentPtr,
                     SizeOfData = Marshal.SizeOf<ACCENT_POLICY>()
                 };
-                SetWindowCompositionAttribute(hwnd, ref data);
+                ok = SetWindowCompositionAttribute(hwnd, ref data) == 0 && ok;
             }
             finally
             {
                 Marshal.FreeHGlobal(accentPtr);
             }
+
+            return ok;
         }
 
         /// <summary>

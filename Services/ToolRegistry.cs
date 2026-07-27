@@ -45,8 +45,16 @@ public class ToolRegistry
 
         foreach (var type in toolTypes)
         {
-            if (Activator.CreateInstance(type) is ITool tool)
-                Tools.Add(tool);
+            // 单个工具实例化失败（构造函数异常/缺依赖）只跳过该工具，继续发现其余工具
+            try
+            {
+                if (Activator.CreateInstance(type) is ITool tool)
+                    Tools.Add(tool);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ToolRegistry] 工具 {type.FullName} 实例化失败，已跳过: {ex.Message}");
+            }
         }
 
         // 按名称排序

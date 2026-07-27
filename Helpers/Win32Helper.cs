@@ -33,7 +33,9 @@ public static class Win32Helper
     public static void EnableRoundedCorners(IntPtr hwnd)
     {
         int cornerPreference = DWMWCP_ROUND;
-        _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
+        int hr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
+        if (hr != 0)
+            System.Diagnostics.Debug.WriteLine($"[Win32Helper] EnableRoundedCorners 失败: 0x{hr:X8}");
     }
 
     /// <summary>
@@ -47,7 +49,9 @@ public static class Win32Helper
         int backdropType = Environment.OSVersion.Version.Build >= 22621
             ? DWMSBT_TABBEDWINDOW
             : DWMSBT_MAINWINDOW;
-        _ = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
+        int hr = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
+        if (hr != 0)
+            System.Diagnostics.Debug.WriteLine($"[Win32Helper] EnableMicaBackdrop 失败: 0x{hr:X8}");
     }
 
     /// <summary>
@@ -57,7 +61,9 @@ public static class Win32Helper
     public static void EnableDarkMode(IntPtr hwnd)
     {
         int dark = 1;
-        _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        int hr = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        if (hr != 0)
+            System.Diagnostics.Debug.WriteLine($"[Win32Helper] EnableDarkMode 失败: 0x{hr:X8}");
     }
 
     /// <summary>
@@ -68,7 +74,9 @@ public static class Win32Helper
     public static void SetBorderColor(IntPtr hwnd, uint colorBgr = 0xFFFFFFFE)
     {
         int borderColor = unchecked((int)colorBgr);
-        _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+        int hr = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+        if (hr != 0)
+            System.Diagnostics.Debug.WriteLine($"[Win32Helper] SetBorderColor 失败: 0x{hr:X8}");
     }
 
     // ---- 将 DWM 帧扩展到标题栏区域，使 Mica 透入 ----
@@ -98,7 +106,9 @@ public static class Win32Helper
             cyTopHeight = -1,
             cyBottomHeight = -1
         };
-        _ = DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        int hr = DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        if (hr != 0)
+            System.Diagnostics.Debug.WriteLine($"[Win32Helper] ExtendFrameIntoClientArea 失败: 0x{hr:X8}");
     }
 
     // ---- WM_NCCALCSIZE & WM_ERASEBKGND 拦截 ----

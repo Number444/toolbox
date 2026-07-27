@@ -46,13 +46,6 @@ public class JunkCleanerTool : ITool
     private System.Windows.Shapes.Ellipse? _spinner;
     private TextBlock? _doNotCloseText;
 
-    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-    private static readonly Color Warning = Color.FromRgb(0xE0, 0xA0, 0x30);
-
     public string Name => "C盘垃圾清理";
     public string Description => "分类扫描 C 盘常见垃圾文件，勾选后一键清理，文件先移入回收站。";
     public string Category => Toolbox.Models.ToolCategory.System;
@@ -167,14 +160,14 @@ public class JunkCleanerTool : ITool
         {
             Text = "扫描 C 盘常见垃圾文件，按类别勾选后一键清理。清理的文件会先移入回收站，可随时恢复。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 8)
         });
 
         // 状态栏（顶部显眼位置，含进度、结果、加载动画）
         _statusArea = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 8, 10, 8),
             Margin = new Thickness(0, 6, 0, 12),
@@ -188,7 +181,7 @@ public class JunkCleanerTool : ITool
         {
             Width = 14,
             Height = 14,
-            Stroke = new SolidColorBrush(Success),
+            Stroke = new SolidColorBrush(ThemeColors.Success),
             StrokeThickness = 2,
             StrokeDashArray = new DoubleCollection(new double[] { 25, 75 }),
             RenderTransformOrigin = new Point(0.5, 0.5),
@@ -215,7 +208,7 @@ public class JunkCleanerTool : ITool
         _progressText = new TextBlock
         {
             FontSize = 13,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(8, -1, 0, 0),
             TextWrapping = TextWrapping.Wrap,
             Visibility = Visibility.Collapsed
@@ -227,7 +220,7 @@ public class JunkCleanerTool : ITool
         _statusText = new TextBlock
         {
             FontSize = 12,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, -1, 0, 0)
         };
 
@@ -236,7 +229,7 @@ public class JunkCleanerTool : ITool
         {
             Text = "⚠️ 请勿关闭程序，清理正在进行中...",
             FontSize = 12,
-            Foreground = new SolidColorBrush(Warning),
+            Foreground = new SolidColorBrush(ThemeColors.Warning),
             Margin = new Thickness(0, 6, 0, 0),
             Visibility = Visibility.Collapsed
         };
@@ -282,7 +275,7 @@ public class JunkCleanerTool : ITool
             Style = FindResourceStyle("ClassicCheckBoxStyle"),
             Content = "跳过 24 小时内修改的文件",
             IsChecked = true,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(14, 0, 0, 0)
@@ -298,7 +291,7 @@ public class JunkCleanerTool : ITool
         {
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Danger),
+            Foreground = new SolidColorBrush(ThemeColors.Danger),
             Margin = new Thickness(0, 10, 0, 0),
             Visibility = Visibility.Collapsed
         };
@@ -307,7 +300,7 @@ public class JunkCleanerTool : ITool
         // 类别列表
         var listBorder = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(6, 4, 6, 4),
             Margin = new Thickness(0, 12, 0, 0)
@@ -340,13 +333,13 @@ public class JunkCleanerTool : ITool
         {
             Text = cat.Name,
             FontSize = 13,
-            Foreground = new SolidColorBrush(TextPrimary)
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary)
         });
         textPanel.Children.Add(new TextBlock
         {
             Text = cat.Subtitle,
             FontSize = 11,
-            Foreground = new SolidColorBrush(cat.IsRecycleBin ? Warning : TextSecondary)
+            Foreground = new SolidColorBrush(cat.IsRecycleBin ? ThemeColors.Warning : ThemeColors.TextSecondary)
         });
         check.Content = textPanel;
         check.Checked += (_, _) => UpdateCleanButton();
@@ -357,7 +350,7 @@ public class JunkCleanerTool : ITool
         {
             Text = "未扫描",
             FontSize = 12,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(12, 0, 4, 0)
         };
@@ -423,12 +416,12 @@ public class JunkCleanerTool : ITool
 
             long totalSize = _categories.Sum(c => c.SizeBytes);
             _statusText!.Text = $"✅ 扫描完成，共发现 {FormatSize(totalSize)} 可清理内容";
-            _statusText.Foreground = new SolidColorBrush(Success);
+            _statusText.Foreground = new SolidColorBrush(ThemeColors.Success);
         }
         catch (OperationCanceledException)
         {
             _statusText!.Text = "扫描已取消";
-            _statusText.Foreground = new SolidColorBrush(Warning);
+            _statusText.Foreground = new SolidColorBrush(ThemeColors.Warning);
         }
         catch (Exception ex)
         {
@@ -573,7 +566,7 @@ public class JunkCleanerTool : ITool
             _statusText!.Text = notes.Count > 0
                 ? $"✅ 清理完成（{string.Join("；", notes)}），正在重新扫描..."
                 : "✅ 清理完成，正在重新扫描...";
-            _statusText.Foreground = new SolidColorBrush(Success);
+            _statusText.Foreground = new SolidColorBrush(ThemeColors.Success);
 
             // 重新扫描被清理的类别，刷新显示
             await RescanCategoriesAsync(selected, token);
@@ -581,7 +574,7 @@ public class JunkCleanerTool : ITool
         catch (OperationCanceledException)
         {
             _statusText!.Text = "清理已取消";
-            _statusText.Foreground = new SolidColorBrush(Warning);
+            _statusText.Foreground = new SolidColorBrush(ThemeColors.Warning);
         }
         catch (Exception ex)
         {
@@ -875,14 +868,14 @@ public class JunkCleanerTool : ITool
         if (_errorText == null) return;
         _errorText.Text = msg;
         _errorText.Visibility = Visibility.Visible;
-        _statusText?.SetCurrentValue(TextBlock.ForegroundProperty, new SolidColorBrush(TextSecondary));
+        _statusText?.SetCurrentValue(TextBlock.ForegroundProperty, new SolidColorBrush(ThemeColors.TextSecondary));
     }
 
     private void HideError()
     {
         if (_errorText != null) _errorText.Visibility = Visibility.Collapsed;
         if (_statusText != null)
-            _statusText.Foreground = new SolidColorBrush(TextSecondary);
+            _statusText.Foreground = new SolidColorBrush(ThemeColors.TextSecondary);
     }
 
     private static string FormatSize(long bytes)

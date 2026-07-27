@@ -3,7 +3,6 @@ using Microsoft.Win32;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 
 namespace Toolbox.Core.Services;
 
@@ -96,20 +95,28 @@ public sealed class AppSettings : INotifyPropertyChanged
 
     private static void SetStartupRegistry(bool enable)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(
-            @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
-        if (key == null) return;
+        // 杀软拦截/权限不足可能抛异常，失败不影响设置项本身
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            if (key == null) return;
 
-        if (enable)
-        {
-            var exePath = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exePath))
-                key.SetValue("Toolbox", $"\"{exePath}\"");
+            if (enable)
+            {
+                var exePath = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(exePath))
+                    key.SetValue("Toolbox", $"\"{exePath}\"");
+            }
+            else
+            {
+                if (key.GetValue("Toolbox") != null)
+                    key.DeleteValue("Toolbox", false);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            if (key.GetValue("Toolbox") != null)
-                key.DeleteValue("Toolbox", false);
+            System.Diagnostics.Debug.WriteLine($"[AppSettings] 开机自启注册表写入失败: {ex.Message}");
         }
     }
 
@@ -127,38 +134,30 @@ public sealed class AppSettings : INotifyPropertyChanged
 
     public void Load()
     {
-        var path = SettingsPath;
-        if (!File.Exists(path)) return;
-        try
+        var data = JsonSettingsFile.Load<SettingsData>(SettingsPath);
+        if (data == null) return;
+
+        _minimizeOnClose = data.MinimizeOnClose;
+        OnPropertyChanged(nameof(MinimizeOnClose));
+
+        _autoOpenFloatWindow = data.AutoOpenFloatWindow;
+        OnPropertyChanged(nameof(AutoOpenFloatWindow));
+
+        if (!string.IsNullOrEmpty(data.MusicFloatSizeMode))
         {
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<SettingsData>(json);
-            if (data != null)
-            {
-                _minimizeOnClose = data.MinimizeOnClose;
-                OnPropertyChanged(nameof(MinimizeOnClose));
-
-                _autoOpenFloatWindow = data.AutoOpenFloatWindow;
-                OnPropertyChanged(nameof(AutoOpenFloatWindow));
-
-                if (!string.IsNullOrEmpty(data.MusicFloatSizeMode))
-                {
-                    _musicFloatSizeMode = data.MusicFloatSizeMode;
-                    OnPropertyChanged(nameof(MusicFloatSizeMode));
-                }
-
-                _autoStart = data.AutoStart;
-                OnPropertyChanged(nameof(AutoStart));
-
-                // 旧版 settings.json 无此字段（null），默认开启
-                _mouseHaloEnabled = data.MouseHaloEnabled ?? true;
-                OnPropertyChanged(nameof(MouseHaloEnabled));
-
-                _controlGlowEnabled = data.ControlGlowEnabled ?? true;
-                OnPropertyChanged(nameof(ControlGlowEnabled));
-            }
+            _musicFloatSizeMode = data.MusicFloatSizeMode;
+            OnPropertyChanged(nameof(MusicFloatSizeMode));
         }
-        catch { /* 文件损坏，忽略，保留默认值 */ }
+
+        _autoStart = data.AutoStart;
+        OnPropertyChanged(nameof(AutoStart));
+
+        // 旧版 settings.json 无此字段（null），默认开启
+        _mouseHaloEnabled = data.MouseHaloEnabled ?? true;
+        OnPropertyChanged(nameof(MouseHaloEnabled));
+
+        _controlGlowEnabled = data.ControlGlowEnabled ?? true;
+        OnPropertyChanged(nameof(ControlGlowEnabled));
     }
 
     public void Save()
@@ -172,9 +171,7 @@ public sealed class AppSettings : INotifyPropertyChanged
             MouseHaloEnabled = _mouseHaloEnabled,
             ControlGlowEnabled = _controlGlowEnabled
         };
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        try { File.WriteAllText(SettingsPath, json); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[AppSettings] 保存失败: {ex.Message}"); }
+        JsonSettingsFile.Save(SettingsPath, data);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

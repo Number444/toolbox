@@ -2,7 +2,7 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
+using Toolbox.Core.Services;
 
 namespace Toolbox.Services;
 
@@ -142,43 +142,35 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
 
     public void Load()
     {
-        var path = SettingsPath;
-        if (!File.Exists(path)) return;
-        try
+        var data = JsonSettingsFile.Load<AudioflowData>(SettingsPath);
+        if (data == null) return;
+
+        _floatWindowBlurEnabled = data.FloatWindowBlurEnabled;
+        OnPropertyChanged(nameof(FloatWindowBlurEnabled));
+
+        _lockFloatWindow = data.LockFloatWindow;
+        OnPropertyChanged(nameof(LockFloatWindow));
+
+        _edgeDockEnabled = data.EdgeDockEnabled;
+        OnPropertyChanged(nameof(EdgeDockEnabled));
+
+        _clickThroughEnabled = data.ClickThroughEnabled;
+        OnPropertyChanged(nameof(ClickThroughEnabled));
+
+        _showPlaybackControls = data.ShowPlaybackControls;
+        OnPropertyChanged(nameof(ShowPlaybackControls));
+
+        if (!double.IsNaN(data.FloatWindowLeft))
         {
-            var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<AudioflowData>(json);
-            if (data != null)
-            {
-                _floatWindowBlurEnabled = data.FloatWindowBlurEnabled;
-                OnPropertyChanged(nameof(FloatWindowBlurEnabled));
-
-                _lockFloatWindow = data.LockFloatWindow;
-                OnPropertyChanged(nameof(LockFloatWindow));
-
-                _edgeDockEnabled = data.EdgeDockEnabled;
-                OnPropertyChanged(nameof(EdgeDockEnabled));
-
-                _clickThroughEnabled = data.ClickThroughEnabled;
-                OnPropertyChanged(nameof(ClickThroughEnabled));
-
-                _showPlaybackControls = data.ShowPlaybackControls;
-                OnPropertyChanged(nameof(ShowPlaybackControls));
-
-                if (!double.IsNaN(data.FloatWindowLeft))
-                {
-                    _floatWindowLeft = data.FloatWindowLeft;
-                    OnPropertyChanged(nameof(FloatWindowLeft));
-                }
-
-                if (!double.IsNaN(data.FloatWindowTop))
-                {
-                    _floatWindowTop = data.FloatWindowTop;
-                    OnPropertyChanged(nameof(FloatWindowTop));
-                }
-            }
+            _floatWindowLeft = data.FloatWindowLeft;
+            OnPropertyChanged(nameof(FloatWindowLeft));
         }
-        catch { /* 文件损坏，忽略，保留默认值 */ }
+
+        if (!double.IsNaN(data.FloatWindowTop))
+        {
+            _floatWindowTop = data.FloatWindowTop;
+            OnPropertyChanged(nameof(FloatWindowTop));
+        }
     }
 
     public void Save()
@@ -193,9 +185,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             FloatWindowLeft = _floatWindowLeft,
             FloatWindowTop = _floatWindowTop
         };
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        try { File.WriteAllText(SettingsPath, json); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[AudioflowSettings] 保存失败: {ex.Message}"); }
+        JsonSettingsFile.Save(SettingsPath, data);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

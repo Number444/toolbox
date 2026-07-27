@@ -12,14 +12,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class ScreensaverTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具一致的配色常量
-    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-    private static readonly Color Warning = Color.FromRgb(0xE0, 0xA0, 0x30);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     public string Name => "系统屏保";
     public string Description => "选择并启动 Windows 内置屏保，仅保留稳定的屏保方案。";
     public string Category => Toolbox.Models.ToolCategory.System;
@@ -43,7 +36,7 @@ public class ScreensaverTool : ITool
         {
             Text = "选择系统屏保并启动。部分屏保名称可能因系统版本而异。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
@@ -106,12 +99,12 @@ public class ScreensaverTool : ITool
                             CreateNoWindow = true
                         });
                         resultBlock.Text = "✅ 空白屏保已启动";
-                        resultBlock.Foreground = new SolidColorBrush(Success);
+                        resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
                     }
                     else
                     {
                         resultBlock.Text = "⚠️ 未找到空白屏保文件";
-                        resultBlock.Foreground = new SolidColorBrush(Warning);
+                        resultBlock.Foreground = new SolidColorBrush(ThemeColors.Warning);
                     }
                     return;
                 }
@@ -132,7 +125,7 @@ public class ScreensaverTool : ITool
                     });
 
                     resultBlock.Text = $"✅ {scrName}.scr 已启动";
-                    resultBlock.Foreground = new SolidColorBrush(Success);
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
                 }
                 else
                 {
@@ -145,13 +138,13 @@ public class ScreensaverTool : ITool
                     });
 
                     resultBlock.Text = $"⚠️ 未找到 {scrName}.scr，已打开屏保设置";
-                    resultBlock.Foreground = new SolidColorBrush(Warning);
+                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Warning);
                 }
             }
             catch (Exception ex)
             {
                 resultBlock.Text = $"❌ 启动失败：{ex.Message}";
-                resultBlock.Foreground = new SolidColorBrush(Danger);
+                resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };
 
@@ -162,7 +155,7 @@ public class ScreensaverTool : ITool
             Text = "选择屏保",
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(0, 0, 0, 10)
         });
         inner.Children.Add(combo);
@@ -170,7 +163,7 @@ public class ScreensaverTool : ITool
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

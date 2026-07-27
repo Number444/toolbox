@@ -11,12 +11,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class RestartExplorerTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具一致的配色常量
-    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-    private static readonly Color Warning = Color.FromRgb(0xE0, 0xA0, 0x30);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     public string Name => "重启资源管理器";
     public string Description => "当任务栏或桌面卡死时，一键结束并重启 explorer.exe 进程。";
     public string Category => Toolbox.Models.ToolCategory.System;
@@ -40,7 +35,7 @@ public class RestartExplorerTool : ITool
         {
             Text = "⚠️ 此操作会关闭所有文件资源管理器窗口，请先保存工作。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Warning),
+            Foreground = new SolidColorBrush(ThemeColors.Warning),
             Margin = new Thickness(0, 0, 0, 12)
         };
 
@@ -80,12 +75,12 @@ public class RestartExplorerTool : ITool
                 });
 
                 resultBlock.Text = "✅ 资源管理器已重启";
-                resultBlock.Foreground = new SolidColorBrush(Success);
+                resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
             }
             catch (Exception ex)
             {
                 resultBlock.Text = $"❌ 操作失败：{ex.Message}";
-                resultBlock.Foreground = new SolidColorBrush(Danger);
+                resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };
 
@@ -96,7 +91,7 @@ public class RestartExplorerTool : ITool
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgDark),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

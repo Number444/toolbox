@@ -129,7 +129,9 @@ public sealed class SystemTrayHelper : IDisposable
             uID = 1
         };
 
-        Shell_NotifyIconW(NIM_DELETE, ref data);
+        if (!Shell_NotifyIconW(NIM_DELETE, ref data))
+            System.Diagnostics.Debug.WriteLine("[SystemTrayHelper] 托盘图标删除失败（NIM_DELETE）");
+        // 即使删除失败也不再重试（_added 语义保持不变）
         _added = false;
 
         if (_hIcon != IntPtr.Zero)

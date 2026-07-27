@@ -17,6 +17,9 @@ public partial class App : System.Windows.Application
     private static Mutex? _singleInstanceMutex;
     private const string MutexName = "ToolboxSingleInstanceMutex";
 
+    /// <summary>窗口标题（弹窗标题、托盘提示、单实例窗口查找共用）</summary>
+    public const string WindowTitle = "Toolbox";
+
     private static readonly string CrashLogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Toolbox", "crash.log");
@@ -82,19 +85,34 @@ public partial class App : System.Windows.Application
 
         Debug.WriteLine(msg);
 
-        // 弹窗让用户看到崩溃原因
-        System.Windows.MessageBox.Show(
-            $"{source}\n\n{ex?.Message}\n\n{ex?.StackTrace}",
-            "Toolbox 异常捕获",
-            System.Windows.MessageBoxButton.OK,
-            System.Windows.MessageBoxImage.Warning);
+        // 弹窗让用户看到崩溃原因（弹窗本身失败不影响日志已写入的事实）
+        try
+        {
+            System.Windows.MessageBox.Show(
+                $"{source}\n\n{ex?.Message}\n\n{ex?.StackTrace}",
+                $"{WindowTitle} 异常捕获",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+        }
+        catch (Exception msgEx)
+        {
+            Debug.WriteLine($"[App] 崩溃弹窗显示失败: {msgEx.Message}");
+        }
     }
 
     protected override void OnExit(System.Windows.ExitEventArgs e)
     {
-        Helpers.SystemTrayHelper.Instance.Dispose();
-        _singleInstanceMutex?.ReleaseMutex();
-        _singleInstanceMutex?.Dispose();
+        // 退出清理失败（托盘已销毁/互斥锁已释放）不应阻止应用退出
+        try
+        {
+            Helpers.SystemTrayHelper.Instance.Dispose();
+            _singleInstanceMutex?.ReleaseMutex();
+            _singleInstanceMutex?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] 退出清理失败: {ex.Message}");
+        }
         base.OnExit(e);
     }
 
@@ -103,7 +121,7 @@ public partial class App : System.Windows.Application
         try
         {
             // 通过窗口标题查找已有实例
-            var hwnd = Helpers.Win32Helper.FindWindowByTitle("Toolbox");
+            var hwnd = Helpers.Win32Helper.FindWindowByTitle(WindowTitle);
             if (hwnd != IntPtr.Zero)
             {
                 // 如果最小化则还原

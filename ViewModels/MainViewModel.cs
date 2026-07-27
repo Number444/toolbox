@@ -85,7 +85,15 @@ public class MainViewModel : INotifyPropertyChanged
 
     public MainViewModel()
     {
-        _registry.DiscoverTools();
+        // 工具发现兜底：插件程序集加载/扫描异常不应导致应用无法启动
+        try
+        {
+            _registry.DiscoverTools();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainViewModel] 工具发现失败: {ex.Message}");
+        }
         BuildGroups();
         ApplyFilter();
 

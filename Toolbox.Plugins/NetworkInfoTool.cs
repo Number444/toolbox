@@ -15,13 +15,7 @@ namespace Toolbox.Tools;
 /// </summary>
 public class NetworkInfoTool : ITool
 {
-    // 与全局主题（App.xaml）及其它工具一致的配色常量
-    private static readonly Color BgCard = Color.FromRgb(0x2D, 0x2D, 0x2D);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x63, 0xD4, 0x7E);
-    private static readonly Color Danger = Color.FromRgb(0xF0, 0x70, 0x70);
-
+    // 配色统一使用 Toolbox.Models.ThemeColors
     // 公网 IP 查询源（主 + 备用）：api.ipify.org / ifconfig.me 在国内不可达，
     // 改用国内可达源：首选 4.ipw.cn（纯文本返回 IPv4），
     // 备用 myip.ipip.net（返回"当前 IP:x.x.x.x 来自于:…"，用正则提取 IPv4）
@@ -56,7 +50,7 @@ public class NetworkInfoTool : ITool
         {
             Text = "展示本机主机名、启用中的网卡信息和公网 IP，每项均可单独复制。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
         };
 
@@ -106,7 +100,7 @@ public class NetworkInfoTool : ITool
             Text = "正在获取公网 IP…",
             FontFamily = new FontFamily("Consolas"),
             FontSize = 14,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             VerticalAlignment = VerticalAlignment.Center
         };
         _publicIpCopyButton = new Button
@@ -192,7 +186,7 @@ public class NetworkInfoTool : ITool
         {
             Text = label,
             FontSize = 13,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(labelText, 0);
@@ -202,7 +196,7 @@ public class NetworkInfoTool : ITool
             Text = value,
             FontFamily = new FontFamily("Consolas"),
             FontSize = 13,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap
         };
@@ -242,7 +236,7 @@ public class NetworkInfoTool : ITool
 
                 _publicIp = match.Value;
                 _publicIpText!.Text = match.Value;
-                _publicIpText.Foreground = new SolidColorBrush(Success);
+                _publicIpText.Foreground = new SolidColorBrush(ThemeColors.Success);
                 _publicIpCopyButton!.IsEnabled = true;
                 return;
             }
@@ -251,7 +245,7 @@ public class NetworkInfoTool : ITool
 
         // 所有源都失败：仅提示失败，不影响本机信息展示
         _publicIpText!.Text = "获取失败（请检查网络连接）";
-        _publicIpText.Foreground = new SolidColorBrush(Danger);
+        _publicIpText.Foreground = new SolidColorBrush(ThemeColors.Danger);
         _publicIpCopyButton!.IsEnabled = false;
     }
 
@@ -268,11 +262,11 @@ public class NetworkInfoTool : ITool
         try
         {
             Clipboard.SetText(text);
-            feedback.Foreground = new SolidColorBrush(Success);
+            feedback.Foreground = new SolidColorBrush(ThemeColors.Success);
         }
         catch
         {
-            feedback.Foreground = new SolidColorBrush(Danger);
+            feedback.Foreground = new SolidColorBrush(ThemeColors.Danger);
         }
     }
 
@@ -286,14 +280,14 @@ public class NetworkInfoTool : ITool
             Text = title,
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(TextPrimary),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10)
         });
 
         var card = new Border
         {
-            Background = new SolidColorBrush(BgCard),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12),
             Child = inner

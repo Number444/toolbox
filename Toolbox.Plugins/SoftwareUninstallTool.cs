@@ -29,13 +29,8 @@ public class SoftwareUninstallTool : ITool
     private readonly HashSet<string> _pendingUninstall = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _pollCts;
 
-    private static readonly Color BgDark = Color.FromRgb(0x2D, 0x2D, 0x2D);
     private static readonly Color BgHover = Color.FromRgb(0x3A, 0x3A, 0x3A);
     private static readonly Color Accent = Color.FromRgb(0x76, 0xB5, 0x80);
-    private static readonly Color TextPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-    private static readonly Color TextSecondary = Color.FromRgb(0x80, 0x80, 0x80);
-    private static readonly Color Success = Color.FromRgb(0x20, 0xA0, 0x20);
-    private static readonly Color Danger = Color.FromRgb(0xC0, 0x40, 0x40);
 
     public string Name => "软件卸载管理器";
     public string Description => "查看已安装的软件列表，双击条目即可卸载。需要管理员权限。";
@@ -51,7 +46,7 @@ public class SoftwareUninstallTool : ITool
         {
             Text = "电脑上所有已安装的软件，双击即可调用其自带的卸载程序。",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 15, 0, 12)
         };
         root.Children.Add(desc);
@@ -69,7 +64,7 @@ public class SoftwareUninstallTool : ITool
         _placeholderText = new TextBlock
         {
             Text = "搜索软件",
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
@@ -113,7 +108,7 @@ public class SoftwareUninstallTool : ITool
             Text = "",
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(Danger),
+            Foreground = new SolidColorBrush(ThemeColors.Danger),
             Margin = new Thickness(0, 11, 0, 0),
             Visibility = Visibility.Collapsed
         };
@@ -125,7 +120,7 @@ public class SoftwareUninstallTool : ITool
         {
             Text = "正在扫描已安装软件...",
             FontSize = 14,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 8)
         };
         root.Children.Add(loadingBlock);
@@ -138,7 +133,7 @@ public class SoftwareUninstallTool : ITool
         _statusBlock = new TextBlock
         {
             FontSize = 12,
-            Foreground = new SolidColorBrush(TextSecondary),
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 19)
         };
         root.Children.Add(_statusBlock);
@@ -174,8 +169,8 @@ public class SoftwareUninstallTool : ITool
         {
             Margin = new Thickness(0, 11, 0, 8),
             FontSize = 13,
-            Background = new SolidColorBrush(BgDark),
-            Foreground = new SolidColorBrush(TextPrimary),
+            Background = new SolidColorBrush(ThemeColors.BgDark),
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             BorderBrush = new SolidColorBrush(Color.FromRgb(0x3F, 0x3F, 0x3F)),
             BorderThickness = new Thickness(1),
         };
@@ -214,8 +209,8 @@ public class SoftwareUninstallTool : ITool
 
         // ListViewItem 样式：自定义 ControlTemplate + 覆盖默认白色边框和焦点框
         var itemStyle = new Style(typeof(ListViewItem));
-        itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgDark)));
-        itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(TextPrimary)));
+        itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(ThemeColors.BgDark)));
+        itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(ThemeColors.TextPrimary)));
         itemStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A))));
         itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0, 0, 0, 1)));
         itemStyle.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty, null));
@@ -269,8 +264,8 @@ public class SoftwareUninstallTool : ITool
 
         // 列头样式
         var headerStyle = new Style(typeof(GridViewColumnHeader));
-        headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(BgDark)));
-        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(TextPrimary)));
+        headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(ThemeColors.BgDark)));
+        headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(ThemeColors.TextPrimary)));
         headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, 13.0));
         headerStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(0x3F, 0x3F, 0x3F))));
         headerStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0, 0, 0, 1)));
@@ -467,7 +462,7 @@ public class SoftwareUninstallTool : ITool
 
         _errorBlock!.Text = "";
         _errorBlock.Visibility = Visibility.Collapsed;
-        _errorBlock.Foreground = new SolidColorBrush(Danger);
+        _errorBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
 
         try
         {
@@ -533,13 +528,13 @@ public class SoftwareUninstallTool : ITool
                 _errorBlock!.Visibility = Visibility.Visible;
                 _errorBlock!.Text = $"⚠️ 启动卸载失败：{launchError}";
             }
-            _errorBlock.Foreground = new SolidColorBrush(Danger);
+            _errorBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             return;
         }
 
         _errorBlock!.Visibility = Visibility.Visible;
         _errorBlock!.Text = $"✅ 已启动卸载程序：{software.DisplayName}，正在等待卸载完成...";
-        _errorBlock.Foreground = new SolidColorBrush(Success);
+        _errorBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
 
         _pollCts?.Cancel();
         _pollCts = new CancellationTokenSource();
@@ -572,7 +567,7 @@ public class SoftwareUninstallTool : ITool
                     _pendingUninstall.Remove(software.DisplayName);
                     _errorBlock!.Visibility = Visibility.Visible;
                     _errorBlock!.Text = $"✅ 卸载成功：{software.DisplayName}";
-                    _errorBlock.Foreground = new SolidColorBrush(Success);
+                    _errorBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
                     UpdateStatus();
                 });
                 return;

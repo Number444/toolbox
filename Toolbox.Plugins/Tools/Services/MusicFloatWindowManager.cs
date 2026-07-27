@@ -78,7 +78,21 @@ public class MusicFloatWindowManager
         // 始终创建新窗口（确保正确的窗口类型）
         var newWindow = CreateWindow();
         PrePositionWindow(newWindow);
-        newWindow.Show();
+        try
+        {
+            newWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 悬浮窗显示失败: {ex.Message}");
+            // 回滚：CreateWindow 已把 DockService 挂到新窗口，重新挂回旧窗口（无旧窗口则断开）
+            if (_activeWindow != null)
+                _dockService.Attach(_activeWindow, GetContentControl(_activeWindow),
+                    GetTriggerBar(_activeWindow), OnDragMoveCompleted);
+            else
+                _dockService.Detach();
+            return;
+        }
 
         // 注入缓存的歌曲信息
         if (_cachedInfo.Title != null || _cachedInfo.Artist != null)
@@ -147,7 +161,19 @@ public class MusicFloatWindowManager
         SetLocked(newWindow, savedLocked);
 
         // 先显示新窗口再关闭旧窗口，避免闪烁
-        newWindow.Show();
+        try
+        {
+            newWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 切换毛玻璃窗口显示失败: {ex.Message}");
+            // 回滚：旧窗口保持完整功能（恢复位置保存订阅与贴边挂载，Attach 内部自带 Detach）
+            _activeWindow.LocationChanged += OnWindowMoved;
+            _dockService.Attach(_activeWindow, GetContentControl(_activeWindow),
+                GetTriggerBar(_activeWindow), OnDragMoveCompleted);
+            return;
+        }
         InjectSongInfo(newWindow);
 
         // 右侧锚定右边缘，宽度可能因 size mode 不同而变
@@ -184,7 +210,19 @@ public class MusicFloatWindowManager
         SetLocked(newWindow, savedLocked);
 
         // 先显示新窗口再关闭旧窗口，避免闪烁
-        newWindow.Show();
+        try
+        {
+            newWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 切换大小模式窗口显示失败: {ex.Message}");
+            // 回滚：旧窗口保持完整功能（恢复位置保存订阅与贴边挂载，Attach 内部自带 Detach）
+            _activeWindow.LocationChanged += OnWindowMoved;
+            _dockService.Attach(_activeWindow, GetContentControl(_activeWindow),
+                GetTriggerBar(_activeWindow), OnDragMoveCompleted);
+            return;
+        }
         InjectSongInfo(newWindow);
 
         // 右侧锚定右边缘，宽窄模式切换时宽度会变（242↔190）

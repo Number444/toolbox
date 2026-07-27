@@ -56,7 +56,9 @@ public class EdgeGlowLayer : FrameworkElement
         public required FrameworkElement Owner;   // 控件本身（可见性判断）
         public required FrameworkElement Edge;    // 模板边缘元素（坐标 + 圆角来源）
         public CornerRadius Radius;
-        public ScrollViewer? Viewport;            // 最近滚动容器（裁剪用）
+        public List<ScrollViewer>? Viewports;     // 所有祖先滚动容器（逐层求交裁剪）
+        public RadialGradientBrush? Brush;        // 预分配笔刷（每帧只改属性值，避免 GC 压力）
+        public Pen? Pen;                          // 预分配画笔
     }
 
     private readonly List<GlowTarget> _targets = new();
@@ -143,7 +145,7 @@ public class EdgeGlowLayer : FrameworkElement
             Owner = fe,
             Edge = edgeSource,
             Radius = radius,
-            Viewport = FindAncestor<ScrollViewer>(fe)
+            Viewports = FindAncestors<ScrollViewer>(fe)
         });
     }
 
@@ -177,6 +179,18 @@ public class EdgeGlowLayer : FrameworkElement
         return null;
     }
 
+    /// <summary>沿视觉树向上收集所有 T 类型祖先（嵌套滚动容器需逐层裁剪，无匹配返回 null）</summary>
+    private static List<T>? FindAncestors<T>(DependencyObject node) where T : class
+    {
+        List<T>? results = null;
+        while (node is Visual or System.Windows.Media.Media3D.Visual3D)
+        {
+            node = VisualTreeHelper.GetParent(node);
+            if (node is T match) (results ??= []).Add(match);
+        }
+        return results;
+    }
+
     /// <summary>实时计算目标在本层坐标系中的【完整】矩形与可见裁剪区域（滚动视口 ∩ 层边界）。
     /// full 用于描边（真实控件边缘），clip 用于裁剪绘制——滚出视口的部分被裁掉，
     /// 但视口边缘绝不会被误当成控件边缘描出假边。控件不可见/脱离视觉树返回 null</summary>
@@ -195,17 +209,21 @@ public class EdgeGlowLayer : FrameworkElement
             return null; // 元素已脱离视觉树（切换/销毁过程中）
         }
 
-        // 可见裁剪区域：层边界 ∩ 最近祖先 ScrollViewer 的视口矩形
+        // 可见裁剪区域：层边界 ∩ 所有祖先 ScrollViewer 的视口矩形（嵌套视口逐层求交，
+        // 如 SoftwareUninstallTool 的 ListView 内嵌 ScrollViewer）
         var clip = layerBounds;
-        if (target.Viewport != null)
+        if (target.Viewports != null)
         {
-            try
+            foreach (var viewport in target.Viewports)
             {
-                var viewport = target.Viewport.TransformToVisual(this).TransformBounds(
-                    new Rect(target.Viewport.RenderSize));
-                clip.Intersect(viewport);
+                try
+                {
+                    var rect = viewport.TransformToVisual(this).TransformBounds(
+                        new Rect(viewport.RenderSize));
+                    clip.Intersect(rect);
+                }
+                catch (InvalidOperationException) { }
             }
-            catch (InvalidOperationException) { }
         }
 
         // 完整矩形与裁剪区域无交集：目标完全不可见
@@ -325,20 +343,18 @@ public class EdgeGlowLayer : FrameworkElement
             // 与小控件同样只覆盖鼠标光晕大小的一段，不会整圈被照亮。
             double litRadius = Math.Min(
                 Math.Max(bounds.Width, bounds.Height) * LitRadiusFactor + 24, MaxLitRadius);
-            var brush = new RadialGradientBrush
-            {
-                MappingMode = BrushMappingMode.Absolute,
-                Center = _cursorPos,
-                GradientOrigin = _cursorPos,
-                RadiusX = litRadius,
-                RadiusY = litRadius
-            };
+            // 笔刷/画笔按目标预分配，每帧只改属性值（避免 60fps × N 目标反复 new 造成 GC 压力）
+            var brush = target.Brush ??= CreateGlowBrush();
+            brush.Center = _cursorPos;
+            brush.GradientOrigin = _cursorPos;
+            brush.RadiusX = litRadius;
+            brush.RadiusY = litRadius;
             for (int i = 0; i < GradientStopCount; i++)
             {
                 double offset = (double)i / (GradientStopCount - 1);
                 byte a = (byte)Math.Min(255,
                     alpha * Math.Pow(1 - offset, GradientFalloffExponent) * GradientBoost * 255);
-                brush.GradientStops.Add(new GradientStop(Color.FromArgb(a, 255, 255, 255), offset));
+                brush.GradientStops[i].Color = Color.FromArgb(a, 255, 255, 255);
             }
             // 单条 2px 硬切高光线，圆角逐像素贴合控件模板边缘，无柔光无羽化；
             // 逐角取半径构造几何（支持上直下圆等异径圆角，如标题栏按钮）。
@@ -346,8 +362,7 @@ public class EdgeGlowLayer : FrameworkElement
             // 视口边界处不会出现假描边（长卡片底部被遮挡区域误照亮的修复）。
             // 对"滚出视口"的那一侧再叠加渐隐遮罩：侧边在没入视口边界前逐渐变暗，
             // 不会以全亮度硬切在遮挡边界上（被遮挡部分侧边透出的修复）
-            var pen = new Pen(brush, StrokeThickness);
-            pen.Freeze();
+            var pen = target.Pen ??= new Pen(brush, StrokeThickness);
             var geometry = BuildRoundedRectGeometry(bounds, target.Radius);
             geometry.Freeze();
             dc.PushClip(new RectangleGeometry(clip));
@@ -357,6 +372,19 @@ public class EdgeGlowLayer : FrameworkElement
             if (mask != null) dc.Pop();
             dc.Pop();
         }
+    }
+
+    /// <summary>按目标预分配径向渐变笔刷：结构（绝对映射 + 固定色标数量/位置）创建一次，
+    /// 之后每帧仅修改 Center/Radius 与各色标透明度</summary>
+    private static RadialGradientBrush CreateGlowBrush()
+    {
+        var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute };
+        for (int i = 0; i < GradientStopCount; i++)
+        {
+            double offset = (double)i / (GradientStopCount - 1);
+            brush.GradientStops.Add(new GradientStop(Colors.Transparent, offset));
+        }
+        return brush;
     }
 
     /// <summary>视口边缘渐隐区高度（px）：发光在没入视口边界前这段距离内线性淡出</summary>

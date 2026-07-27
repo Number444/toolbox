@@ -27,52 +27,61 @@ public partial class MainWindow : Window
         // 窗口加载后，通过 P/Invoke 启用 Win11 圆角和 Mica 材质
         Loaded += (_, _) =>
         {
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
-            EnableAcrylicBackdrop(hwnd);                    // 2. Acrylic 毛玻璃（替代 Mica）
-            Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
-            Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
-
-            // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
-            var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
-            source?.AddHook(Win32Helper.WndProc);
-
-            // 7. 强制 WPF DirectX 交换链背景透明，彻底消除白色底漆
-            if (source?.CompositionTarget is System.Windows.Interop.HwndTarget hwndTarget)
+            // 整段 DWM/Win32 调用链外包 try-catch：任一步失败（DWM 未运行、
+            // 远程桌面、低版本 Windows）不崩应用，静默继续
+            try
             {
-                hwndTarget.BackgroundColor = Colors.Transparent;
-            }
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
+                EnableAcrylicBackdrop();                        // 2. Acrylic 毛玻璃（替代 Mica）
+                Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
+                Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
 
-            // 更新四角落遮盖（等窗口实际尺寸确定后）
-            Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
-                System.Windows.Threading.DispatcherPriority.Loaded);
+                // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
+                var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
+                source?.AddHook(Win32Helper.WndProc);
 
-            // 初始化分组高度（展开的为 Auto，折叠的为 0）
-            Dispatcher.BeginInvoke(new Action(InitGroupHeights),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 初始化导航高亮位置（等布局完成后）
-            Dispatcher.BeginInvoke(new Action(InitHighlight),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 设置页返回事件
-            SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
-
-            // 启动时自动打开悬浮窗
-            if (AppSettings.Instance.AutoOpenFloatWindow)
-            {
-                var savedMode = AppSettings.Instance.MusicFloatSizeMode;
-                var mode = savedMode == "Compact"
-                    ? Toolbox.Controls.FloatSizeMode.Compact
-                    : Toolbox.Controls.FloatSizeMode.Large;
-                Dispatcher.BeginInvoke(new Action(() =>
+                // 7. 强制 WPF DirectX 交换链背景透明，彻底消除白色底漆
+                if (source?.CompositionTarget is System.Windows.Interop.HwndTarget hwndTarget)
                 {
-                    // 加载悬浮窗独立配置
-                    AudioflowSettings.Instance.Load();
-                    var mgr = Toolbox.Tools.Views.MusicFloatWindowManager.Instance;
-                    mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
-                    mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
-                }), System.Windows.Threading.DispatcherPriority.Background);
+                    hwndTarget.BackgroundColor = Colors.Transparent;
+                }
+
+                // 更新四角落遮盖（等窗口实际尺寸确定后）
+                Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+
+                // 初始化分组高度（展开的为 Auto，折叠的为 0）
+                Dispatcher.BeginInvoke(new Action(InitGroupHeights),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+
+                // 初始化导航高亮位置（等布局完成后）
+                Dispatcher.BeginInvoke(new Action(InitHighlight),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+
+                // 设置页返回事件
+                SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
+
+                // 启动时自动打开悬浮窗
+                if (AppSettings.Instance.AutoOpenFloatWindow)
+                {
+                    var savedMode = AppSettings.Instance.MusicFloatSizeMode;
+                    var mode = savedMode == "Compact"
+                        ? Toolbox.Controls.FloatSizeMode.Compact
+                        : Toolbox.Controls.FloatSizeMode.Large;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        // 加载悬浮窗独立配置
+                        AudioflowSettings.Instance.Load();
+                        var mgr = Toolbox.Tools.Views.MusicFloatWindowManager.Instance;
+                        mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
+                        mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] 窗口初始化失败: {ex.Message}");
             }
         };
 
@@ -81,6 +90,10 @@ public partial class MainWindow : Window
 
         // 鼠标跟随呼吸光晕
         InitHalo();
+
+        // 搜索过滤会重建导航列表（VisibleGroups 变更），缓存的 工具→Border 映射随之失效
+        if (DataContext is ViewModels.MainViewModel navVm)
+            navVm.VisibleGroups.CollectionChanged += (_, _) => _toolBorders.Clear();
     }
 
     /// <summary>更新四角遮盖形状（全矩形 减 内圆角矩形 = 四个角落区域）</summary>
@@ -138,8 +151,18 @@ public partial class MainWindow : Window
     private void PositionHighlight(FrameworkElement itemElement)
     {
         // 计算 item 相对于 NavContainer 的位置
-        var transform = itemElement.TransformToAncestor(NavContainer);
-        var position = transform.Transform(new Point(0, 0));
+        Point position;
+        try
+        {
+            var transform = itemElement.TransformToAncestor(NavContainer);
+            position = transform.Transform(new Point(0, 0));
+        }
+        catch (Exception ex)
+        {
+            // 元素尚未连接/已脱离视觉树时静默放弃本次定位
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] 高亮定位失败: {ex.Message}");
+            return;
+        }
         double top = position.Y; // 精确对齐，无需补偿
 
         var targetMargin = new Thickness(10, top, 12, 0);
@@ -339,15 +362,23 @@ public partial class MainWindow : Window
         NavScrollViewer.RaiseEvent(args);
     }
 
-    /// <summary>通过 ITool 引用在视觉树中查找对应的 Border 元素</summary>
+    /// <summary>工具→导航 Border 缓存（O(1) 查找；VisibleGroups 变更时清空重建）</summary>
+    private readonly Dictionary<Models.ITool, Border> _toolBorders = new();
+
+    /// <summary>通过 ITool 引用查找对应的导航 Border 元素（缓存优先，未命中全量扫描重建）</summary>
     private Border? FindToolBorderByTool(Models.ITool tool)
     {
+        if (_toolBorders.TryGetValue(tool, out var cached) && cached.DataContext == tool)
+            return cached;
+
+        // 缓存未命中：全量扫描视觉树重建映射
+        _toolBorders.Clear();
         foreach (var border in FindVisualChildren<Border>(NavContainer))
         {
-            if (border.DataContext == tool)
-                return border;
+            if (border.DataContext is Models.ITool t)
+                _toolBorders[t] = border;
         }
-        return null;
+        return _toolBorders.TryGetValue(tool, out var found) ? found : null;
     }
 
     /// <summary>在所有 VisibleGroups 中找第一个可见的工具</summary>
@@ -467,7 +498,7 @@ public partial class MainWindow : Window
             Hide();
             ShowInTaskbar = false;
             SystemTrayHelper.Instance.Show(
-                tooltip: "Toolbox - \u70B9\u51FB\u6062\u590D",
+                tooltip: $"{App.WindowTitle} - \u70B9\u51FB\u6062\u590D",
                 onDoubleClick: () =>
                 {
                     Dispatcher.Invoke(() =>
@@ -632,42 +663,18 @@ public partial class MainWindow : Window
     }
 
     // ═══════════════════════════════════════════════════════════
-    // DWM Acrylic 毛玻璃效果
+    // DWM Acrylic 毛玻璃效果（复用 Toolbox.Plugins 的 DwmHelper 封装）
     // ═══════════════════════════════════════════════════════════
 
-    private static void EnableAcrylicBackdrop(IntPtr hwnd)
+    /// <summary>启用 Acrylic 毛玻璃背景（保持原版本门槛：Win11 Build≥22000 优先尝试官方背景效果）</summary>
+    private void EnableAcrylicBackdrop()
     {
-        if (Environment.OSVersion.Version.Build >= 22000)
-        {
-            // Win11 22H2+: DWMWA_SYSTEMBACKDROP_TYPE = 38, Acrylic = 3
-            int backdrop = 3;
-            DwmSetWindowAttribute(hwnd, 38, ref backdrop, Marshal.SizeOf<int>());
-        }
-        else
-        {
-            // Win10: ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
-            var accent = new ACCENT_POLICY
-            {
-                AccentState = 4,
-                AccentFlags = 2,
-                GradientColor = 0x661A1A1A
-            };
-            DwmSetWindowAttribute(hwnd, 19, ref accent, Marshal.SizeOf<ACCENT_POLICY>());
-        }
-    }
+        // Win11 (Build 22000+)：尝试官方 DWMWA_SYSTEMBACKDROP_TYPE（需 22H2+，失败自动回落）
+        if (Environment.OSVersion.Version.Build >= 22000
+            && Toolbox.Tools.Helpers.DwmHelper.SetBackdrop(this, Toolbox.Tools.Helpers.BackdropType.Acrylic))
+            return;
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref ACCENT_POLICY value, int size);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ACCENT_POLICY
-    {
-        public int AccentState;
-        public int AccentFlags;
-        public uint GradientColor;
-        public int AnimationId;
+        // Win10 / 低版本 Win11 / SetBackdrop 失败：回落 SetWindowCompositionAttribute 方案
+        Toolbox.Tools.Helpers.DwmHelper.EnableAcrylicBlur(this, 0x661A1A1A);
     }
 }
