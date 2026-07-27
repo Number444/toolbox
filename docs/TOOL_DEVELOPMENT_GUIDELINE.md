@@ -154,6 +154,8 @@ var wa = MonitorHelper.GetMonitorWorkAreaDips(window);
 
 ### 3.9 Win32 / DWM 基础调用 —— `Win32Helper`
 
+> ⚠️ **主程序专用**：`Win32Helper` 位于主程序（Toolbox.csproj），而 `Toolbox.Plugins` 仅引用 `Toolbox.Core`，工具**无法访问**此类。工具需要 DWM 效果请用 `DwmHelper`（3.6）。
+
 ```csharp
 using Toolbox.Helpers;   // Toolbox 主项目命名空间
 
@@ -165,16 +167,19 @@ Win32Helper.ExtendFrameIntoClientArea(hwnd);
 
 ### 3.10 自定义滚动条 —— `CustomScrollBar`
 
+> ⚠️ **主程序专用**：位于主程序（Toolbox.csproj），工具插件无法引用（会形成循环依赖）。工具页面滚动由主窗口 `ContentScrollViewer` 统一接管，无需工具关心。
+
 ```xml
-<!-- XAML 引用 -->
+<!-- XAML 引用（仅主程序内可用） -->
 <helpers:CustomScrollBar TargetScrollViewer="{Binding ElementName=MyScrollViewer}"/>
 ```
 
 ### 3.11 淡入过渡 —— `TransitioningContentControl`
 
-主窗口内容区已集成，一般不需要在工具内部使用。如需手动使用：
+> ⚠️ **主程序专用**：同上，工具插件无法引用。工具只需从 `CreateContent()` 返回 `UIElement`，主窗口自动套用 200ms 淡入。
 
 ```xml
+<!-- XAML 引用（仅主程序内可用） -->
 <helpers:TransitioningContentControl Content="{Binding MyContent}"/>
 ```
 
