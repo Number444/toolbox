@@ -15,7 +15,8 @@ public sealed class ConfirmDialog : Window
     /// <summary>用户是否点了确认按钮（取消 / 关闭 / Esc 均为 false）</summary>
     public bool Confirmed { get; private set; }
 
-    public ConfirmDialog(string message, string title, string confirmText = "确定")
+    public ConfirmDialog(string message, string title,
+        string confirmText = "确定", string cancelText = "取消")
     {
         Title = title;
         Width = 400;
@@ -72,7 +73,7 @@ public sealed class ConfirmDialog : Window
 
         var cancelBtn = new Button
         {
-            Content = "取消",
+            Content = cancelText,
             Width = 80,
             Height = 32,
             FontSize = 13,

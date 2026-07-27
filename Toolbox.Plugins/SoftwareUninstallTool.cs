@@ -501,14 +501,14 @@ public class SoftwareUninstallTool : ITool
     {
         if (_softwareList!.SelectedItem is not InstalledSoftware software) return;
 
-        var result = MessageBox.Show(
+        var dialog = new ConfirmDialog(
             $"确定要卸载「{software.DisplayName}」吗？\n\n"
             + "将调用其自带的卸载程序，可能需要管理员权限。",
             "确认卸载",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes) return;
+            confirmText: "是",
+            cancelText: "否");
+        dialog.ShowDialog();
+        if (!dialog.Confirmed) return;
 
         _pendingUninstall.Add(software.DisplayName);
 

@@ -85,7 +85,8 @@ public partial class App : System.Windows.Application
 
         Debug.WriteLine(msg);
 
-        // 弹窗让用户看到崩溃原因（弹窗本身失败不影响日志已写入的事实）
+        // 用原生 MessageBox（非主题弹窗）：崩溃时 WPF 可能处于不稳定状态，
+        // 创建 WPF Window 可能二次崩溃，原生 Win32 弹窗最安全
         try
         {
             System.Windows.MessageBox.Show(
