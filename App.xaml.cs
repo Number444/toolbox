@@ -73,12 +73,18 @@ public partial class App : System.Windows.Application
         e.SetObserved(); // 阻止进程崩溃
     }
 
+    /// <summary>crash.log 大小上限，超过则滚动为 crash.1.log（只保留一份旧日志）</summary>
+    private const long CrashLogMaxBytes = 2 * 1024 * 1024;
+
     private static void LogCrash(string source, Exception? ex)
     {
         var msg = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}\n{ex}\n\n";
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(CrashLogPath)!);
+            // 追加前滚动：超过上限则把当前日志改名存档，从空文件重新记
+            if (File.Exists(CrashLogPath) && new FileInfo(CrashLogPath).Length > CrashLogMaxBytes)
+                File.Move(CrashLogPath, CrashLogPath + ".1", overwrite: true);
             File.AppendAllText(CrashLogPath, msg);
         }
         catch { }

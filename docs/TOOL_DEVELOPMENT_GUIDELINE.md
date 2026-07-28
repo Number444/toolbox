@@ -111,11 +111,14 @@ using Toolbox.Core.Services;
 // 读取
 var data = JsonSettingsFile.Load<MyData>("path/to/settings.json");
 
-// 保存
+// 保存（原子写入：先写 .tmp 再替换，旧文件自动留作 .bak 备份；
+// 主文件损坏时 Load 自动回落 .bak，不会因断电/强杀丢光数据）
 JsonSettingsFile.Save("path/to/settings.json", data);
 ```
 
 如需完整的 PropertyChanged + 自动存盘模式，参考 `AppSettings.cs` 或 `AudioflowSettings.cs` 的实现。
+
+> **注意**：`Load` 在主文件损坏时会静默回落 `.bak`，不要再自己实现备份逻辑，也不要在清理"旧文件"时误删 `.bak`。
 
 ### 3.6 DWM 窗口效果 —— `DwmHelper`
 
@@ -355,6 +358,11 @@ private static Style? FindResourceStyle(string key)
 
 **不标记的元素**：
 - 纯展示面、分隔线、装饰容器、ComboBox 内部模板的 Border
+
+> **回归警示**：`EdgeGlowLayer` 是全项目回归率最高的模块（遮挡透出/Hover 消失曾多次互修互发）。
+> 任何改动它或其调用方（hover 跟踪、ScrollViewer、裁剪）前，必读并按
+> `docs/EDGE_GLOW_REGRESSION_CHECKLIST.md` 逐项实测后方可交付。
+> 复选框等小控件享有更大的感应半径（`CheckBoxRangeScale`），属预期行为。
 
 ### 5.2 鼠标跟随光晕（Mouse Halo）
 

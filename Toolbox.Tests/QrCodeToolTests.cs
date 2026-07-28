@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -70,7 +71,7 @@ public class QrCodeToolTests
         Assert.True(result, "Status TextBlock should NOT be inside the horizontal button row");
     }
 
-    // RED: 这个测试将失败——当前图片在底部，按钮在上方，两者不在同一水平容器中
+    // 布局已调整为：图片与按钮在同一个水平容器中（嵌套在"结果"卡片内），该测试验证此结构
     [Fact]
     public void ImageBorder_IsInsideHorizontalContainer_WithButtons()
     {
@@ -80,10 +81,10 @@ public class QrCodeToolTests
             var ui = tool.CreateContent();
             var panel = Assert.IsType<StackPanel>(ui);
 
-            // 在根面板的子元素中查找一个水平容器，里面同时包含图片边框和按钮
-            foreach (var child in panel.Children)
+            // 递归查找一个水平容器，里面同时包含图片边框和按钮
+            foreach (var element in EnumerateTree(panel))
             {
-                if (child is StackPanel sp && sp.Orientation == Orientation.Horizontal)
+                if (element is StackPanel sp && sp.Orientation == Orientation.Horizontal)
                 {
                     bool hasImageBorder = false;
                     bool hasAnyButton = false;
@@ -119,56 +120,71 @@ public class QrCodeToolTests
     private static T RunOnStaThread<T>(Func<T> func)
     {
         T result = default!;
-        var thread = new Thread(() => { result = func(); });
+        Exception? error = null;
+        // 必须捕获并转发异常：否则断言失败会在工作线程上成为未处理异常，
+        // 直接崩溃整个测试主机进程（本测试类之前的崩溃就是这个原因）
+        var thread = new Thread(() =>
+        {
+            try { result = func(); }
+            catch (Exception ex) { error = ex; }
+        });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         thread.Join();
+        if (error != null)
+            ExceptionDispatchInfo.Capture(error).Throw();
         return result;
     }
 
-    private static bool FindButtonWithText(Panel panel, string text)
+    /// <summary>枚举元素的逻辑子元素：Panel 取 Children，Border 取 Child（UI 用 Border 卡片分组）</summary>
+    private static IEnumerable<UIElement> GetChildren(UIElement element)
     {
-        foreach (var child in panel.Children)
+        if (element is Panel p)
         {
-            if (child is Button btn && btn.Content?.ToString()?.Contains(text) == true)
+            foreach (UIElement child in p.Children)
+                yield return child;
+        }
+        else if (element is Border b && b.Child != null)
+        {
+            yield return b.Child;
+        }
+    }
+
+    /// <summary>递归枚举整棵子树（含自身），穿透 Panel 与 Border 卡片</summary>
+    private static IEnumerable<UIElement> EnumerateTree(UIElement root)
+    {
+        yield return root;
+        foreach (var child in GetChildren(root))
+        {
+            foreach (var descendant in EnumerateTree(child))
+                yield return descendant;
+        }
+    }
+
+    private static bool FindButtonWithText(UIElement root, string text)
+    {
+        foreach (var element in EnumerateTree(root))
+        {
+            if (element is Button btn && btn.Content?.ToString()?.Contains(text) == true)
                 return true;
-            if (child is Panel childPanel)
-            {
-                if (FindButtonWithText(childPanel, text))
-                    return true;
-            }
         }
         return false;
     }
 
-    private static StackPanel? FindHorizontalPanelContainingButton(Panel panel, string buttonContent)
+    private static StackPanel? FindHorizontalPanelContainingButton(UIElement root, string buttonContent)
     {
-        foreach (var child in panel.Children)
+        foreach (var element in EnumerateTree(root))
         {
-            if (child is StackPanel sp && sp.Orientation == Orientation.Horizontal)
+            if (element is StackPanel sp && sp.Orientation == Orientation.Horizontal)
             {
-                // 检查这个水平 StackPanel 是否包含指定按钮
+                // 检查这个水平 StackPanel 是否包含指定按钮（直接子级或嵌套在垂直面板中）
                 foreach (var inner in sp.Children)
                 {
                     if (inner is Button btn && btn.Content?.ToString()?.Contains(buttonContent) == true)
                         return sp;
-                    if (inner is StackPanel innerSp)
-                    {
-                        // 也可能按钮在嵌套的垂直面板中
-                        foreach (var c in innerSp.Children)
-                        {
-                            if (c is Button btn2 && btn2.Content?.ToString()?.Contains(buttonContent) == true)
-                                return sp;
-                        }
-                    }
+                    if (inner is Panel innerPanel && FindButtonWithText(innerPanel, buttonContent))
+                        return sp;
                 }
-            }
-            // 递归搜索子面板
-            if (child is Panel childPanel)
-            {
-                var found = FindHorizontalPanelContainingButton(childPanel, buttonContent);
-                if (found != null)
-                    return found;
             }
         }
         return null;

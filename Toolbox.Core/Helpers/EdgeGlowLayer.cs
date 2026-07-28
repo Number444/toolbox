@@ -41,6 +41,11 @@ public class EdgeGlowLayer : FrameworkElement
     /// 大卡片/大输入框的被照亮弧段不会超过这个范围，亮边大小与小控件一致</summary>
     private const double MaxLitRadius = 100;
 
+    /// <summary>复选框感应范围倍率：同时放大亮度包络半径（GlowRadius×倍率）与亮弧半径。
+    /// 复选框本体太小（亮弧仅 ~36px），鼠标要进入亮弧内边框才可见发光；
+    /// ×2.7 后亮弧 ≈100px，触发距离与按钮等大控件持平</summary>
+    private const double CheckBoxRangeScale = 2.7;
+
     /// <summary>径向渐变色标数量（线性衰减，分段越多越细腻）</summary>
     private const int GradientStopCount = 10;
 
@@ -56,6 +61,7 @@ public class EdgeGlowLayer : FrameworkElement
         public required FrameworkElement Owner;   // 控件本身（可见性判断）
         public required FrameworkElement Edge;    // 模板边缘元素（坐标 + 圆角来源）
         public CornerRadius Radius;
+        public double RangeScale;                 // 感应半径倍率（复选框等小控件 >1）
         public List<ScrollViewer>? Viewports;     // 所有祖先滚动容器（逐层求交裁剪）
         public RadialGradientBrush? Brush;        // 预分配笔刷（每帧只改属性值，避免 GC 压力）
         public Pen? Pen;                          // 预分配画笔
@@ -145,6 +151,7 @@ public class EdgeGlowLayer : FrameworkElement
             Owner = fe,
             Edge = edgeSource,
             Radius = radius,
+            RangeScale = fe is CheckBox ? CheckBoxRangeScale : 1.0,
             Viewports = FindAncestors<ScrollViewer>(fe)
         });
     }
@@ -323,10 +330,12 @@ public class EdgeGlowLayer : FrameworkElement
             if (ComputeVisibleBounds(target, layerBounds) is not var (bounds, clip, visible)) continue;
 
             // 控件被鼠标光源照亮：按到边缘的距离逐渐增强，接触时接近过曝
+            // （复选框等小控件按 RangeScale 放大有效感应半径，远处即开始发光）
             double d = DistanceToRect(_cursorPos, bounds);
-            if (d >= GlowRadius) continue;
+            double glowRadius = GlowRadius * target.RangeScale;
+            if (d >= glowRadius) continue;
 
-            double t = 1 - d / GlowRadius;
+            double t = 1 - d / glowRadius;
             double alpha = t * t * MaxAlpha;
             if (alpha < 0.01) continue;
 
@@ -341,8 +350,11 @@ public class EdgeGlowLayer : FrameworkElement
             // 亮弧更亮，尾端仍归零（背光侧熄灭）。
             // 照亮半径取控件尺寸与 MaxLitRadius 的较小值：大卡片/大输入框的亮弧
             // 与小控件同样只覆盖鼠标光晕大小的一段，不会整圈被照亮。
+            // 小控件（复选框）按 RangeScale 放大亮弧——画笔是半径 litRadius 的径向渐变，
+            // 半径之外边框完全透明，只放大包络而不放大亮弧会导致远处"有亮度没画面"。
             double litRadius = Math.Min(
-                Math.Max(bounds.Width, bounds.Height) * LitRadiusFactor + 24, MaxLitRadius);
+                (Math.Max(bounds.Width, bounds.Height) * LitRadiusFactor + 24) * target.RangeScale,
+                MaxLitRadius);
             // 笔刷/画笔按目标预分配，每帧只改属性值（避免 60fps × N 目标反复 new 造成 GC 压力）
             var brush = target.Brush ??= CreateGlowBrush();
             brush.Center = _cursorPos;

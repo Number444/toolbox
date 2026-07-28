@@ -150,10 +150,21 @@ public class NeteaseMusicToolTests
             try
             {
                 var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
-                result = window.AllowsTransparency
-                    && window.Background == System.Windows.Media.Brushes.Transparent;
+                // 设计变更（见 MusicFloatWindow.xaml 注释）：AllowsTransparency 已被刻意移除，
+                // 因为 DWM 的 Acrylic/Mica 效果无法在分层窗口上工作；透明背景改由
+                // Background=Transparent + WindowStyle=None + WindowChrome 组合实现。
+                result = window.Background == System.Windows.Media.Brushes.Transparent
+                    && window.WindowStyle == System.Windows.WindowStyle.None
+                    && System.Windows.Shell.WindowChrome.GetWindowChrome(window) != null;
             }
             catch (Exception ex) { threadException = ex; }
+            finally
+            {
+                // 必须在同一 STA 线程上关闭窗口：若放任窗口实例随线程退出而"遗孤"，
+                // 后续测试的 ForceResetInstance 会通过已死线程的 Dispatcher 关闭它，
+                // 导致测试主机崩溃/挂起
+                try { Toolbox.Tools.Views.MusicFloatWindow.ForceResetInstance(); } catch { }
+            }
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
@@ -163,7 +174,7 @@ public class NeteaseMusicToolTests
             throw new InvalidOperationException(
                 $"STA thread test failed: {threadException.Message}", threadException);
 
-        Assert.True(result, "Window should have transparent background");
+        Assert.True(result, "Window should have transparent background (via WindowChrome, not AllowsTransparency)");
     }
 
     [Fact]
@@ -532,8 +543,31 @@ public class NeteaseMusicToolTests
     [Fact]
     public void MusicFloatWindow_SizeMode_DefaultsToLarge()
     {
-        var window = Toolbox.Tools.Views.MusicFloatWindow.Instance;
-        Assert.Equal(Toolbox.Controls.FloatSizeMode.Large, window.SizeMode);
+        // WPF 窗口必须在 STA 线程创建，且用后要重置单例，
+        // 避免遗留实例归属已退出线程、导致后续测试 ForceResetInstance 时崩溃
+        Exception? threadException = null;
+        FloatSizeMode? sizeMode = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                sizeMode = Toolbox.Tools.Views.MusicFloatWindow.Instance.SizeMode;
+            }
+            catch (Exception ex) { threadException = ex; }
+            finally
+            {
+                try { Toolbox.Tools.Views.MusicFloatWindow.ForceResetInstance(); } catch { }
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadException != null)
+            throw new InvalidOperationException(
+                $"STA thread test failed: {threadException.Message}", threadException);
+
+        Assert.Equal(Toolbox.Controls.FloatSizeMode.Large, sizeMode);
     }
 
     [Fact]
@@ -790,34 +824,42 @@ public class NeteaseMusicToolTests
         Assert.Equal(GridUnitType.Star, col1Width!.Value.GridUnitType);
     }
 
-    // ── Task 3: 按钮默认颜色（绿色强调色）────────────────────────
+    // ── Task 3: 按钮背景（不得内联 Transparent，交给全局样式）────────────
 
     /// <summary>
-    /// 验证 btnClose 和 toggleBtn 的 Background 不是 Transparent，
-    /// 修复后应使用全局默认样式（AccentBrush #76B580）。
+    /// 回归场景：按钮曾内联 Background=Transparent，修复后应交给全局样式（ModeBtnStyle）。
+    /// 注：旧布局的 btnClose/toggleBtn 已在重构中移除（现为 modeBtn/resetBtn + 胶囊开关），
+    /// 因此改为遍历内容树中的所有按钮，断言没有任何按钮内联 Transparent 背景。
     /// </summary>
     [Fact]
-    public void NeteaseMusicTool_CloseAndToggleButton_BackgroundIsNotTransparent()
+    public void NeteaseMusicTool_Buttons_DoNotUseInlineTransparentBackground()
     {
         Exception? threadException = null;
-        Color? btnCloseBg = null;
-        Color? toggleBtnBg = null;
+        var buttons = new List<Button>();
         var thread = new Thread(() =>
         {
             try
             {
                 var tool = new Toolbox.Tools.NeteaseMusicTool();
-                var content = tool.CreateContent() as StackPanel;
-                Assert.NotNull(content);
+                var content = Assert.IsType<StackPanel>(tool.CreateContent());
 
-                // 获取 btnClose（第二个 Button，root.Children[1]）
-                var btnClose = Assert.IsType<Button>(content.Children[1]);
-                // 获取 toggleBtn（在 sizeRow 中，sizeRow 是 root.Children[4]）
-                var sizeRow = Assert.IsType<Grid>(content.Children[4]);
-                var toggleBtn = Assert.IsType<Button>(sizeRow.Children[1]);
-
-                btnCloseBg = (btnClose.Background as SolidColorBrush)?.Color;
-                toggleBtnBg = (toggleBtn.Background as SolidColorBrush)?.Color;
+                void Collect(Panel panel)
+                {
+                    foreach (var child in panel.Children)
+                    {
+                        if (child is Button btn)
+                        {
+                            // 必须在创建线程上读取依赖属性：本地值要么是未设置（交给样式），
+                            // 要么是非透明画刷
+                            var local = btn.ReadLocalValue(Button.BackgroundProperty);
+                            if (local is SolidColorBrush brush)
+                                Assert.NotEqual(Colors.Transparent, brush.Color);
+                            buttons.Add(btn);
+                        }
+                        if (child is Panel childPanel) Collect(childPanel);
+                    }
+                }
+                Collect(content);
             }
             catch (Exception ex) { threadException = ex; }
         });
@@ -829,10 +871,7 @@ public class NeteaseMusicToolTests
             throw new InvalidOperationException(
                 $"STA thread test failed: {threadException.Message}", threadException);
 
-        Assert.NotNull(btnCloseBg);
-        Assert.NotNull(toggleBtnBg);
-        Assert.NotEqual(Colors.Transparent, btnCloseBg!.Value);
-        Assert.NotEqual(Colors.Transparent, toggleBtnBg!.Value);
+        Assert.NotEmpty(buttons);
     }
 
     // ── Task 4: 紧凑模式歌名宽度不随 Canvas 缩小 ──────────────────

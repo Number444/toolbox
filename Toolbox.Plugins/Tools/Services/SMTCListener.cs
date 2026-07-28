@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using Windows.Media.Control;
 using Toolbox.Tools.Models;
 
@@ -31,6 +32,14 @@ public sealed class SMTCListener : IDisposable
     // 陈旧封面候选字节：切歌时被判定为上一首封面的字节快照，供重试验证
     private byte[]? _staleThumbnailCandidate;
 
+    // ── 生命周期防护（启动重试 / 看门狗 / 休眠唤醒恢复）──
+    private bool _disposed;
+    private int _startInProgress;      // Interlocked 守卫，防止并发 Start 造成多重订阅
+    private int _powerModeSubscribed;  // Interlocked 守卫，防止重复订阅电源事件
+    private System.Threading.Timer? _watchdogTimer;
+    private CancellationTokenSource? _lifecycleCts; // Stop/Dispose 时取消进行中的启动重试
+    private DateTime _lastEventUtc = DateTime.MinValue; // 最近一次收到任何 SMTC 会话事件的时间
+
     /// <summary>当前播放信息（变化时更新）。</summary>
     public NowPlayingInfo CurrentInfo { get; private set; } = new();
 
@@ -51,18 +60,68 @@ public sealed class SMTCListener : IDisposable
 
     /// <summary>
     /// 异步启动监听：请求 SMTC SessionManager 并订阅当前会话的事件。
+    /// 幂等：已在监听或已有启动流程进行中时直接返回。
+    /// WinRT 调用失败时按 5s → 15s → 30s（封顶）退避自动重试，
+    /// 直到成功、Stop 或 Dispose。
     /// </summary>
     public async Task StartAsync()
     {
-        if (_manager != null) return;
+        if (_disposed || _manager != null) return;
+        if (Interlocked.CompareExchange(ref _startInProgress, 1, 0) != 0) return;
 
-        _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-        // 必须过滤目标应用（网易云），不能直接用 GetCurrentSession()——
-        // 它返回的是"当前会话"，可能是浏览器等任意媒体源
-        SubscribeToSession(FindTargetSession());
+        try
+        {
+            _isClosing = false; // 允许 Stop 之后重新启动（看门狗/唤醒重建依赖此语义）
+            _lifecycleCts?.Dispose();
+            _lifecycleCts = new CancellationTokenSource();
+            var token = _lifecycleCts.Token;
+            SubscribePowerModeChanged();
 
-        // 订阅会话列表变化，当网易云音乐启动/关闭时重新匹配
-        _manager.SessionsChanged += OnSessionsChanged;
+            int attempt = 0;
+            while (!_disposed && !_isClosing && _manager == null)
+            {
+                try
+                {
+                    _manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                    // 必须过滤目标应用（网易云），不能直接用 GetCurrentSession()——
+                    // 它返回的是"当前会话"，可能是浏览器等任意媒体源
+                    SubscribeToSession(FindTargetSession());
+
+                    // 订阅会话列表变化，当网易云音乐启动/关闭时重新匹配
+                    _manager.SessionsChanged += OnSessionsChanged;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SMTCListener] 启动失败（第 {attempt + 1} 次）: {ex.Message}");
+                    // 部分订阅可能已完成，回滚到干净状态再重试
+                    UnsubscribeFromSession(_session);
+                    _session = null;
+                    if (_manager != null)
+                    {
+                        try { _manager.SessionsChanged -= OnSessionsChanged; } catch { /* 忽略回滚异常 */ }
+                        _manager = null;
+                    }
+
+                    // 退避重试：5s → 15s → 30s 封顶
+                    int delayMs = attempt == 0 ? 5000 : attempt == 1 ? 15000 : 30000;
+                    attempt++;
+                    try
+                    {
+                        await Task.Delay(delayMs, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return; // Stop/Dispose 取消了重试
+                    }
+                }
+            }
+
+            EnsureWatchdog();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _startInProgress, 0);
+        }
     }
 
     /// <summary>在所有会话中查找目标应用（网易云音乐）的会话，未找到返回 null。</summary>
@@ -77,15 +136,32 @@ public sealed class SMTCListener : IDisposable
     }
 
     /// <summary>
-    /// 停止监听并释放资源。
+    /// 停止监听并释放资源（含看门狗、电源事件订阅和进行中的启动重试）。
+    /// 幂等，可重复调用；之后可再次 StartAsync 重建监听。
     /// </summary>
     public void Stop()
     {
         _isClosing = true;
+
+        // 取消进行中的启动重试
+        try { _lifecycleCts?.Cancel(); } catch (ObjectDisposedException) { /* 已释放 */ }
+
+        // 停止看门狗
+        _watchdogTimer?.Dispose();
+        _watchdogTimer = null;
+
+        // 退订电源事件（防止 Stop/Start 循环造成重复订阅）
+        if (Interlocked.Exchange(ref _powerModeSubscribed, 0) == 1)
+        {
+            try { SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
+            catch (Exception ex) { Debug.WriteLine($"[SMTCListener] 退订电源事件失败: {ex.Message}"); }
+        }
+
         UnsubscribeFromSession(_session);
         if (_manager != null)
         {
-            _manager.SessionsChanged -= OnSessionsChanged;
+            try { _manager.SessionsChanged -= OnSessionsChanged; }
+            catch (Exception ex) { Debug.WriteLine($"[SMTCListener] 退订 SessionsChanged 失败: {ex.Message}"); }
         }
         _manager = null;
         _session = null;
@@ -93,14 +169,116 @@ public sealed class SMTCListener : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return; // 幂等
+        _disposed = true;
         Stop();
+        _lifecycleCts?.Dispose();
         _refreshLock.Dispose();
+    }
+
+    // ── 生命周期防护：看门狗 + 休眠唤醒 ────────────────────
+
+    /// <summary>启动低频看门狗（30s 周期），幂等。</summary>
+    private void EnsureWatchdog()
+    {
+        if (_disposed || _watchdogTimer != null) return;
+        _watchdogTimer = new System.Threading.Timer(
+            WatchdogTick, null,
+            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>
+    /// 看门狗：发现管理器失效/长时间无会话事件/订阅断链迹象时自动重建监听。
+    /// 启发式保持简单：能枚举会话即视为管理器存活；无目标会话时顺带重新匹配一次，
+    /// 兜底遗漏的 SessionsChanged 事件。
+    /// </summary>
+    private void WatchdogTick(object? state)
+    {
+        if (_disposed || _isClosing) return;
+        try
+        {
+            if (_manager == null)
+            {
+                // 管理器缺失（启动失败或被置空）→ 触发重建（已在重试中时幂等返回）
+                _ = StartAsync();
+                return;
+            }
+
+            // 探测管理器活性：枚举会话抛异常视为失效
+            try
+            {
+                _ = _manager.GetSessions();
+            }
+            catch
+            {
+                RebuildListening("SessionManager 已失效");
+                return;
+            }
+
+            if (_session == null)
+            {
+                // 未持有目标会话 → 重新匹配，兜底网易云已启动但事件未触发的情况
+                var target = FindTargetSession();
+                if (target != null) SubscribeToSession(target);
+                return;
+            }
+
+            // 持有会话但超过 5 分钟无任何事件 → 探测会话活性，失效则重建
+            if (DateTime.UtcNow - _lastEventUtc > TimeSpan.FromMinutes(5))
+            {
+                try
+                {
+                    _ = _session.GetPlaybackInfo();
+                }
+                catch
+                {
+                    RebuildListening("会话已失效");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[SMTCListener] 看门狗检查异常: {ex.Message}");
+        }
+    }
+
+    /// <summary>销毁当前订阅并异步重建整个监听。</summary>
+    private void RebuildListening(string reason)
+    {
+        Debug.WriteLine($"[SMTCListener] 重建监听（{reason}）");
+        Stop();
+        _ = StartAsync();
+    }
+
+    /// <summary>订阅系统电源事件（去重），Resume 时重建监听。</summary>
+    private void SubscribePowerModeChanged()
+    {
+        if (Interlocked.CompareExchange(ref _powerModeSubscribed, 1, 0) != 0) return;
+        try
+        {
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        }
+        catch (Exception ex)
+        {
+            // 无消息泵的线程（如测试环境）无法订阅系统事件，回退标记并放弃该能力
+            Interlocked.Exchange(ref _powerModeSubscribed, 0);
+            Debug.WriteLine($"[SMTCListener] 订阅电源事件失败: {ex.Message}");
+        }
+    }
+
+    private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Resume) return;
+        if (_disposed || _isClosing) return;
+        // 唤醒后媒体服务可能尚未就绪，重建失败时由启动重试/看门狗兜底
+        RebuildListening("系统休眠唤醒");
     }
 
     // ── 会话管理 ──────────────────────────────────────────
 
     private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender, SessionsChangedEventArgs args)
     {
+        _lastEventUtc = DateTime.UtcNow;
         if (_isClosing) return;
 
         var target = FindTargetSession();
@@ -138,9 +316,17 @@ public sealed class SMTCListener : IDisposable
     private void UnsubscribeFromSession(GlobalSystemMediaTransportControlsSession? session)
     {
         if (session == null) return;
-        session.MediaPropertiesChanged -= OnMediaPropertiesChanged;
-        session.TimelinePropertiesChanged -= OnTimelinePropertiesChanged;
-        session.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+        try
+        {
+            session.MediaPropertiesChanged -= OnMediaPropertiesChanged;
+            session.TimelinePropertiesChanged -= OnTimelinePropertiesChanged;
+            session.PlaybackInfoChanged -= OnPlaybackInfoChanged;
+        }
+        catch (Exception ex)
+        {
+            // 会话已失效（网易云重启/媒体服务重启）时退订可能抛异常，忽略即可
+            Debug.WriteLine($"[SMTCListener] 退订会话事件失败: {ex.Message}");
+        }
     }
 
     // ── 事件处理（按职责分开，修复 4）──────────────────────
@@ -150,6 +336,7 @@ public sealed class SMTCListener : IDisposable
     /// </summary>
     private void OnMediaPropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args)
     {
+        _lastEventUtc = DateTime.UtcNow;
         _ = RefreshNowPlayingAsync(RefreshScope.Full);
     }
 
@@ -158,6 +345,7 @@ public sealed class SMTCListener : IDisposable
     /// </summary>
     private void OnTimelinePropertiesChanged(GlobalSystemMediaTransportControlsSession sender, TimelinePropertiesChangedEventArgs args)
     {
+        _lastEventUtc = DateTime.UtcNow;
         _ = RefreshNowPlayingAsync(RefreshScope.TimelineOnly);
     }
 
@@ -166,6 +354,7 @@ public sealed class SMTCListener : IDisposable
     /// </summary>
     private void OnPlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
     {
+        _lastEventUtc = DateTime.UtcNow;
         _ = RefreshNowPlayingAsync(RefreshScope.TimelineOnly);
     }
 

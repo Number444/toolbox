@@ -82,7 +82,10 @@ public class AppSettingsTests
         s1.Save();
 
         // 删除 settings 文件 -> 重新加载应返回默认值 "Large"
+        // 注意：JsonSettingsFile.Save 采用原子写入，会把旧文件留作 settings.json.bak，
+        // 而 Load 在主文件缺失时会回落 .bak，因此必须连同 .bak 一起删除
         File.Delete(Path.Combine(TestDir, "settings.json"));
+        File.Delete(Path.Combine(TestDir, "settings.json.bak"));
 
         var s2 = new Toolbox.Core.Services.AppSettings(TestDir);
         s2.Load();
