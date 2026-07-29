@@ -99,7 +99,7 @@ public static class SystemInfoHelper
         return null;
     }
 
-    // 公网 IP 查询源（与 NetworkInfoTool 同策略）：首选 4.ipw.cn（纯文本 IPv4），
+    // 公网 IP 查询源（全局唯一实现，NetworkInfoTool 与首页仪表盘共用）：首选 4.ipw.cn（纯文本 IPv4），
     // 备用 myip.ipip.net（描述文本，正则提取）——单一源在国内网络下不稳，必须带 fallback
     private static readonly string[] PublicIpSources = { "https://4.ipw.cn", "https://myip.ipip.net" };
     private static readonly System.Text.RegularExpressions.Regex Ipv4Regex =

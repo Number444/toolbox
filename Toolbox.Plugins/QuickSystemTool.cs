@@ -83,7 +83,12 @@ public class QuickSystemTool : ITool
 
         var monitorButton = MakePowerButton("🖥️ 关闭显示器", 1);
         monitorButton.Click += (_, _) =>
-            Report(SystemPowerHelper.TurnOffMonitor(), "显示器已关闭,移动鼠标唤醒", resultBlock);
+        {
+            // TurnOffMonitor 无成败探测(见 SystemPowerHelper 注释),只能报告"已下发"
+            SystemPowerHelper.TurnOffMonitor();
+            resultBlock.Text = "✅ 已下发关闭显示器指令,移动鼠标唤醒";
+            resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+        };
 
         var sleepButton = MakePowerButton("😴 睡眠", 2);
         sleepButton.Click += (_, _) => Report(SystemPowerHelper.Sleep(), "已进入睡眠", resultBlock);

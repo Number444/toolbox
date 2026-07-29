@@ -25,4 +25,11 @@ public static class ThemeColors
 
     /// <summary>警告状态（橙）</summary>
     public static readonly Color Warning = Color.FromRgb(0xE0, 0xA0, 0x30);
+
+    /// <summary>细边框 / 分割竖线（低调灰）</summary>
+    public static readonly Color BorderSubtle = Color.FromRgb(0x45, 0x45, 0x45);
+
+    /// <summary>实心危险按钮（深红，用于确认弹窗确认键等）；
+    /// 与 Danger 警示红并存——两种红待用户体验后统一，统一时只需改这一处</summary>
+    public static readonly Color DangerButton = Color.FromRgb(0xD0, 0x40, 0x40);
 }

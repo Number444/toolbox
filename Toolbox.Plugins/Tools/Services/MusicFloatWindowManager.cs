@@ -21,7 +21,10 @@ public class MusicFloatWindowManager
 
     private readonly SMTCListener _listener = new();
     private readonly EdgeDockService _dockService = new();
-    private NowPlayingInfo _cachedInfo = new();
+    // SMTC 事件（后台线程）写入，UI 线程与 PeekNowPlaying 读取。
+    // volatile 保证跨线程可见性；引用赋值天然原子，允许短暂读到"新曲名+旧艺术家"
+    // 的混合快照（下一轮刷新自愈），因此不加锁。
+    private volatile NowPlayingInfo _cachedInfo = new();
 
     /// <summary>贴边服务，供外部（NeteaseMusicTool）访问。</summary>
     public EdgeDockService DockService => _dockService;
@@ -38,6 +41,7 @@ public class MusicFloatWindowManager
     /// <summary>
     /// 被动窥探当前播放信息（供首页仪表盘读取）：单例未创建过（悬浮窗从未开启）
     /// 时返回 null，绝不触发单例实例化——仪表盘不得有"读一下就把监听拉起来"的副作用。
+    /// 允许读到短暂的混合快照（新曲名+旧艺术家），下一轮刷新自愈，属预期行为。
     /// </summary>
     public static NowPlayingInfo? PeekNowPlaying() =>
         _instance.IsValueCreated ? Instance._cachedInfo : null;

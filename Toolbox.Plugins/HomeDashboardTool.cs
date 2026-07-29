@@ -133,7 +133,7 @@ public class HomeDashboardTool : ITool
         var divider = new Border
         {
             Width = 3,
-            Background = new SolidColorBrush(Color.FromRgb(0x45, 0x45, 0x45)),
+            Background = new SolidColorBrush(ThemeColors.BorderSubtle),
             VerticalAlignment = VerticalAlignment.Stretch,
             Margin = new Thickness(0, -2, 0, -2)
         };

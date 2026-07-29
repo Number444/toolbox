@@ -920,11 +920,11 @@ public class JunkCleanerTool : ITool
             AllowsTransparency = true;
             Background = Brushes.Transparent;
 
-            var darkBg = Color.FromRgb(0x2D, 0x2D, 0x2D);
-            var textPrimary = Color.FromRgb(0xF0, 0xF0, 0xF0);
-            var textSecondary = Color.FromRgb(0xC0, 0xC0, 0xC0);
-            var borderColor = Color.FromRgb(0x45, 0x45, 0x45);
-            var warningColor = Color.FromRgb(0xE0, 0xA0, 0x30);
+            var darkBg = ThemeColors.BgDark;
+            var textPrimary = ThemeColors.TextPrimary;
+            var textSecondary = Color.FromRgb(0xC0, 0xC0, 0xC0); // 弹窗正文专用：比全局次要文本更亮
+            var borderColor = ThemeColors.BorderSubtle;
+            var warningColor = ThemeColors.Warning;
 
             var mainBorder = new Border
             {
@@ -995,7 +995,7 @@ public class JunkCleanerTool : ITool
                 Width = 90,
                 Height = 32,
                 FontSize = 13,
-                Background = new SolidColorBrush(Color.FromRgb(0xD0, 0x40, 0x40)),
+                Background = new SolidColorBrush(ThemeColors.DangerButton),
                 Foreground = new SolidColorBrush(textPrimary),
                 BorderThickness = new Thickness(0)
             };

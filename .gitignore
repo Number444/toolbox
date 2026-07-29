@@ -6,6 +6,7 @@ obj/
 *.sln.docstates
 .vs/
 *.DotSettings.user
+TestResults/
 
 ## NuGet
 **/[Pp]ackages/*

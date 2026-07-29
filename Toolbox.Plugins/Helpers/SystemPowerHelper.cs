@@ -30,15 +30,13 @@ public static class SystemPowerHelper
         catch { return false; }
     }
 
-    /// <summary>关闭显示器(移动鼠标/按键即唤醒);成功返回 true</summary>
-    public static bool TurnOffMonitor()
+    /// <summary>关闭显示器(移动鼠标/按键即唤醒)。
+    /// 广播消息无返回语义,系统不提供成败探测(如远程桌面会话会静默忽略),
+    /// 调用即视为已下发——调用方不得据此报告"成功",只能报告"已下发指令"。</summary>
+    public static void TurnOffMonitor()
     {
-        try
-        {
-            SendMessage(HwndBroadcast, WmSysCommand, ScMonitorPower, MonitorOff);
-            return true;
-        }
-        catch { return false; }
+        try { SendMessage(HwndBroadcast, WmSysCommand, ScMonitorPower, MonitorOff); }
+        catch { /* 调用即视为已下发,失败无任何可探测信号 */ }
     }
 
     /// <summary>进入睡眠(不休眠、不强制);成功返回 true</summary>
