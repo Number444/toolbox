@@ -119,8 +119,8 @@ public class MainViewModel : INotifyPropertyChanged
             var group = new ToolGroup
             {
                 CategoryName = cat,
-                // 仅"系统维护"默认展开，其他分类默认收起
-                IsExpanded = cat == ToolCategory.System
+                // "首页"与"系统维护"默认展开，其他分类默认收起
+                IsExpanded = cat is ToolCategory.Home or ToolCategory.System
             };
             foreach (var tool in tools)
                 group.Tools.Add(tool);

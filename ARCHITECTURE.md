@@ -37,7 +37,7 @@ Toolbox/
 │   ├── Models/
 │   │   ├── ITool.cs                        工具接口：Name/Description/IconGlyph/Category/CreateContent()
 │   │   ├── ToolGroup.cs                    工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon）
-│   │   ├── ToolCategory.cs                 工具分类常量（6 大类）
+│   │   ├── ToolCategory.cs                 工具分类常量（7 大类，首页固定最前）
 │   │   ├── GlowCardMarker.cs               卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in
 │   │   └── ThemeColors.cs                  统一主题色常量（供新工具使用，避免硬编码）
 │   ├── Services/
@@ -52,7 +52,8 @@ Toolbox/
 │   ├── Toolbox.Plugins.csproj
 │   ├── ShutdownTool.cs                     定时关机：6 个快捷按钮 + 自定义分钟 + 取消关机
 │   ├── ScreensaverTool.cs                  系统屏保：ComboBox 选择并启动
-│   ├── RestartExplorerTool.cs              重启资源管理器：结束并重启 explorer.exe
+│   ├── QuickSystemTool.cs                  ★ 新增：快捷系统操作（锁屏/关显示器/睡眠/重启资源管理器，原 RestartExplorerTool 改造）
+│   ├── HomeDashboardTool.cs                ★ 新增：首页仪表盘（时间/磁盘/内存/网络/播放状态卡 + 快捷操作，启动默认页）
 │   ├── JunkCleanerTool.cs                  C盘垃圾清理：12 类分类扫描，回收站删除，受保护文件跳过
 │   ├── SoftwareUninstallTool.cs            软件卸载管理器：注册表扫描 + 双击卸载 + 轮询检测
 │   ├── QrCodeTool.cs                       二维码生成：文本/URL 实时生成 + 保存 + 复制
@@ -138,7 +139,8 @@ Toolbox/
 | SettingsView.xaml | 99 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮） |
 | SettingsView.xaml.cs | 34 | 设置页后置代码 |
 | ITool.cs | 21 | 工具接口（含 Category） |
-| ToolCategory.cs | 16 | 6 大分类常量 |
+| ToolCategory.cs | 17 | 7 大分类常量（首页固定最前） |
+| ToolNavigation.cs | 15 | ★ 新增：插件→主窗口导航请求中转（首页卡片点击跳工具） |
 | ToolGroup.cs | 66 | 分组模型 |
 | AppSettings.cs | 190 | 全局设置单例（6 个开关：最小化/悬浮窗自启/开机自启/鼠标光晕/控件发光/悬浮窗尺寸） |
 | AudioflowSettings.cs | 205 | 悬浮窗独立设置（★ 新增：游戏模式点击穿透 / 悬停播放控制开关） |
@@ -161,7 +163,10 @@ Toolbox/
 | ScreensaverTool.cs | 186 | 卡片式布局 + 主题色统一 |
 | ClickThroughHelper.cs | 132 | ★ 新增：游戏模式点击穿透（Transparent/Acrylic 两套实现） |
 | DockTriggerBar.xaml.cs | 123 | 贴边触发条 |
-| RestartExplorerTool.cs | 111 | 卡片式布局 + 主题色统一 |
+| HomeDashboardTool.cs | 328 | ★ 新增：首页仪表盘（启动默认页，定时器随显隐启停） |
+| QuickSystemTool.cs | 157 | ★ 新增：快捷系统操作（锁屏/关显示器/睡眠/重启资源管理器，替代 RestartExplorerTool） |
+| SystemInfoHelper.cs | 93 | ★ 新增：轻量系统信息读取（内存/运行时长/磁盘/本机 IPv4） |
+| SystemPowerHelper.cs | 50 | ★ 新增：锁屏/关显示器/睡眠 Win32 封装（工具与首页共用） |
 | ConfirmDialog.cs | 112 | ★ 新增：统一深色确认弹窗 |
 | TransparentMusicWindow.xaml.cs | 92 | 透明窗口（★ 新增：游戏模式点击穿透 + 右键菜单集成） |
 | MonitorHelper.cs | 81 | 多屏辅助 |
@@ -190,7 +195,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 ### 层 1：Toolbox.Core（接口定义 + 基础服务层）
 
 - 定义 `ITool` 接口，6 个成员：`Name` / `Description` / `IconGlyph` / `Category` / `CreateContent()`
-- `Category` 属性（2026-07 新增）将工具按 `ToolCategory` 六大分类分组
+- `Category` 属性（2026-07 新增）将工具按 `ToolCategory` 七大分类分组（首页固定最前，为启动默认页）
 - `ToolGroup` 分组模型支持导航栏手风琴式展开/折叠（IsExpanded/IsHovered/ArrowText/HoverIcon/CategoryColor）
 - `AppSettings` 单例管理全局用户偏好，JSON 持久化到 `%LOCALAPPDATA%\Toolbox\settings.json`
 - `EdgeGlowLayer` 控件边缘发光引擎（FrameworkElement 子类），主窗口与插件共用
@@ -493,9 +498,10 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 
 | 工具 | 文件名 | 分类 | 行数 | 功能 |
 |------|--------|------|:----:|------|
+| **系统总览** | `HomeDashboardTool.cs` | 📊 首页 | 328 | **★ 新增**：启动默认页，时间/磁盘/内存/网络/播放状态卡 + 主卡内嵌快捷操作，卡片点击跳工具 |
 | 定时关机 | `ShutdownTool.cs` | ⚙️ 系统维护 | 241 | 卡片式布局 + 快捷按钮重排序 + 自定义分钟 + 取消关机 |
 | 屏保启动 | `ScreensaverTool.cs` | ⚙️ 系统维护 | 186 | ComboBox 选择 5 种系统屏保 + 卡片式布局 |
-| 重启资源管理器 | `RestartExplorerTool.cs` | ⚙️ 系统维护 | 111 | taskkill + explorer 重启 + 卡片式布局 |
+| **快捷系统操作** | `QuickSystemTool.cs` | ⚙️ 系统维护 | 157 | **★ 新增**：锁屏/关显示器/睡眠/重启资源管理器（原重启资源管理器工具改造） |
 | C盘垃圾清理 | `JunkCleanerTool.cs` | ⚙️ 系统维护 | 1024 | 12 类分类扫描 + 自定义确认弹窗 + 取消按钮 + 间距微调 |
 | 二维码生成 | `QrCodeTool.cs` | 🌐 网络与开发 | 264 | 深色圆角卡片式 + 竖排按钮，实时生成 + 保存 + 复制 |
 | **网络信息** | `NetworkInfoTool.cs` | 🌐 网络与开发 | 298 | **★ 新增**：IP/MAC/网关/DNS + 公网 IP 异步获取 + 逐项复制 |

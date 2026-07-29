@@ -35,6 +35,13 @@ public class MusicFloatWindowManager
     /// <summary>当前活跃窗口是否可见。</summary>
     public bool IsVisible => _isVisible && _activeWindow != null;
 
+    /// <summary>
+    /// 被动窥探当前播放信息（供首页仪表盘读取）：单例未创建过（悬浮窗从未开启）
+    /// 时返回 null，绝不触发单例实例化——仪表盘不得有"读一下就把监听拉起来"的副作用。
+    /// </summary>
+    public static NowPlayingInfo? PeekNowPlaying() =>
+        _instance.IsValueCreated ? Instance._cachedInfo : null;
+
     /// <summary>当前大小模式。</summary>
     public FloatSizeMode CurrentSizeMode => _sizeMode;
 

@@ -5,6 +5,7 @@ namespace Toolbox.Models;
 /// </summary>
 public static class ToolCategory
 {
+    public const string Home = "📊 首页";
     public const string System = "⚙️ 系统维护";
     public const string Network = "🌐 网络与开发";
     public const string Window = "🏠 窗口与桌面";
@@ -12,6 +13,6 @@ public static class ToolCategory
     public const string File = "📁 文件管理";
     public const string Media = "🎵 媒体与娱乐";
 
-    /// <summary>获取所有分类列表（按显示顺序）</summary>
-    public static string[] All => [System, Network, Window, Text, File, Media];
+    /// <summary>获取所有分类列表（按显示顺序，首页固定在最前）</summary>
+    public static string[] All => [Home, System, Network, Window, Text, File, Media];
 }

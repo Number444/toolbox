@@ -365,16 +365,26 @@
                                        Foreground="{StaticResource TextPrimaryBrush}"
                                        Margin="0,0,0,4"/>
 
-                            <!-- 当前工具描述 -->
+                            <!-- 当前工具描述（为空时整块折叠，不占布局空间） -->
                             <TextBlock Text="{Binding SelectedToolDescription}"
                                        FontSize="13"
                                        Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,0,10"/>
+                                       Margin="0,0,0,10">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedToolDescription}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
 
                             <!-- 分隔线 -->
                             <Rectangle Height="1"
                                        Fill="{StaticResource BorderSubtleBrush}"
-                                       Margin="0,0,0,12"/>
+                                       Margin="0,0,0,8"/>
 
                             <!-- 动态工具内容（带淡入过渡动画） -->
                             <helpers:TransitioningContentControl Content="{Binding CurrentContent}"/>

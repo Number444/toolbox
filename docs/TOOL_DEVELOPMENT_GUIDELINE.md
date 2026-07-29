@@ -35,12 +35,15 @@ public class MyTool : ITool
 
 | 常量 | 含义 |
 |------|------|
+| `ToolCategory.Home` | 📊 首页（保留给仪表盘，普通工具不要使用） |
 | `ToolCategory.System` | ⚙️ 系统维护 |
 | `ToolCategory.Network` | 🌐 网络与开发 |
 | `ToolCategory.Window` | 🏠 窗口与桌面 |
 | `ToolCategory.Text` | 🔤 文本与数据 |
 | `ToolCategory.File` | 📁 文件管理 |
 | `ToolCategory.Media` | 🎵 媒体与娱乐 |
+
+> 普通工具请用 Home 以外的分类;Home 固定排在导航最前，是启动默认页。
 
 ---
 
@@ -153,6 +156,38 @@ ClickThroughHelper.SetClickThrough(window, true, layered: false);
 using Toolbox.Tools.Helpers;
 
 var wa = MonitorHelper.GetMonitorWorkAreaDips(window);
+```
+
+### 3.8.1 系统电源操作 —— `SystemPowerHelper`
+
+```csharp
+using Toolbox.Tools.Helpers;
+
+SystemPowerHelper.Lock();            // 锁定电脑（Win+L）
+SystemPowerHelper.TurnOffMonitor();  // 关闭显示器
+SystemPowerHelper.Sleep();           // 睡眠
+// 均返回 bool 表示成败；插件层自含 P/Invoke，不要引用主程序的 Win32Helper
+```
+
+### 3.8.2 轻量系统信息 —— `SystemInfoHelper`
+
+```csharp
+using Toolbox.Tools.Helpers;
+
+SystemInfoHelper.GetMemoryUsagePercent();  // 内存占用 %(int?)
+SystemInfoHelper.GetUptime();              // 运行时长 TimeSpan
+SystemInfoHelper.GetDriveSpace("C:");      // (free, total) 字节
+SystemInfoHelper.GetLocalIPv4();           // 本机首个有网关网卡的 IPv4
+```
+
+### 3.8.3 工具间导航 —— `ToolNavigation`
+
+```csharp
+using Toolbox.Models;
+
+// 请求主窗口切换到指定名称的工具（如仪表盘卡片点击跳转）
+ToolNavigation.Request("网络信息");
+// 插件无法引用主程序的 MainViewModel，必须经此 Core 中转；主窗口负责实际切换与高亮跟随
 ```
 
 ### 3.9 Win32 / DWM 基础调用 —— `Win32Helper`

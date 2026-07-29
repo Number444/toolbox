@@ -62,6 +62,9 @@ public partial class MainWindow : Window
                 // 设置页返回事件
                 SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
 
+                // 插件经 Core 中转的导航请求（如首页仪表盘卡片点击跳转工具）
+                Models.ToolNavigation.NavigateRequested += OnToolNavigateRequested;
+
                 // 启动时自动打开悬浮窗
                 if (AppSettings.Instance.AutoOpenFloatWindow)
                 {
@@ -145,6 +148,23 @@ public partial class MainWindow : Window
             if (SettingsLayer.Visibility == Visibility.Visible)
                 ExitSettingsView();
         }
+    }
+
+    /// <summary>处理插件经 ToolNavigation 中转的导航请求（按工具名切换 + 高亮跟随）</summary>
+    private void OnToolNavigateRequested(string toolName)
+    {
+        if (DataContext is not ViewModels.MainViewModel vm) return;
+
+        var tool = vm.AllGroups.SelectMany(g => g.Tools)
+            .FirstOrDefault(t => t.Name == toolName);
+        if (tool == null) return;
+
+        vm.SelectedTool = tool;
+        var target = FindToolBorderByTool(tool);
+        if (target != null) PositionHighlight(target);
+
+        if (SettingsLayer.Visibility == Visibility.Visible)
+            ExitSettingsView();
     }
 
     /// <summary>将高亮指示器动画移动到指定元素的位置（跨分组定位）</summary>
