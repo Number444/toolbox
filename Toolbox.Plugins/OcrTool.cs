@@ -30,6 +30,11 @@ public class OcrTool : ITool
     private TextBlock? _zoneText;
     private Canvas? _dimLayer;
 
+    private TextBlock? _engineStatusText;
+    private Button? _engineButton;
+    private bool _highPrecisionAvailable;
+    private bool _useHighPrecision;
+    private PaddleOcrWrapper? _paddleWrapper;
     private int _ocrVersion; // 防抖/丢弃过期识别结果
 
     public string Name => "截图识字";
@@ -64,6 +69,14 @@ public class OcrTool : ITool
         };
         buttonRow.Children.Add(openButton);
         buttonRow.Children.Add(pasteButton);
+        _engineButton = new Button
+        {
+            Content = "📥 下载高精度引擎",
+            FontSize = 14,
+            Padding = new Thickness(14, 6, 14, 6),
+            Margin = new Thickness(8, 0, 0, 0)
+        };
+        buttonRow.Children.Add(_engineButton);
 
         // 拖拽投放区：横置长条虚线圆角矩形，初始灰色，拖入后变绿
         _zoneRect = new Rectangle
@@ -122,8 +135,71 @@ public class OcrTool : ITool
             Visibility = Visibility.Collapsed
         };
 
+        _engineStatusText = new TextBlock
+        {
+            Text = "引擎: Windows 内置",
+            FontSize = 12,
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var engineDot = new Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(ThemeColors.Success),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+
+        // 光晕层：半径 = 绿点半径(3px) × 2 = 6px → 直径 12px，半透明 + 模糊
+        var engineDotGlow = new Ellipse
+        {
+            Width = 12,
+            Height = 12,
+            Fill = new SolidColorBrush(ThemeColors.Success),
+            Opacity = 0.35,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 4 }
+        };
+
+        var engineDotContainer = new Grid
+        {
+            Width = 12,
+            Height = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0)
+        };
+        engineDotContainer.Children.Add(engineDotGlow);
+        engineDotContainer.Children.Add(engineDot);
+
+        var engineInfoPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        engineInfoPanel.Children.Add(engineDotContainer);
+        engineInfoPanel.Children.Add(_engineStatusText);
+
+        var titleRow = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        titleRow.Children.Add(new TextBlock
+        {
+            Text = "图片来源",
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary)
+        });
+        titleRow.Children.Add(engineInfoPanel);
+        Grid.SetColumn(engineInfoPanel, 1);
+
         var sourceCard = BuildCard("图片来源");
         var sourceInner = (StackPanel)sourceCard.Child;
+        sourceInner.Children.RemoveAt(0);  // 移除 BuildCard 默认添加的标题
+        sourceInner.Children.Insert(0, titleRow);
         sourceInner.Children.Add(buttonRow);
         sourceInner.Children.Add(_zoneGrid);
         sourceInner.Children.Add(_previewBorder);
@@ -247,6 +323,28 @@ public class OcrTool : ITool
                 SetStatus($"❌ 复制失败：{ex.Message}", ThemeColors.Danger);
             }
         };
+
+        // 下载/切换引擎
+        _engineButton!.Click += (_, _) =>
+        {
+            if (_highPrecisionAvailable)
+            {
+                _useHighPrecision = !_useHighPrecision;
+                UpdateEngineUi();
+            }
+            else
+            {
+                DownloadHighPrecisionEngine();
+            }
+        };
+
+        // 启动时检测已下载的引擎文件并初始化（不自动启用高精度模式）
+        if (EngineDownloader.IsDownloaded && PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory) == null)
+        {
+            _paddleWrapper = new PaddleOcrWrapper();
+            _highPrecisionAvailable = _paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory);
+            UpdateEngineUi();
+        }
 
         return _rootGrid;
 
@@ -375,7 +473,26 @@ public class OcrTool : ITool
             var sw = Stopwatch.StartNew();
             try
             {
-                string text = await Task.Run(() => OcrHelper.RecognizeAsync(bitmap));
+                string? text;
+                if (_useHighPrecision && _paddleWrapper is { IsAvailable: true })
+                {
+                    // 高精度引擎
+                    text = await Task.Run(() => _paddleWrapper.RecognizeBitmap(bitmap));
+                    if (text == null)
+                    {
+                        // Paddle 失败 → 回退到 Windows 内置引擎
+                        SetStatus("⚠️ 高精度引擎异常，已回退到 Windows 内置引擎", ThemeColors.Warning);
+                        _useHighPrecision = false;
+                        UpdateEngineUi();
+                        text = await Task.Run(() => OcrHelper.RecognizeAsync(bitmap));
+                    }
+                }
+                else
+                {
+                    // Windows 内置引擎
+                    text = await Task.Run(() => OcrHelper.RecognizeAsync(bitmap));
+                }
+
                 if (ver != _ocrVersion) return; // 期间又导入新图，丢弃过期结果
 
                 sw.Stop();
@@ -395,6 +512,84 @@ public class OcrTool : ITool
             {
                 if (ver != _ocrVersion) return;
                 SetStatus($"❌ 识别失败：{ex.Message}", ThemeColors.Danger);
+            }
+        }
+
+        void UpdateEngineUi()
+        {
+            if (_highPrecisionAvailable)
+            {
+                _engineStatusText!.Text = _useHighPrecision ? "引擎: 高精度模式" : "引擎: Windows 内置";
+                _engineButton!.Content = _useHighPrecision ? "🔄 切换内置引擎" : "🔄 切换高精度引擎";
+            }
+            else
+            {
+                _engineStatusText!.Text = "引擎: Windows 内置";
+                _engineButton!.Content = "📥 下载高精度引擎";
+            }
+        }
+
+        async void DownloadHighPrecisionEngine()
+        {
+            if (EngineDownloader.IsDownloaded && _paddleWrapper is { IsAvailable: true })
+            {
+                // 已下载已加载 → 切换引擎
+                _useHighPrecision = !_useHighPrecision;
+                UpdateEngineUi();
+                return;
+            }
+
+            var dialog = new DownloadDialog("下载高精度引擎",
+                "正在下载离线识别引擎包，请在下载完成后稍等片刻…");
+            dialog.Owner = Application.Current?.MainWindow;
+            dialog.Show();
+
+            try
+            {
+                var progress = new Progress<(int percent, string status)>(p =>
+                    dialog.ReportProgress(p.percent, p.status));
+
+                // 引擎未加载 → 始终执行完整下载/解压（DownloadAndExtractAsync 自身会清理旧版）
+                await EngineDownloader.DownloadAndExtractAsync(progress, CancellationToken.None);
+
+                if (dialog.Cancelled) return;
+
+                // 加载引擎
+                dialog.ReportProgress(90, "正在初始化识别引擎…");
+                _paddleWrapper ??= new PaddleOcrWrapper();
+
+                // 先快速检查文件完整性
+                var missing = PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory);
+                if (missing != null)
+                {
+                    dialog.SetResult(false, $"引擎文件不完整：{missing}");
+                    return;
+                }
+
+                if (_paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory))
+                {
+                    _highPrecisionAvailable = true;
+                    _useHighPrecision = true;
+                    UpdateEngineUi();
+                    dialog.SetResult(true, "高精度引擎已就绪，识别准确率 98%+");
+                }
+                else
+                {
+                    var detail = _paddleWrapper.LastError ?? "未知错误";
+                    dialog.SetResult(false, $"引擎加载失败：{detail}");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 用户取消，弹窗已在 CancelAndClose 中关闭
+            }
+            catch (InvalidOperationException ex)
+            {
+                dialog.SetResult(false, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                dialog.SetResult(false, $"下载失败：{ex.Message}");
             }
         }
     }
