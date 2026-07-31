@@ -1,6 +1,6 @@
 # Toolbox 项目架构
 
-> 最后更新: 2026-07-27
+> 最后更新: 2026-07-31
 
 ## 目录结构
 
@@ -17,14 +17,14 @@ Toolbox/
 ├── Toolbox.ico                             应用图标
 │
 ├── Helpers/
-│   ├── Win32Helper.cs                      Win32 P/Invoke：圆角/深色模式/单实例互斥/Frame扩展/窗口查找 + WndProc 消息钩子
+│   ├── Win32Helper.cs                      Win32 业务封装（圆角/深色模式/帧扩展/窗口查找 + WndProc 消息钩子；P/Invoke 声明统一在 Core 的 Win32Native）
 │   ├── SystemTrayHelper.cs                 纯 Win32 系统托盘图标（不依赖 WinForms）
 │   ├── CustomScrollBar.cs                  自定义迷你滚动条（深色主题，替代系统 ScrollBar）
 │   ├── TransitioningContentControl.cs      内容切换淡入动画控件
 │   └── TextBoxContextMenuHelper.cs         统一深色主题 TextBox 右键菜单（替换 WPF 默认灰色系统菜单）
 │
 ├── Services/
-│   └── ToolRegistry.cs                     工具注册中心：三策略插件加载（单文件发布/plugins目录/调试目录）
+│   └── ToolRegistry.cs                     工具注册中心：单策略插件加载（Assembly.Load 默认加载上下文）+ 反射注册悬浮窗控制器
 │
 ├── Views/
 │   └── SettingsView.xaml (+ .cs)           设置页面：5 个 ToggleSwitch（最小化/自启悬浮窗/自启/鼠标光晕/控件边缘发光）+ ComboBox(悬浮窗大小) + 退出按钮
@@ -39,14 +39,19 @@ Toolbox/
 │   │   ├── ToolGroup.cs                    工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon）
 │   │   ├── ToolCategory.cs                 工具分类常量（7 大类，首页固定最前）
 │   │   ├── GlowCardMarker.cs               卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in
-│   │   └── ThemeColors.cs                  统一主题色常量（供新工具使用，避免硬编码）
+│   │   ├── ThemeColors.cs                  统一主题色常量（供新工具使用，避免硬编码）
+│   │   ├── FloatSizeMode.cs                悬浮窗大小模式枚举（Large / Compact）★ 自插件层移入 Core
+│   │   ├── IMusicFloatController.cs        悬浮窗控制器接口 ★ 新增：主程序经此控制悬浮窗，不引用插件类型
+│   │   └── MusicFloatControllerHost.cs     悬浮窗控制器静态宿主 ★ 新增：插件加载后由 ToolRegistry 注册实现
 │   ├── Services/
 │   │   ├── AppSettings.cs                  单例全局设置（settings.json）：6 个开关 + 悬浮窗尺寸
 │   │   └── JsonSettingsFile.cs             泛型 JSON 设置文件读写（原子写入 .tmp→替换，.bak 备份回落）
 │   ├── Controls/
 │   │   └── ThemedMenuWindow.cs             深色圆角主题弹出菜单窗口（带 DropShadowEffect 投影 + 屏幕边界吸附）
 │   └── Helpers/
-│       └── EdgeGlowLayer.cs                控件边缘发光引擎（从 MainWindow 迁入 Core，供主窗口与插件共用）
+│       ├── EdgeGlowLayer.cs                控件边缘发光引擎（从 MainWindow 迁入 Core，供主窗口与插件共用）
+│       ├── DwmHelper.cs                    DWM 背景效果帮助类（Mica/Acrylic/圆角/深色模式/纯模糊）★ 自插件层整体迁入 Core
+│       └── Win32Native.cs                  全项目唯一 Win32 P/Invoke 声明处 ★ 新增（重复声明已清理）
 │
 ├── Toolbox.Plugins/                        插件实现层（独立程序集，运行时反射加载）
 │   ├── Toolbox.Plugins.csproj
@@ -60,6 +65,8 @@ Toolbox/
 │   ├── QrCodeHelper.cs                     QRCoder 库辅助封装
 │   ├── NetworkInfoTool.cs                  ★ 新增：网络信息面板（IP/MAC/网关/DNS/公网 IP，逐项复制）
 │   ├── PasswordGeneratorTool.cs            ★ 新增：密码生成器（名字种子 + SHA256 确定性生成 + 历史记录）
+│   ├── OcrTool.cs                          ★ 新增：截图识字（文件选择/拖入虚线框/粘贴导入，Windows 内置 OCR 离线识别，可选 PaddleOCR 高精度引擎）
+│   ├── DownloadDialog.cs                   ★ 新增：OCR 引擎下载进度对话框（进度条 + 取消）
 │   ├── ConfirmDialog.cs                    ★ 新增：统一深色主题确认弹窗（通用删除/清空确认）
 │   │
 │   ├── Tools/                              网易云音乐悬浮窗子模块
@@ -68,7 +75,7 @@ Toolbox/
 │   │   │   └── NowPlayingInfo.cs           当前播放信息模型
 │   │   ├── Services/
 │   │   │   ├── SMTCListener.cs             SMTC 监听器：Windows 原生 API 监听媒体，陈旧封面重试（6 次退避）+ 启动退避重试（5/15/30s）+ 30s 看门狗自愈 + 休眠唤醒重建
-│   │   │   ├── MusicFloatWindowManager.cs  悬浮窗管理器（单例）：创建/切换透明/毛玻璃窗口 + 播放控制转发 + 位置复位
+│   │   │   ├── MusicFloatWindowManager.cs  悬浮窗管理器（单例）：实现 Core 的 IMusicFloatController，创建/切换透明/毛玻璃窗口 + 播放控制转发 + 位置复位
 │   │   │   └── EdgeDockService.cs          贴边自动缩入服务：状态机（Free→Docking→Docked→Expanding→Expanded）
 │   │   └── Views/
 │   │       ├── AcrylicMusicWindow.xaml     毛玻璃悬浮窗（WindowChrome + DWM Acrylic）
@@ -86,10 +93,13 @@ Toolbox/
 │   │   ├── InstalledSoftware.cs            已安装软件数据模型
 │   │   └── SortMode.cs                     排序模式枚举 + 扩展方法
 │   │
-│   └── Helpers/
-│       ├── DwmHelper.cs                    DWM 背景效果帮助类（Mica/Acrylic/圆角/深色模式/纯模糊）
+│   └── Helpers/                            （命名空间统一为 Toolbox.Plugins.Helpers；DwmHelper 已迁入 Core）
 │       ├── MonitorHelper.cs                多屏工作区查询（MonitorFromWindow + GetMonitorInfo）
-│       └── ClickThroughHelper.cs           ★ 新增：悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现）
+│       ├── ClickThroughHelper.cs           ★ 新增：悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现）
+│       ├── OcrHelper.cs                    ★ 新增：Windows 内置 OCR 引擎封装（离线识别）
+│       ├── PaddleOcrWrapper.cs             ★ 新增：PaddleOCR 高精度引擎包装（原生库加载/释放）
+│       ├── EngineDownloader.cs             ★ 新增：OCR 引擎/模型下载、校验与解压
+│       └── ImageFileHelper.cs              ★ 新增：图片文件校验与格式判断
 │
 ├── Toolbox.Tests/                          单元测试项目
 │   ├── Toolbox.Tests.csproj
@@ -105,11 +115,12 @@ Toolbox/
 │
 └── docs/
     ├── music-float-window-structure.md          悬浮窗结构说明
-    ├── music-float-window-edge-dock-design.md  贴边缩入设计文档
-    ├── 按钮亚克力毛玻璃改造方案.md               主窗口 Acrylic + 按钮毛玻璃方案
     ├── changelog-2026-07-21.md                  更新日志
     ├── TOOL_DEVELOPMENT_GUIDELINE.md            ★ 新增：新工具开发规范文档
-    └── plans/                                  各类功能设计文档
+    ├── ROBUSTNESS_PLAN.md                       鲁棒性加固方案
+    ├── EDGE_GLOW_REGRESSION_CHECKLIST.md        边缘发光模块回归检查清单
+    ├── plans/                                   已清空（历史设计文档归档至 待删除/plans/）
+    └── 待删除/                                  归档区（music-float-window-edge-dock-design.md 等已归档；按钮亚克力毛玻璃改造方案.md 已删除）
 ```
 
 ### 行数概览
@@ -118,21 +129,26 @@ Toolbox/
 |------|:----:|------|
 | App.xaml | 558 | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6） |
 | App.xaml.cs | 146 | 单实例互斥 + 三层全局异常捕获 + crash.log（2MB 轮转存档） |
-| MainWindow.xaml | 486 | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
-| MainWindow.xaml.cs | 679 | DWM/Acrylic 内联实现（Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 鼠标光晕 + 边缘发光集成 |
-| Win32Helper.cs | 167 | 圆角/Acrylic/深色模式/消息钩子 P/Invoke |
+| MainWindow.xaml | 496 | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
+| MainWindow.xaml.cs | 691 | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 鼠标光晕 + 边缘发光集成 |
+| Win32Helper.cs | 143 | Win32 业务封装（圆角/深色模式/帧扩展/消息钩子；P/Invoke 统一在 Core 的 Win32Native） |
 | | | |
 | **主程序 Helpers** | | |
 | SystemTrayHelper.cs | 237 | 纯 Win32 系统托盘 |
 | CustomScrollBar.cs | 318 | 自定义深色滚动条 |
 | TransitioningContentControl.cs | 53 | 淡入过渡控件 |
 | TextBoxContextMenuHelper.cs | 91 | ★ 新增：TextBox 主题右键菜单 |
-| ToolRegistry.cs | 117 | 三策略插件加载 |
+| ToolRegistry.cs | 85 | 单策略插件加载（Assembly.Load）+ 反射注册悬浮窗控制器 |
 | | | |
 | **Toolbox.Core（★ 2026-07 大幅扩展）** | | |
 | Helpers/EdgeGlowLayer.cs | 472 | ★ 新增：控件边缘发光引擎（从 MainWindow 迁入 Core；复选框等小控件包络+亮弧双半径 2.7x） |
+| Helpers/DwmHelper.cs | 242 | ★ 自插件层迁入：DWM 背景效果帮助类（SetBackdrop / EnableAcrylicBlur / 圆角 / 深色模式 / 纯模糊），含 BackdropType / CornerPreference 枚举 |
+| Helpers/Win32Native.cs | 90 | ★ 新增：全项目唯一 Win32 P/Invoke 声明处 |
 | Models/GlowCardMarker.cs | 24 | ★ 新增：卡片发光标记附加属性 |
 | Models/ThemeColors.cs | 28 | ★ 新增：统一主题色常量 |
+| Models/FloatSizeMode.cs | 4 | ★ 自插件层移入：悬浮窗大小模式枚举（Large / Compact） |
+| Models/IMusicFloatController.cs | 35 | ★ 新增：悬浮窗控制器接口 |
+| Models/MusicFloatControllerHost.cs | 20 | ★ 新增：悬浮窗控制器静态宿主 |
 | Controls/ThemedMenuWindow.cs | 190 | ★ 新增：深色主题弹出菜单 |
 | Services/JsonSettingsFile.cs | 68 | ★ 新增：泛型 JSON 设置文件读写（原子写入 + .bak 备份回落） |
 | MainViewModel.cs | 179 | 工具分组 + 搜索过滤 + UI 缓存 |
@@ -153,7 +169,12 @@ Toolbox/
 | SMTCListener.cs | 582 | SMTC 监听器（★ 加固：启动退避重试 + 30s 看门狗自愈 + 休眠唤醒重建） |
 | MusicFloatWindowManager.cs | 514 | 悬浮窗管理器（★ 新增：播放控制转发 + 位置复位 API） |
 | PasswordGeneratorTool.cs | 563 | ★ 新增：密码生成器 |
-| DwmHelper.cs | 301 | DWM 帮助类（含设置/禁用背景 / 纯模糊 / 帧扩展） |
+| OcrTool.cs | 611 | ★ 新增：截图识字（Windows 内置 OCR 离线识别 + 可选 PaddleOCR 高精度引擎） |
+| DownloadDialog.cs | 210 | ★ 新增：OCR 引擎下载进度对话框 |
+| OcrHelper.cs | 89 | ★ 新增：Windows 内置 OCR 引擎封装 |
+| PaddleOcrWrapper.cs | 189 | ★ 新增：PaddleOCR 高精度引擎包装 |
+| EngineDownloader.cs | 275 | ★ 新增：OCR 引擎/模型下载、校验与解压 |
+| ImageFileHelper.cs | 83 | ★ 新增：图片文件校验与格式判断 |
 | NeteaseMusicTool.cs | 317 | 悬浮窗工具面板（★ 新增：游戏模式设置） |
 | SoftwareUninstallService.cs | 284 | 卸载服务 |
 | NetworkInfoTool.cs | 298 | ★ 新增：网络信息工具 |
@@ -174,19 +195,20 @@ Toolbox/
 ## 项目间依赖关系
 
 ```
-Toolbox ──→ Toolbox.Core                （编译期 ProjectReference，需要 ITool 接口）
-         ──→ Toolbox.Plugins            （编译期 ProjectReference，单文件发布嵌入）
-         ──→ plugins/Toolbox.Plugins.dll（运行时后备加载，通过 Assembly.LoadFrom）
+Toolbox ──→ Toolbox.Core                （编译期 ProjectReference，需要 ITool 接口 + Core 基础设施）
+         ──→ Toolbox.Plugins            （编译期 ProjectReference，单文件发布嵌入；运行时经 ToolRegistry 反射加载）
 
-Toolbox.Plugins ──→ Toolbox.Core        （编译期 ProjectReference，实现 ITool + 共用 EdgeGlowLayer/ThemeColors）
+Toolbox.Plugins ──→ Toolbox.Core        （编译期 ProjectReference，实现 ITool / IMusicFloatController + 共用 EdgeGlowLayer/ThemeColors/DwmHelper/Win32Native）
 
 Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
                ──→ Toolbox.Plugins      （测试插件层服务）
 ```
 
-**关键设计**：Toolbox.csproj 有 Toolbox.Plugins 的 ProjectReference，但插件 DLL 仍通过 `ToolRegistry` 反射扫描加载，而非直接类型引用。单文件发布时 .NET 宿主将嵌入式程序集提取到 temp 目录注册到默认加载上下文。
+**关键设计**：Toolbox.csproj 有 Toolbox.Plugins 的 ProjectReference，但插件 DLL 仍通过 `ToolRegistry` 反射扫描加载，而非直接类型引用。单文件发布时 .NET 宿主将嵌入式程序集提取到 temp 目录注册到默认加载上下文。加载策略唯一（2026-07-31 收敛）：`Assembly.Load` 经默认加载上下文加载——ProjectReference + 编译期静态绑定保证插件 DLL 必在主输出目录且登记于 deps.json，故无需（也已删除）plugins/ 目录与基目录两条 `LoadFrom` 回退路径。插件加载成功后 `ToolRegistry` 反射获取 `MusicFloatWindowManager` 并注册至 `MusicFloatControllerHost`，主程序经 `Current` 控制悬浮窗，不直接引用插件类型。
 
 **2026-07 架构变化**：`EdgeGlowLayer` 从 `MainWindow.xaml.cs` 内联实现迁移至 `Toolbox.Core/Helpers/EdgeGlowLayer.cs`，供主窗口与插件悬浮窗共用。新增 `ThemedMenuWindow`、`ThemeColors`、`JsonSettingsFile` 等基础设施至 Core 层，增强核心层复用能力。
+
+**2026-07-31 架构变化**：`DwmHelper` 自插件层整体迁入 `Toolbox.Core/Helpers/DwmHelper.cs`（含 BackdropType / CornerPreference 枚举），主窗口 Acrylic 背景改经 Core 的 DwmHelper 实现；全部 Win32 P/Invoke 收拢于 `Toolbox.Core/Helpers/Win32Native.cs`（唯一声明处），Win32Helper/DwmHelper/ClickThroughHelper/SystemTrayHelper/MainWindow 中的重复声明已删；插件加载收敛为单一策略（`Assembly.Load`，删除 plugins/ 目录与基目录两条 `LoadFrom` 回退）；新增悬浮窗控制器抽象（`IMusicFloatController` + `MusicFloatControllerHost`，主程序不再直接引用插件类型，`FloatSizeMode` 枚举移入 Core）；新增截图识字 OCR 工具（`OcrTool` + Helpers/OcrHelper、PaddleOcrWrapper、EngineDownloader、ImageFileHelper + DownloadDialog）；插件层命名空间统一为 `Toolbox.Plugins.*`（Helpers/Services/Models/Controls），工具类保留 `Toolbox.Tools.*`。
 
 **2026-07 鲁棒性加固**（详见 `docs/ROBUSTNESS_PLAN.md`）：`JsonSettingsFile` 升级为原子写入（.tmp→替换）+ `.bak` 备份回落，设置/密码记录不再因断电写半截而丢光；crash.log 增加 2MB 轮转；`SMTCListener` 增加启动退避重试（5/15/30s）、30s 看门狗自愈与休眠唤醒重建，网易云重启/系统休眠后悬浮窗可自动恢复；测试套件修复既有失败恢复 80/80 全绿 baseline。EdgeGlowLayer 改动前必读 `docs/EDGE_GLOW_REGRESSION_CHECKLIST.md`（该模块历史回归率最高）。
 
@@ -203,6 +225,9 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 - `ThemeColors` 统一颜色常量，供新工具使用避免硬编码
 - `ThemedMenuWindow` 深色圆角主题弹出菜单（投影 + 屏幕边界吸附）
 - `JsonSettingsFile` 泛型 JSON 设置文件读写（原子写入 .tmp→替换，旧文件留 `.bak`；主文件损坏时 `Load` 自动回落 `.bak`）
+- `DwmHelper` DWM 背景效果封装（Mica/Acrylic/圆角/深色模式/纯模糊，含 `BackdropType`/`CornerPreference` 枚举），自插件层整体迁入，主窗口 Acrylic 背景经此实现
+- `Win32Native` 全项目唯一 Win32 P/Invoke 声明处，Win32Helper/DwmHelper 等仅保留业务封装
+- `IMusicFloatController` + `MusicFloatControllerHost`：悬浮窗控制器抽象与静态宿主，主程序经 `Current` 控制悬浮窗，不编译期依赖插件类型；`FloatSizeMode` 大小模式枚举随迁入 Core
 - 无 UI 依赖，纯抽象，被主项目和插件项目共同引用
 
 ### 层 2：Toolbox.Plugins（工具实现层）
@@ -210,7 +235,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 - 每个工具一个 `.cs` 文件实现 `ITool`，`CreateContent()` 返回 `UIElement`
 - 独立编译为 class library，反射加载
 - **增删工具不修改主项目代码**，仅重新编译插件
-- 已实现 9 个工具（7 个原生 + 2 个新增） + 1 个完整悬浮窗子模块
+- 已实现 11 个工具 + 1 个完整悬浮窗子模块 + 1 个 OCR 引擎子系统（截图识字：Windows 内置 OCR + 可选 PaddleOCR 高精度引擎，首次使用自动下载模型）
 - 子模块（悬浮窗）进一步分层：Views / Controls / Services / Models / Helpers
 - `Directory.Build.props` 处理 `wpftmp` 临时编译项目的重复生成问题
 - `ClickThroughHelper` 游戏模式点击穿透共享实现
@@ -222,7 +247,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 - 主窗口 UI：Acrylic 毛玻璃背景 → 自定义标题栏 + 左侧手风琴导航 + 右侧 TransitioningContentControl 淡入过渡 + 设置浮层 + Canvas HaloLayer + EdgeGlowLayer
 - 工具标题区间距收紧：描述→分隔线 10px，分隔线→内容 12px（紧贴内容）
 - 关闭按钮支持最小化到系统托盘（纯 Win32，不依赖 WinForms）
-- 启动时根据设置自动打开悬浮窗
+- 启动时根据设置经 `MusicFloatControllerHost.Current` 自动打开悬浮窗（控制器未注册时静默跳过）；关闭时经 `Current?.Close()` 释放 SMTC 监听
 - **v1.2**（状态栏显示）
 
 #### 半透明背景体系（Acrylic 毛玻璃配套，004db07）
@@ -264,7 +289,7 @@ App.xaml → App.xaml.cs OnStartup:
   Loaded 事件：
     1. WindowInteropHelper 获取 HWND
     2. Win32Helper.EnableRoundedCorners(hwnd)              // 圆角 (DWMWCP_ROUND)
-    3. EnableAcrylicBackdrop(hwnd)                         // Acrylic 毛玻璃（内联实现）
+    3. EnableAcrylicBackdrop()                             // Acrylic 毛玻璃（经 Core 的 DwmHelper 封装）
        - Win11 22H2+: DWMWA_SYSTEMBACKDROP_TYPE=38, Acrylic=3
        - Win10: ACCENT_ENABLE_ACRYLICBLURBEHIND=4, tint=0x661A1A1A
     4. Win32Helper.EnableDarkMode(hwnd)                    // 沉浸式深色模式
@@ -272,16 +297,15 @@ App.xaml → App.xaml.cs OnStartup:
     6. HwndSource.AddHook(Win32Helper.WndProc)             // WM_NCCALCSIZE + WM_ERASEBKGND 拦截
     7. HwndTarget.BackgroundColor = Transparent            // 交换链透明
     8. Dispatcher.BeginInvoke: UpdateCornerMask() + InitGroupHeights() + InitHighlight()
-    9. 若 AutoOpenFloatWindow → 打开悬浮窗（加载 AudioflowSettings）
+    9. 若 AutoOpenFloatWindow → 经 MusicFloatControllerHost.Current 打开悬浮窗（加载 AudioflowSettings，控制器未注册则跳过）
 
   MainWindow 构造函数末尾：
     10. InitHalo() — 初始化鼠标光晕系统 + EdgeGlowLayer（CompositionTarget.Rendering 逐帧轮询）
 
 → MainViewModel 构造函数:
   1. ToolRegistry.DiscoverTools()
-     → TryLoadFromDefaultContext()    // 单文件发布：Assembly.Load("Toolbox.Plugins")
-     → TryLoadFromPluginsDir()        // plugins/Toolbox.Plugins.dll
-     → TryLoadFromBaseDir()           // 调试目录直接加载
+     → TryLoadFromDefaultContext()    // 唯一策略：Assembly.Load("Toolbox.Plugins")，默认加载上下文
+     → 反射获取 MusicFloatWindowManager → MusicFloatControllerHost.Register（悬浮窗控制器接线）
      → 反射扫描 ITool 实现 → 实例化 → 按 Category 分组
   2. BuildGroups()：按 ToolCategory.All 顺序 + "系统维护"默认展开
   3. ApplyFilter()：初始化可见分组
@@ -372,6 +396,8 @@ MusicFloatWindowManager (单例)
          窗口创建即实例化，切换背景类型或尺寸时替换窗口（非原地切换）
 ```
 
+**控制器抽象（2026-07-31）**：`MusicFloatWindowManager` 实现 Core 的 `IMusicFloatController`；`ToolRegistry.DiscoverTools()` 加载插件后经反射获取单例并注册到 `MusicFloatControllerHost`。主程序（MainWindow）通过 `MusicFloatControllerHost.Current` 显示/隐藏/关闭/切换毛玻璃/大小模式/锁定/复位悬浮窗，不再直接引用插件类型；插件加载失败时控制器为 null，静默跳过。
+
 **窗口替换模式**：切换毛玻璃/透明或大小模式时，保存位置 → 创建新窗口 → 显示新窗口 → 关闭旧窗口，避免 DWM 渲染问题。
 
 **后台闪退全链路防护**（004db07）：
@@ -408,7 +434,7 @@ MusicFloatWindowManager (单例)
 
 ### 层 2 — EdgeGlowLayer（控件边缘发光叠加层）
 
-**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`（460 行），`FrameworkElement` 子类。2026-07-21 从 `MainWindow.xaml.cs` 内联实现迁移至 Core 层。
+**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`（472 行），`FrameworkElement` 子类。2026-07-21 从 `MainWindow.xaml.cs` 内联实现迁移至 Core 层。
 
 **基本参数**：
 - `GlowRadius = 120px`（发光影响范围）
@@ -419,7 +445,7 @@ MusicFloatWindowManager (单例)
 
 **核心机制**：
 
-1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `models:GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 7 处：ShutdownTool(2) / RestartExplorer(1) / Screensaver(1) / QrCode(2) / JunkCleaner 主列表 / 设置页卡片 / NeteaseMusicTool 设置卡片。
+1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `models:GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 10 处（SetIsGlowCard 调用点）：ShutdownTool / Screensaver / QuickSystemTool / HomeDashboardTool / JunkCleaner 主列表 / QrCodeTool / NetworkInfoTool / PasswordGeneratorTool / OcrTool / NeteaseMusicTool 设置卡片。
    递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，若四角半径不同（如标题栏按钮 0,0,6,6），用 `StreamGeometry` 逐角构造异径圆角矩形描边，逐像素贴合控件玻璃边缘。
 
 2. **径向渐变描边**：描边用 `RadialGradientBrush`（`MappingMode=Absolute`，中心=光标位置）。10 段色标，`alpha × (1-offset)^0.6 × 1.3`，近光心一端形成过曝平台，背光侧完全熄灭——模拟灯光扫过物体。`MaxLitRadius=100px`，大卡片照亮弧段不会超过此范围。
@@ -507,6 +533,7 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 | **网络信息** | `NetworkInfoTool.cs` | 🌐 网络与开发 | 298 | **★ 新增**：IP/MAC/网关/DNS + 公网 IP 异步获取 + 逐项复制 |
 | 软件卸载管理器 | `SoftwareUninstallTool.cs` | 📁 文件管理 | 608 | 注册表扫描 + 图标提取 + 双击卸载 |
 | **密码生成器** | `PasswordGeneratorTool.cs` | 🔤 文本与数据 | 563 | **★ 新增**：名字种子 SHA256 确定性生成 + 长度/字符集选择 + 历史记录 |
+| **截图识字** | `OcrTool.cs` | 🔤 文本与数据 | 611 | **★ 新增**：导入截图/图片离线提取文字（文件选择 / 拖入虚线框 / 粘贴，Windows 内置 OCR 不上传网络；可选 PaddleOCR 高精度引擎，首次使用自动下载） |
 | 网易云音乐悬浮窗 | `NeteaseMusicTool.cs` | 🎵 媒体与娱乐 | 317 | 胶囊开关 + 模式切换 + 悬浮窗设置面板（含游戏模式） |
 
 ## ITool 接口规范
@@ -568,10 +595,10 @@ public static class ToolCategory
 
 ### Acrylic 背景（替代 Mica，004db07）
 
-`MainWindow.xaml.cs` 内联实现（非 Win32Helper），支持两套 API：
+`MainWindow.xaml.cs` 的 `EnableAcrylicBackdrop()` 经 `Toolbox.Core.Helpers.DwmHelper` 实现（DwmHelper 自插件层整体迁入 Core，此处仅保留 Win11 版本门槛判断），支持两套 API：
 
-- **Win11 22H2+**（Build ≥ 22000）：`DWMWA_SYSTEMBACKDROP_TYPE = 38`，`Acrylic = 3`，原生 DWM API
-- **Win10 降级**：`ACCENT_ENABLE_ACRYLICBLURBEHIND = 4`，`GradientColor = 0x661A1A1A`（40% tint），通过 `DwmSetWindowAttribute(hwnd, 19, ...)` 设置
+- **Win11 22H2+**（Build ≥ 22000）：`DwmHelper.SetBackdrop(this, BackdropType.Acrylic)`，`DWMWA_SYSTEMBACKDROP_TYPE = 38`，`Acrylic = 3`，原生 DWM API
+- **Win10 降级**：`DwmHelper.EnableAcrylicBlur(this, 0x661A1A1A)`，`SetWindowCompositionAttribute` + `ACCENT_ENABLE_ACRYLICBLURBEHIND = 4`，`GradientColor = 0x661A1A1A`（40% tint）
 
 ### CornerMask 四角遮盖（全窗口内矩形方案）
 
@@ -637,6 +664,6 @@ public class MyNewTool : ITool
 }
 ```
 
-编译后放入 `plugins/`，重启即可自动发现。
+重新编译主项目后重启即可自动发现（ProjectReference 编译期静态绑定，插件 DLL 随主输出目录发布；不再有 plugins/ 目录回退加载）。
 
 新工具开发请参考 `docs/TOOL_DEVELOPMENT_GUIDELINE.md`，包含详细规范。
