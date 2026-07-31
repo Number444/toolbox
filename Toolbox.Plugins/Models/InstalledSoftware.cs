@@ -1,6 +1,6 @@
 using System.Windows.Media;
 
-namespace Toolbox.Models;
+namespace Toolbox.Plugins.Models;
 
 /// <summary>
 /// 已安装软件的数据模型

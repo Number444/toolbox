@@ -5,7 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using Toolbox.Helpers;
+using Toolbox.Plugins.Helpers;
 using Toolbox.Models;
 
 namespace Toolbox.Tools;

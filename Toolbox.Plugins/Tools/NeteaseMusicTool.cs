@@ -4,10 +4,10 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Toolbox.Models;
+using Toolbox.Core.Models;
 using Toolbox.Core.Services;
 using Toolbox.Tools.Views;
-using Toolbox.Services;
-using Toolbox.Controls;
+using Toolbox.Plugins.Services;
 
 namespace Toolbox.Tools;
 

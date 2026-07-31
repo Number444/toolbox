@@ -6,7 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Toolbox.Tools.Services;
 
-namespace Toolbox.Controls;
+namespace Toolbox.Plugins.Controls;
 
 /// <summary>
 /// 悬浮窗贴边后的触发条控件。

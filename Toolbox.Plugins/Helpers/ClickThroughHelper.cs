@@ -3,6 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using Toolbox.Core.Helpers;
+using static Toolbox.Core.Helpers.Win32Native;
 
 namespace Toolbox.Tools.Helpers
 {
@@ -103,11 +105,6 @@ namespace Toolbox.Tools.Helpers
 
         [DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-            int X, int Y, int cx, int cy, uint uFlags);
 
         /// <summary>按 IsClickThrough 切换扩展样式（layered 窗口含 WS_EX_TRANSPARENT）。</summary>
         private static void ApplyStyles(Window window, State state)

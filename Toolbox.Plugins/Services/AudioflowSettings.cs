@@ -4,7 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using Toolbox.Core.Services;
 
-namespace Toolbox.Services;
+namespace Toolbox.Plugins.Services;
 
 /// <summary>
 /// 网易云音乐悬浮窗独立设置

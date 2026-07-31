@@ -1,5 +1,6 @@
 using Toolbox.Models;
-using Toolbox.Services;
+using Toolbox.Plugins.Models;
+using Toolbox.Plugins.Services;
 using Toolbox.Tools;
 using Xunit;
 

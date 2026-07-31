@@ -1,4 +1,4 @@
-<UserControl x:Class="Toolbox.Controls.DockTriggerBar"
+<UserControl x:Class="Toolbox.Plugins.Controls.DockTriggerBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="14"

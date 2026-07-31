@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Toolbox.Controls;
+using Toolbox.Core.Models;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Views;
 using Xunit;
@@ -567,7 +567,7 @@ public class NeteaseMusicToolTests
             throw new InvalidOperationException(
                 $"STA thread test failed: {threadException.Message}", threadException);
 
-        Assert.Equal(Toolbox.Controls.FloatSizeMode.Large, sizeMode);
+        Assert.Equal(FloatSizeMode.Large, sizeMode);
     }
 
     [Fact]

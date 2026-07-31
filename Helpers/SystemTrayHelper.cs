@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Toolbox.Core.Helpers;
+using static Toolbox.Core.Helpers.Win32Native;
 
 namespace Toolbox.Helpers;
 
@@ -65,13 +67,7 @@ public sealed class SystemTrayHelper : IDisposable
     private static extern IntPtr DestroyIcon(IntPtr hIcon);
 
     [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out POINT lpPoint);
-
-    [DllImport("user32.dll")]
     private static extern IntPtr CopyIcon(IntPtr hIcon);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int X; public int Y; }
 
     private IntPtr _hIcon = IntPtr.Zero;
 

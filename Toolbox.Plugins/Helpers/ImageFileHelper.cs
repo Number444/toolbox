@@ -2,7 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
 
-namespace Toolbox.Helpers;
+namespace Toolbox.Plugins.Helpers;
 
 /// <summary>
 /// 图片文件共享辅助类 —— 图片扩展名判断、文件加载、剪贴板图片/文件提取。

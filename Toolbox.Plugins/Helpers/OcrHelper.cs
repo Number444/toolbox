@@ -5,7 +5,7 @@ using Windows.Globalization;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 
-namespace Toolbox.Helpers;
+namespace Toolbox.Plugins.Helpers;
 
 /// <summary>
 /// 本地 OCR 文字识别封装 —— 调用 Windows 内置 Windows.Media.Ocr 引擎（Win10 1809+），

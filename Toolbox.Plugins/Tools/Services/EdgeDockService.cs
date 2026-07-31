@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Toolbox.Controls;
+using Toolbox.Plugins.Controls;
 using Toolbox.Tools.Helpers;
 
 namespace Toolbox.Tools.Services;

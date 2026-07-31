@@ -4,7 +4,9 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Toolbox.Controls;
+using Toolbox.Core.Helpers;
+using Toolbox.Core.Models;
+using Toolbox.Plugins.Controls;
 using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Services;
 

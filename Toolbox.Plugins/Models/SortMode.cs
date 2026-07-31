@@ -1,4 +1,4 @@
-namespace Toolbox.Models;
+namespace Toolbox.Plugins.Models;
 
 /// <summary>
 /// 软件列表排序模式

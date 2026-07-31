@@ -9,10 +9,11 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Interop;
-using Toolbox.Tools.Helpers;
+using Toolbox.Core.Helpers;
+using Toolbox.Core.Models;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Services;
-using Toolbox.Controls;
+using Toolbox.Plugins.Controls;
 
 namespace Toolbox.Tools.Views;
 

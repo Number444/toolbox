@@ -1,4 +1,4 @@
-using Toolbox.Helpers;
+using Toolbox.Plugins.Helpers;
 using Xunit;
 
 namespace Toolbox.Tests;

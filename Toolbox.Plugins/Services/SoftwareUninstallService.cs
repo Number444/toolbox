@@ -7,9 +7,9 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using Toolbox.Models;
+using Toolbox.Plugins.Models;
 
-namespace Toolbox.Services;
+namespace Toolbox.Plugins.Services;
 
 /// <summary>
 /// 已安装软件读取与卸载执行服务

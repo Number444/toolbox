@@ -1,18 +1,15 @@
 using System.Runtime.InteropServices;
+using Toolbox.Core.Helpers;
+using static Toolbox.Core.Helpers.Win32Native;
 
 namespace Toolbox.Helpers;
 
 /// <summary>
-/// Win32 API P/Invoke —— 用于启用 Windows 11 圆角和 Mica 材质
+/// Win32 API 封装 —— 用于启用 Windows 11 圆角和 Mica 材质
+/// （P/Invoke 声明统一在 Toolbox.Core.Helpers.Win32Native，本类只保留业务封装）
 /// </summary>
 public static class Win32Helper
 {
-    // DWM 窗口属性常量
-    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-    private const int DWMWA_BORDER_COLOR = 34;
-
     // 圆角类型（官方值：0=Default, 1=DoNotRound, 2=Round, 3=RoundSmall）
     private const int DWMWCP_ROUND = 2;
     private const int DWMWCP_ROUNDSMALL = 3;
@@ -21,13 +18,6 @@ public static class Win32Helper
     private const int DWMSBT_MAINWINDOW = 2;
     private const int DWMSBT_TABBEDWINDOW = 4;
     private const int DWMSBT_ACRYLIC = 3;
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(
-        IntPtr hwnd,
-        int dwAttribute,
-        ref int pvAttribute,
-        int cbAttribute);
 
     /// <summary>启用 Windows 11 圆角窗口</summary>
     public static void EnableRoundedCorners(IntPtr hwnd)
@@ -80,20 +70,6 @@ public static class Win32Helper
     }
 
     // ---- 将 DWM 帧扩展到标题栏区域，使 Mica 透入 ----
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(
-        IntPtr hwnd,
-        ref MARGINS pMarInset);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS
-    {
-        public int cxLeftWidth;
-        public int cxRightWidth;
-        public int cyTopHeight;
-        public int cyBottomHeight;
-    }
 
     /// <summary>将 DWM 帧扩展到整个客户区（让 Mica 透入标题栏）</summary>
     public static void ExtendFrameIntoClientArea(IntPtr hwnd)

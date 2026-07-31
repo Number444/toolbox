@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Net.Http;
 using System.Text;
 
-namespace Toolbox.Helpers;
+namespace Toolbox.Plugins.Helpers;
 
 /// <summary>
 /// 自动从 NuGet.org / 百度 CDN / GitHub 下载并组装 PaddleOCR 高精度引擎。

@@ -7,7 +7,8 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using Toolbox.Models;
-using Toolbox.Services;
+using Toolbox.Plugins.Models;
+using Toolbox.Plugins.Services;
 
 namespace Toolbox.Tools;
 

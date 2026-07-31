@@ -11,13 +11,14 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using Toolbox.Core.Controls;
+using Toolbox.Core.Models;
 using Toolbox.Core.Services;
-using Toolbox.Services;
+using Toolbox.Plugins.Services;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Views;
 using Windows.Media.Control;
 
-namespace Toolbox.Controls;
+namespace Toolbox.Plugins.Controls;
 
 /// <summary>
 /// 网易云音乐悬浮窗的内容控件。
@@ -799,6 +800,3 @@ public partial class MusicContentControl : UserControl
         };
     }
 }
-
-/// <summary>悬浮窗大小模式。</summary>
-public enum FloatSizeMode { Large, Compact }

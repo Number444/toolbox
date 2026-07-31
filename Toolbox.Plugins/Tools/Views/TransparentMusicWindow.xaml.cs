@@ -2,7 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
-using Toolbox.Controls;
+using Toolbox.Core.Models;
+using Toolbox.Plugins.Controls;
 using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Services;
 

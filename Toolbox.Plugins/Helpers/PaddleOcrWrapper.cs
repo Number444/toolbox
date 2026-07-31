@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 
-namespace Toolbox.Helpers;
+namespace Toolbox.Plugins.Helpers;
 
 /// <summary>
 /// PaddleOCRSharp 动态加载封装 —— 不依赖任何 NuGet 引用，运行时 Assembly.LoadFrom 加载。
