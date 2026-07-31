@@ -2,8 +2,9 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using static Toolbox.Core.Helpers.Win32Native;
 
-namespace Toolbox.Tools.Helpers
+namespace Toolbox.Core.Helpers
 {
     /// <summary>
     /// DWM 窗口背景效果类型（对应 Windows 11 22H2+ 的 DWMWA_SYSTEMBACKDROP_TYPE）。
@@ -30,79 +31,18 @@ namespace Toolbox.Tools.Helpers
 
     /// <summary>
     /// DWM / User32 模糊/亚克力效果帮助类。
-    /// 
+    ///
     /// 实现原理与 ExplorerBlurMica 一致：
     /// 1. Windows 11 22H2+ → 官方 DWMWA_SYSTEMBACKDROP_TYPE API（最稳定、性能最好）
     /// 2. Windows 10 / 旧版 Win11 → SetWindowCompositionAttribute + ACCENT_POLICY（未文档化但广泛兼容）
     /// </summary>
     public static class DwmHelper
     {
-        #region P/Invoke 常量
-
-        // dwmapi DWM 窗口属性
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-        private const int DWMWA_BORDER_COLOR = 34;
-        private const int DWMWA_CAPTION_COLOR = 35;
-        private const int DWMWA_TEXT_COLOR = 36;
-        private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-        private const int DWMWA_MICA_EFFECT = 1029; // 已废弃，Win11 22H2+ 请用 SYSTEMBACKDROP_TYPE
-
-        // SetWindowCompositionAttribute
-        private const int WCA_ACCENT_POLICY = 19;
-        private const int ACCENT_ENABLE_BLURBEHIND = 3;
-        private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
-        private const int ACCENT_ENABLE_HOSTBACKDROP = 5;
-
-        #endregion
-
-        #region P/Invoke 声明
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmIsCompositionEnabled(out bool enabled);
+        #region SetWindowPos 标志常量
 
         // SetWindowPos flags for SWP_FRAMECHANGED
         private const uint SWP_FRAMECHANGED = 0x0020;
         private const uint SWP_NOMOVE_NOSIZE_NOZORDER_NOACTIVATE = 0x0001 | 0x0002 | 0x0004 | 0x0010;
-
-        [DllImport("user32.dll")]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-            int x, int y, int cx, int cy, uint uFlags);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MARGINS
-        {
-            public int Left;
-            public int Right;
-            public int Top;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct ACCENT_POLICY
-        {
-            public int AccentState;
-            public int AccentFlags;
-            public uint GradientColor;
-            public int AnimationId;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WindowCompositionAttributeData
-        {
-            public int Attribute;
-            public IntPtr Data;
-            public int SizeOfData;
-        }
 
         #endregion
 
@@ -229,7 +169,7 @@ namespace Toolbox.Tools.Helpers
         public static bool ExtendFrameIntoClientArea(Window window)
         {
             var hwnd = new WindowInteropHelper(window).EnsureHandle();
-            var margins = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            var margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
             return DwmExtendFrameIntoClientArea(hwnd, ref margins) == 0;
         }
 

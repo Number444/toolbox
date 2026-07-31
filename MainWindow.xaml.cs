@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,8 +6,11 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Toolbox.Helpers;
+using Toolbox.Core.Helpers;
+using Toolbox.Core.Models;
+using static Toolbox.Core.Helpers.Win32Native;
 using Toolbox.Core.Services;
-using Toolbox.Services;
+using Toolbox.Plugins.Services;
 
 namespace Toolbox;
 
@@ -70,13 +72,14 @@ public partial class MainWindow : Window
                 {
                     var savedMode = AppSettings.Instance.MusicFloatSizeMode;
                     var mode = savedMode == "Compact"
-                        ? Toolbox.Controls.FloatSizeMode.Compact
-                        : Toolbox.Controls.FloatSizeMode.Large;
+                        ? FloatSizeMode.Compact
+                        : FloatSizeMode.Large;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         // 加载悬浮窗独立配置
                         AudioflowSettings.Instance.Load();
-                        var mgr = Toolbox.Tools.Views.MusicFloatWindowManager.Instance;
+                        var mgr = MusicFloatControllerHost.Current;
+                        if (mgr == null) return; // 控制器未注册（插件加载失败）时静默跳过
                         mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
                         mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
                     }), System.Windows.Threading.DispatcherPriority.Background);
@@ -549,7 +552,7 @@ public partial class MainWindow : Window
             Helpers.SystemTrayHelper.Instance.Hide();
 
         // 关闭悬浮窗释放 SMTC 监听
-        Toolbox.Tools.Views.MusicFloatWindowManager.Instance.Close();
+        MusicFloatControllerHost.Current?.Close();
 
         Application.Current.Shutdown();
     }
@@ -671,19 +674,8 @@ public partial class MainWindow : Window
         _glowTargetsLastRebuild = DateTime.MinValue;
     }
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out POINT lpPoint);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
     // ═══════════════════════════════════════════════════════════
-    // DWM Acrylic 毛玻璃效果（复用 Toolbox.Plugins 的 DwmHelper 封装）
+    // DWM Acrylic 毛玻璃效果（复用 Toolbox.Core 的 DwmHelper 封装）
     // ═══════════════════════════════════════════════════════════
 
     /// <summary>启用 Acrylic 毛玻璃背景（保持原版本门槛：Win11 Build≥22000 优先尝试官方背景效果）</summary>
@@ -691,10 +683,10 @@ public partial class MainWindow : Window
     {
         // Win11 (Build 22000+)：尝试官方 DWMWA_SYSTEMBACKDROP_TYPE（需 22H2+，失败自动回落）
         if (Environment.OSVersion.Version.Build >= 22000
-            && Toolbox.Tools.Helpers.DwmHelper.SetBackdrop(this, Toolbox.Tools.Helpers.BackdropType.Acrylic))
+            && DwmHelper.SetBackdrop(this, BackdropType.Acrylic))
             return;
 
         // Win10 / 低版本 Win11 / SetBackdrop 失败：回落 SetWindowCompositionAttribute 方案
-        Toolbox.Tools.Helpers.DwmHelper.EnableAcrylicBlur(this, 0x661A1A1A);
+        DwmHelper.EnableAcrylicBlur(this, 0x661A1A1A);
     }
 }

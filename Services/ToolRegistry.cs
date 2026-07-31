@@ -1,12 +1,15 @@
 using System.Reflection;
+using Toolbox.Core.Models;
 using Toolbox.Models;
 
 namespace Toolbox.Services;
 
 /// <summary>
 /// 工具注册中心 —— 自动扫描 Toolbox.Plugins 程序集中的 ITool 实现。
-/// 适配单文件发布模式：先用 Assembly.Load（默认加载上下文）
-/// 不满足时回退到 Assembly.LoadFrom（常规构建/调试模式）。
+/// 加载策略唯一：Assembly.Load（默认加载上下文）。
+/// 主程序对插件是 ProjectReference + 编译期静态绑定，插件 DLL 必然在主输出目录
+/// 且登记于 deps.json（单文件发布时由宿主提取到默认加载上下文），故 Assembly.Load
+/// 恒成功；若此路径失败则主程序自身已无法启动，其他降级路径无意义（旧策略 2/3 已删）。
 /// </summary>
 public class ToolRegistry
 {
@@ -17,16 +20,19 @@ public class ToolRegistry
     {
         var toolType = typeof(ITool);
 
-        // 尝试三种加载策略，按优先级递减
-        Assembly? pluginAssembly = TryLoadFromDefaultContext()
-                                  ?? TryLoadFromPluginsDir()
-                                  ?? TryLoadFromBaseDir();
+        // 唯一加载策略：通过程序集名称从默认加载上下文加载
+        Assembly? pluginAssembly = TryLoadFromDefaultContext();
 
         if (pluginAssembly == null)
         {
             // 所有加载方式均失败时优雅降级
             return;
         }
+
+        // 注册悬浮窗控制器（反射获取插件实现，保持 ToolRegistry 只编译期依赖 Core）
+        var controllerType = pluginAssembly.GetType("Toolbox.Tools.Views.MusicFloatWindowManager");
+        if (controllerType?.GetProperty("Instance")?.GetValue(null) is IMusicFloatController controller)
+            MusicFloatControllerHost.Register(controller);
 
         // GetTypes() 遇到旧版 DLL（缺少 Category 实现等）会抛出 ReflectionTypeLoadException
         // 取已成功加载的类型子集继续扫描，失败的自动跳过
@@ -61,7 +67,7 @@ public class ToolRegistry
         Tools.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.Ordinal));
     }
 
-    /// <summary>策略 1：通过程序集名称从默认加载上下文加载（单文件发布模式有效）</summary>
+    /// <summary>通过程序集名称从默认加载上下文加载（单文件发布模式有效）</summary>
     private static Assembly? TryLoadFromDefaultContext()
     {
         try
@@ -70,45 +76,6 @@ public class ToolRegistry
             // .NET 宿主将嵌入式程序集提取到 temp 目录并注册到默认加载上下文。
             // Assembly.Load 使用程序集名称通过已注册上下文解析。
             return Assembly.Load("Toolbox.Plugins");
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>策略 2：从运行目录下的 plugins/ 子目录加载（常规构建/调试模式）</summary>
-    private static Assembly? TryLoadFromPluginsDir()
-    {
-        string pluginsDir = System.IO.Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "plugins");
-        string pluginPath = System.IO.Path.Combine(pluginsDir, "Toolbox.Plugins.dll");
-
-        if (!System.IO.File.Exists(pluginPath))
-            return null;
-
-        try
-        {
-            return Assembly.LoadFrom(pluginPath);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>策略 3：从运行目录（BaseDirectory）直接加载（IDE 调试等无 plugins 子目录的场景）</summary>
-    private static Assembly? TryLoadFromBaseDir()
-    {
-        string fallbackPath = System.IO.Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "Toolbox.Plugins.dll");
-
-        if (!System.IO.File.Exists(fallbackPath))
-            return null;
-
-        try
-        {
-            return Assembly.LoadFrom(fallbackPath);
         }
         catch
         {
