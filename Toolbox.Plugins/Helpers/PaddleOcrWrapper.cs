@@ -13,7 +13,7 @@ namespace Toolbox.Helpers;
 public sealed class PaddleOcrWrapper : IDisposable
 {
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool SetDllDirectory(string lpPathName);
+    private static extern bool SetDllDirectory(string? lpPathName);
 
     private dynamic? _engine;
     private bool _loaded;
@@ -183,5 +183,7 @@ public sealed class PaddleOcrWrapper : IDisposable
             _engine = null;
         }
         _loaded = false;
+        // SetDllDirectory 是 kernel32 进程级全局状态，必须恢复默认搜索路径，否则永久污染进程内其他 DLL 解析
+        SetDllDirectory(null);
     }
 }

@@ -341,6 +341,7 @@ public class OcrTool : ITool
         // 启动时检测已下载的引擎文件并初始化（不自动启用高精度模式）
         if (EngineDownloader.IsDownloaded && PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory) == null)
         {
+            _paddleWrapper?.Dispose(); // 防御：CreateContent 若被重复调用，先释放旧实例
             _paddleWrapper = new PaddleOcrWrapper();
             _highPrecisionAvailable = _paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory);
             UpdateEngineUi();
@@ -549,14 +550,15 @@ public class OcrTool : ITool
                 var progress = new Progress<(int percent, string status)>(p =>
                     dialog.ReportProgress(p.percent, p.status));
 
-                // 引擎未加载 → 始终执行完整下载/解压（DownloadAndExtractAsync 自身会清理旧版）
-                await EngineDownloader.DownloadAndExtractAsync(progress, CancellationToken.None);
+                // 引擎未加载 → 始终执行完整下载/解压（DownloadAndExtractAsync 下载成功后整体替换旧引擎）
+                await EngineDownloader.DownloadAndExtractAsync(progress, dialog.Token);
 
                 if (dialog.Cancelled) return;
 
-                // 加载引擎
+                // 加载引擎（先释放旧实例：可能残留加载失败的原生资源，且其 SetDllDirectory 污染需恢复）
                 dialog.ReportProgress(90, "正在初始化识别引擎…");
-                _paddleWrapper ??= new PaddleOcrWrapper();
+                _paddleWrapper?.Dispose();
+                _paddleWrapper = new PaddleOcrWrapper();
 
                 // 先快速检查文件完整性
                 var missing = PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory);
@@ -581,7 +583,8 @@ public class OcrTool : ITool
             }
             catch (OperationCanceledException)
             {
-                // 用户取消，弹窗已在 CancelAndClose 中关闭
+                // 用户取消：CancelAndClose 已触发取消令牌并关闭弹窗；
+                // 引擎按钮/状态文字仍为"下载"初始态，无需额外清理
             }
             catch (InvalidOperationException ex)
             {

@@ -130,7 +130,7 @@ public class ShutdownTool : ITool
 
         shutdownButton.Click += (_, _) =>
         {
-            if (int.TryParse(minuteInput.Text, out int minutes) && minutes > 0)
+            if (int.TryParse(minuteInput.Text, out int minutes) && minutes > 0 && minutes <= 144000)
             {
                 int seconds = minutes * 60;
                 try
@@ -153,7 +153,7 @@ public class ShutdownTool : ITool
             }
             else
             {
-                resultBlock.Text = "⚠️ 请输入有效的正整数";
+                resultBlock.Text = "⚠️ 请输入 1-144000 之间的正整数";
                 resultBlock.Foreground = new SolidColorBrush(ThemeColors.Danger);
             }
         };

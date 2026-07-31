@@ -568,8 +568,18 @@ public class JunkCleanerTool : ITool
                 : "✅ 清理完成，正在重新扫描...";
             _statusText.Foreground = new SolidColorBrush(ThemeColors.Success);
 
+            // 清理阶段已结束：重置 CTS 为新的未取消实例，重新扫描不受清理期间的取消影响；
+            // 同时退出 Cleaning 状态并还原清理按钮，避免重新扫描阶段被误取消
+            _cts = new CancellationTokenSource();
+            _activeOp = ActiveOp.None;
+            if (_cleanButton != null)
+            {
+                _cleanButton.IsEnabled = false;
+                _cleanButton.Content = "🗑️ 清理已选";
+            }
+
             // 重新扫描被清理的类别，刷新显示
-            await RescanCategoriesAsync(selected, token);
+            await RescanCategoriesAsync(selected, _cts.Token);
         }
         catch (OperationCanceledException)
         {

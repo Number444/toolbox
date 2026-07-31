@@ -241,17 +241,26 @@ public static class SoftwareUninstallService
     {
         if (string.IsNullOrWhiteSpace(displayName)) return false;
 
-        // 检查所有注册表路径
-        using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-        foreach (var subPath in RegistryPaths)
+        try
         {
-            if (CheckNameInKey(hklm, subPath, displayName))
+            // 检查所有注册表路径
+            using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            foreach (var subPath in RegistryPaths)
+            {
+                if (CheckNameInKey(hklm, subPath, displayName))
+                    return true;
+            }
+
+            using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+            if (CheckNameInKey(hkcu, RegistryPaths[0], displayName))
                 return true;
         }
-
-        using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
-        if (CheckNameInKey(hkcu, RegistryPaths[0], displayName))
+        catch
+        {
+            // 注册表读取异常（如卸载过程中并发删除键导致的 IOException/Win32Exception）：
+            // 一律视为"仍安装"返回安全值，宁可多轮询一次也不误判为已卸载
             return true;
+        }
 
         return false;
     }

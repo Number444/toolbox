@@ -24,6 +24,13 @@ public sealed class DownloadDialog : Window
     /// <summary>用户是否取消了下载</summary>
     public bool Cancelled { get; private set; }
 
+    /// <summary>下载取消令牌：点"取消"或按 Esc 时触发，由调用方传给下载方法使取消真正生效</summary>
+    public CancellationToken Token => _cts.Token;
+
+    // 不显式 Dispose：取消信号传播期间令牌仍可能被异步下载读取，显式释放有 ObjectDisposedException 竞争；
+    // 该 CTS 无定时器/句柄，随弹窗一起被 GC 回收
+    private readonly CancellationTokenSource _cts = new();
+
     private readonly ProgressBar _progressBar;
     private readonly TextBlock _statusText;
     private readonly TextBlock _resultText;
@@ -195,6 +202,8 @@ public sealed class DownloadDialog : Window
     private void CancelAndClose()
     {
         Cancelled = true;
+        _isComplete = true; // 停止后续进度更新，保持"正在取消…"
+        _cts.Cancel();
         _statusText.Text = "正在取消…";
         Close();
     }

@@ -28,6 +28,7 @@ public class SoftwareUninstallTool : ITool
     private List<InstalledSoftware> _loadedSoftware = new();
     private readonly HashSet<string> _pendingUninstall = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _pollCts;
+    private int _loadVersion; // 列表加载版本号，用于丢弃过期的慢加载结果
 
     private static readonly Color BgHover = Color.FromRgb(0x3A, 0x3A, 0x3A);
     private static readonly Color Accent = Color.FromRgb(0x76, 0xB5, 0x80);
@@ -457,6 +458,8 @@ public class SoftwareUninstallTool : ITool
 
     private async void LoadSoftwareListAsync(TextBlock? loadingBlock = null)
     {
+        int myVersion = ++_loadVersion;
+
         if (loadingBlock != null)
             loadingBlock.Visibility = Visibility.Visible;
 
@@ -467,6 +470,10 @@ public class SoftwareUninstallTool : ITool
         try
         {
             var softwareList = await Task.Run(() => SoftwareUninstallService.GetInstalledSoftware());
+
+            // 版本号防覆盖：期间已有更新的加载发起，本次结果已过期，直接丢弃
+            if (myVersion != _loadVersion)
+                return;
 
             foreach (var sw in softwareList)
             {
@@ -485,6 +492,10 @@ public class SoftwareUninstallTool : ITool
         }
         catch (Exception ex)
         {
+            // 过期的加载即使失败也不再报错，避免旧结果干扰新结果
+            if (myVersion != _loadVersion)
+                return;
+
             _errorBlock.Visibility = Visibility.Visible;
             _errorBlock!.Text = $"⚠️ 读取软件列表失败：{ex.Message}";
         }
@@ -545,25 +556,65 @@ public class SoftwareUninstallTool : ITool
             await PollUntilUninstalled(software, token);
         }
         catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            // 兜底：任何异常都不逃逸 async void，并恢复 UI 状态
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                _pendingUninstall.Remove(software.DisplayName);
+                _errorBlock!.Visibility = Visibility.Visible;
+                _errorBlock!.Text = $"⚠️ 检测卸载状态时出现异常：{software.DisplayName}，请点击刷新确认";
+                _errorBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));
+            });
+        }
     }
 
     private async Task PollUntilUninstalled(InstalledSoftware software, CancellationToken token)
     {
         await Task.Delay(2000, token);
 
+        bool warnedOnce = false;
+
         for (int i = 0; i < 40; i++)
         {
             token.ThrowIfCancellationRequested();
 
-            bool stillExists = await Task.Run(() =>
-                SoftwareUninstallService.IsSoftwareStillInstalled(software.DisplayName), token);
+            bool stillExists;
+            try
+            {
+                stillExists = await Task.Run(() =>
+                    SoftwareUninstallService.IsSoftwareStillInstalled(software.DisplayName), token);
+            }
+            catch (Exception)
+            {
+                // 取消时不吞异常，保证上层正常终止轮询
+                if (token.IsCancellationRequested) throw;
+
+                // 注册表读取异常：视为仍安装继续下一轮，不让异常逃逸导致轮询中断
+                stillExists = true;
+                if (!warnedOnce)
+                {
+                    warnedOnce = true;
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        _errorBlock!.Visibility = Visibility.Visible;
+                        _errorBlock!.Text = $"⚠️ 检测卸载状态时出错，将继续重试：{software.DisplayName}";
+                        _errorBlock.Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xA0, 0x30));
+                    });
+                }
+            }
 
             if (!stillExists)
             {
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    _allSoftware.Remove(software);
-                    _loadedSoftware.Remove(software);
+                    // 刷新后列表元素已是新实例，按引用 Remove 会失败，改为按 DisplayName 匹配移除
+                    var item = _allSoftware.FirstOrDefault(s =>
+                        string.Equals(s.DisplayName, software.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    if (item != null)
+                        _allSoftware.Remove(item);
+                    _loadedSoftware.RemoveAll(s =>
+                        string.Equals(s.DisplayName, software.DisplayName, StringComparison.OrdinalIgnoreCase));
                     _pendingUninstall.Remove(software.DisplayName);
                     _errorBlock!.Visibility = Visibility.Visible;
                     _errorBlock!.Text = $"✅ 卸载成功：{software.DisplayName}";

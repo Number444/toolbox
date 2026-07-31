@@ -109,6 +109,14 @@ public class MusicFloatWindowManager
         if (_cachedInfo.Title != null || _cachedInfo.Artist != null)
             GetContentControl(newWindow).UpdateSongInfo(_cachedInfo);
 
+        // 关闭上一次遗留的窗口（Hide 只隐藏不关闭，重复 Show 会泄漏带活 HWND 的窗口实例）。
+        // 先显示新窗口再关闭旧窗口，避免闪烁（与 ToggleBlur/SetSizeMode 替换路径一致）
+        if (_activeWindow != null)
+        {
+            _activeWindow.LocationChanged -= OnWindowMoved;
+            _activeWindow.Close();
+        }
+
         _activeWindow = newWindow;
         _activeWindow.LocationChanged += OnWindowMoved;
         _isVisible = true;
@@ -434,6 +442,11 @@ public class MusicFloatWindowManager
     public void ResetPosition()
     {
         if (_activeWindow == null || !_isVisible) return;
+
+        // 贴边缩入状态下内容不可见（Opacity=0、IsHitTestVisible=false），直接移动窗口会留下
+        // "内容不可见 + 触发条悬空"的死态。先解除贴边：恢复内容可见、隐藏触发条、回到 Free 态
+        if (_dockService.State != DockState.Free)
+            _dockService.ForceRestore();
 
         var wa = MonitorHelper.GetMonitorWorkAreaDips(_activeWindow);
         _activeWindow.Left = wa.Left + 20;

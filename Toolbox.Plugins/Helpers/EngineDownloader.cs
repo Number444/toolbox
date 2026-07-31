@@ -43,21 +43,47 @@ public static class EngineDownloader
         IProgress<(int percent, string status)> progress, CancellationToken ct)
     {
         var engineDir = DefaultEngineDirectory;
-        var modelsDir = ModelsDirectory;
 
-        // 清理旧版本
-        if (Directory.Exists(engineDir))
+        // 全部先下载/解压到临时目录，全部成功后整体替换旧引擎目录：
+        // 避免下载失败、取消或解压出错时旧引擎已被删除、留下不可用的新引擎。
+        var stagingDir = Path.Combine(Path.GetTempPath(), $"paddleocr_staging_{Guid.NewGuid()}");
+        try
         {
-            progress.Report((0, "清理旧版本…"));
-            try { Directory.Delete(engineDir, true); }
-            catch { throw new IOException("无法清理旧的引擎目录，可能被其他程序占用。"); }
+            await DownloadToStagingAsync(stagingDir, progress, ct);
+
+            // 下载全部成功后才清理旧版本并整体替换
+            progress.Report((90, "清理旧版本…"));
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(engineDir)!);
+                if (Directory.Exists(engineDir))
+                    Directory.Delete(engineDir, true);
+                Directory.Move(stagingDir, engineDir);
+            }
+            catch (Exception ex)
+            {
+                throw new IOException($"无法替换旧的引擎目录：{ex.Message}", ex);
+            }
         }
-        Directory.CreateDirectory(engineDir);
-        Directory.CreateDirectory(modelsDir);
+        finally
+        {
+            // 下载失败/取消/替换失败时清理临时目录；替换成功后目录已移走，此处为空操作
+            try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true); } catch { }
+        }
+
+        progress.Report((100, "安装完成"));
+    }
+
+    /// <summary>把各 NuGet 包下载并解压到临时目录（引擎文件 + 模型），供成功后整体替换</summary>
+    private static async Task DownloadToStagingAsync(
+        string stagingDir, IProgress<(int percent, string status)> progress, CancellationToken ct)
+    {
+        var stagingModelsDir = Path.Combine(stagingDir, "models");
+        Directory.CreateDirectory(stagingModelsDir);
 
         // ===== 第 1 步：下载 PaddleOCRSharp NuGet (0-20%) =====
         // 提取 managed 封装（必须用 net9.0 版本，net40 等依赖 Newtonsoft.Json 而我们不需要）
-        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, engineDir, "PaddleOCRSharp.dll",
+        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingDir, "PaddleOCRSharp.dll",
             entry =>
             {
                 var segs = entry.FullName.Replace('\\', '/').Split('/');
@@ -65,14 +91,14 @@ public static class EngineDownloader
             },
             "引擎封装库", 0, 8, progress, ct);
         // 提取原生 OCR 桥接 DLL（PaddleOCR.dll 是 C++/CLI，依赖 Newtonsoft.Json）
-        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, engineDir, null,
+        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingDir, null,
             entry =>
             {
                 return entry.FullName.Replace('\\', '/').StartsWith("build/ytLib/") && entry.Name.EndsWith(".dll");
             },
             "引擎桥接层", 8, 15, progress, ct);
         // 下载桥接层的 Newtonsoft.Json 依赖（net9.0 的 PaddleOCRSharp.dll 不需要，但 PaddleOCR.dll 需要）
-        await DownloadNuGetDllAsync("Newtonsoft.Json", "13.0.3", engineDir, null,
+        await DownloadNuGetDllAsync("Newtonsoft.Json", "13.0.3", stagingDir, null,
             entry =>
             {
                 var segs = entry.FullName.Replace('\\', '/').Split('/');
@@ -82,7 +108,7 @@ public static class EngineDownloader
             "JSON 依赖", 15, 20, progress, ct);
 
         // ===== 第 2 步：下载 Paddle.Runtime NuGet (20-45%) =====
-        await DownloadNuGetDllAsync("Paddle.Runtime.win_x64", PaddleRuntimeVer, engineDir, null,
+        await DownloadNuGetDllAsync("Paddle.Runtime.win_x64", PaddleRuntimeVer, stagingDir, null,
             entry =>
             {
                 if (!entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
@@ -92,10 +118,8 @@ public static class EngineDownloader
             "推理运行时", 20, 45, progress, ct);
 
         // ===== 第 3 步：提取内置 PP-OCRv5 模型 (45-80%) =====
-        await ExtractBuiltInModelsAsync("PaddleOCRSharp", PaddleOcrSharpVer, modelsDir,
+        await ExtractBuiltInModelsAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingModelsDir,
             "内置模型", 45, 80, progress, ct);
-
-        progress.Report((100, "安装完成"));
     }
 
     /// <summary>从 NuGet 下载管理 DLL 并提取</summary>
@@ -142,6 +166,7 @@ public static class EngineDownloader
             bool found = false;
             foreach (var entry in archive.Entries)
             {
+                ct.ThrowIfCancellationRequested();
                 if (string.IsNullOrEmpty(entry.Name)) continue;
                 if (!filter(entry)) continue;
 
@@ -205,6 +230,7 @@ public static class EngineDownloader
             using var archive = ZipFile.OpenRead(tempPath);
             foreach (var entry in archive.Entries)
             {
+                ct.ThrowIfCancellationRequested();
                 var entryPath = entry.FullName.Replace('\\', '/');
                 if (!entryPath.StartsWith(prefix) || string.IsNullOrEmpty(entryPath))
                     continue;
