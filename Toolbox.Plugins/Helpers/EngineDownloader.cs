@@ -29,7 +29,13 @@ public static class EngineDownloader
         File.Exists(Path.Combine(ModelsDirectory, "ppocr_keys.txt"));
 
     // ====== 下载源 ======
-    private const string NuGetApi = "https://www.nuget.org/api/v2/package";
+    // 按顺序尝试：华为云镜像优先（实测直连 ~5MB/s，无代理时比官方快 50 倍），失败自动回退官方源。
+    // 均为 v3-flatcontainer 格式：{base}/{id小写}/{版本}/{id小写}.{版本}.nupkg
+    private static readonly string[] NuGetSources =
+    {
+        "https://repo.huaweicloud.com/artifactory/api/nuget/v3/nuget-remote",
+        "https://api.nuget.org/v3-flatcontainer",
+    };
     private const string PaddleOcrSharpVer = "6.2.0";
     private const string PaddleRuntimeVer = "3.4.0";
 
@@ -51,8 +57,8 @@ public static class EngineDownloader
         {
             await DownloadToStagingAsync(stagingDir, progress, ct);
 
-            // 下载全部成功后才清理旧版本并整体替换
-            progress.Report((90, "清理旧版本…"));
+            // 下载全部成功后才清理旧版本并整体替换（进度保持单调递增：解压结束为 92）
+            progress.Report((93, "清理旧版本…"));
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(engineDir)!);
@@ -71,7 +77,7 @@ public static class EngineDownloader
             try { if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, true); } catch { }
         }
 
-        progress.Report((100, "安装完成"));
+        progress.Report((95, "引擎文件已就绪"));
     }
 
     /// <summary>把各 NuGet 包下载并解压到临时目录（引擎文件 + 模型），供成功后整体替换</summary>
@@ -81,179 +87,195 @@ public static class EngineDownloader
         var stagingModelsDir = Path.Combine(stagingDir, "models");
         Directory.CreateDirectory(stagingModelsDir);
 
-        // ===== 第 1 步：下载 PaddleOCRSharp NuGet (0-20%) =====
-        // 提取 managed 封装（必须用 net9.0 版本，net40 等依赖 Newtonsoft.Json 而我们不需要）
-        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingDir, "PaddleOCRSharp.dll",
-            entry =>
-            {
-                var segs = entry.FullName.Replace('\\', '/').Split('/');
-                return segs.Length >= 3 && segs[0] == "lib" && segs[1] == "net9.0" && entry.Name == "PaddleOCRSharp.dll";
-            },
-            "引擎封装库", 0, 8, progress, ct);
-        // 提取原生 OCR 桥接 DLL（PaddleOCR.dll 是 C++/CLI，依赖 Newtonsoft.Json）
-        await DownloadNuGetDllAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingDir, null,
-            entry =>
-            {
-                return entry.FullName.Replace('\\', '/').StartsWith("build/ytLib/") && entry.Name.EndsWith(".dll");
-            },
-            "引擎桥接层", 8, 15, progress, ct);
-        // 下载桥接层的 Newtonsoft.Json 依赖（net9.0 的 PaddleOCRSharp.dll 不需要，但 PaddleOCR.dll 需要）
-        await DownloadNuGetDllAsync("Newtonsoft.Json", "13.0.3", stagingDir, null,
-            entry =>
-            {
-                var segs = entry.FullName.Replace('\\', '/').Split('/');
-                return segs.Length >= 3 && segs[0] == "lib" && segs[1] == "netstandard2.0"
-                    && entry.Name == "Newtonsoft.Json.dll";
-            },
-            "JSON 依赖", 15, 20, progress, ct);
-
-        // ===== 第 2 步：下载 Paddle.Runtime NuGet (20-45%) =====
-        await DownloadNuGetDllAsync("Paddle.Runtime.win_x64", PaddleRuntimeVer, stagingDir, null,
-            entry =>
-            {
-                if (!entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                    return false;
-                return entry.FullName.Replace('\\', '/').StartsWith("build/win_x64/");
-            },
-            "推理运行时", 20, 45, progress, ct);
-
-        // ===== 第 3 步：提取内置 PP-OCRv5 模型 (45-80%) =====
-        await ExtractBuiltInModelsAsync("PaddleOCRSharp", PaddleOcrSharpVer, stagingModelsDir,
-            "内置模型", 45, 80, progress, ct);
-    }
-
-    /// <summary>从 NuGet 下载管理 DLL 并提取</summary>
-    private static async Task DownloadNuGetDllAsync(
-        string packageId, string version,
-        string extractDir, string? renameTo,
-        Func<ZipArchiveEntry, bool> filter,
-        string label, int baseMin, int baseMax,
-        IProgress<(int percent, string status)> progress, CancellationToken ct)
-    {
-        var url = $"{NuGetApi}/{packageId}/{version}";
-        progress.Report((baseMin, $"正在连接 {label}…"));
-
-        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
-
-        long totalBytes = resp.Content.Headers.ContentLength ?? -1;
-        using var stream = await resp.Content.ReadAsStreamAsync(ct);
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"nupkg_{Guid.NewGuid()}.zip");
+        // ===== 第 1 步：PaddleOCRSharp 包只下载一次，提取 3 部分 (0-70%) =====
+        // 1a. managed 封装（必须用 net9.0 版本，net40 等依赖 Newtonsoft.Json 而我们不需要）
+        // 1b. 原生 OCR 桥接 DLL（PaddleOCR.dll 是 C++/CLI，依赖 Newtonsoft.Json）
+        // 1c. 内置 PP-OCRv5 模型（build/ytLib/inference/）
+        var ocrSharpZip = await DownloadPackageAsync("PaddleOCRSharp", PaddleOcrSharpVer,
+            "引擎包", 0, 55, progress, ct);
         try
         {
-            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-            {
-                var buffer = new byte[8192];
-                long downloaded = 0;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, ct)) > 0)
-                {
-                    await fs.WriteAsync(buffer.AsMemory(0, read), ct);
-                    downloaded += read;
-                    if (totalBytes > 0)
-                    {
-                        int pct = (int)(downloaded * 100L / totalBytes);
-                        progress.Report((MapPercent(pct, baseMin, baseMax), $"下载 {label}… {pct}%"));
-                    }
-                }
-            }
-
-            ct.ThrowIfCancellationRequested();
-            progress.Report((MapPercent(5, baseMin, baseMax), $"解压 {label}…"));
-
-            using var archive = ZipFile.OpenRead(tempPath);
-            bool found = false;
-            foreach (var entry in archive.Entries)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (string.IsNullOrEmpty(entry.Name)) continue;
-                if (!filter(entry)) continue;
-
-                found = true;
-                string targetPath = renameTo != null
-                    ? Path.Combine(extractDir, renameTo)
-                    : Path.Combine(extractDir, entry.Name);
-
-                Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-                entry.ExtractToFile(targetPath, overwrite: true);
-            }
-
-            if (!found)
-                throw new InvalidOperationException($"未在 {packageId} 包中找到所需文件。");
+            ExtractFromArchive(ocrSharpZip, stagingDir,
+                entry => entry.FullName.Replace('\\', '/') == "lib/net9.0/PaddleOCRSharp.dll",
+                _ => "PaddleOCRSharp.dll",
+                "引擎封装库", 55, 58, progress, ct);
+            ExtractFromArchive(ocrSharpZip, stagingDir,
+                entry => entry.FullName.Replace('\\', '/').StartsWith("build/ytLib/")
+                         && entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase),
+                entry => entry.Name,
+                "引擎桥接层", 58, 62, progress, ct);
+            ExtractFromArchive(ocrSharpZip, stagingModelsDir,
+                entry => entry.FullName.Replace('\\', '/').StartsWith("build/ytLib/inference/"),
+                entry => entry.FullName.Replace('\\', '/').Substring("build/ytLib/inference/".Length),
+                "内置模型", 62, 70, progress, ct);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { File.Delete(ocrSharpZip); } catch { }
+        }
+
+        // ===== 第 2 步：Paddle.Runtime 包 (70-90%) =====
+        var runtimeZip = await DownloadPackageAsync("Paddle.Runtime.win_x64", PaddleRuntimeVer,
+            "推理运行时", 70, 85, progress, ct);
+        try
+        {
+            ExtractFromArchive(runtimeZip, stagingDir,
+                entry => entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                         && entry.FullName.Replace('\\', '/').StartsWith("build/win_x64/"),
+                entry => entry.Name,
+                "推理运行时", 85, 90, progress, ct);
+        }
+        finally
+        {
+            try { File.Delete(runtimeZip); } catch { }
+        }
+
+        // ===== 第 3 步：Newtonsoft.Json 依赖 (90-92%) =====
+        // net9.0 的 PaddleOCRSharp.dll 不需要，但 PaddleOCR.dll 需要
+        var jsonZip = await DownloadPackageAsync("Newtonsoft.Json", "13.0.3",
+            "JSON 依赖", 90, 91, progress, ct);
+        try
+        {
+            ExtractFromArchive(jsonZip, stagingDir,
+                entry => entry.FullName.Replace('\\', '/') == "lib/netstandard2.0/Newtonsoft.Json.dll",
+                _ => "Newtonsoft.Json.dll",
+                "JSON 依赖", 91, 92, progress, ct);
+        }
+        finally
+        {
+            try { File.Delete(jsonZip); } catch { }
         }
     }
 
-    /// <summary>从 PaddleOCRSharp NuGet 包提取内置 PP-OCRv5 模型到 models 目录</summary>
-    private static async Task ExtractBuiltInModelsAsync(
-        string packageId, string version, string modelsDir, string label,
+    /// <summary>
+    /// 下载 NuGet 包到临时 zip 文件。按源列表顺序尝试（华为云镜像优先，失败回退官方）；
+    /// 每个源内网络瞬时失败自动重试（最多 3 次，退避）。
+    /// 返回 zip 路径，调用方负责删除。
+    /// </summary>
+    private static async Task<string> DownloadPackageAsync(
+        string packageId, string version, string label,
         int baseMin, int baseMax,
         IProgress<(int percent, string status)> progress, CancellationToken ct)
     {
-        var url = $"{NuGetApi}/{packageId}/{version}";
-        progress.Report((baseMin, $"正在连接 {label}…"));
+        const int maxRetries = 3;
+        Exception? lastError = null;
 
-        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
-
-        long totalBytes = resp.Content.Headers.ContentLength ?? -1;
-        using var stream = await resp.Content.ReadAsStreamAsync(ct);
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"nupkg_model_{Guid.NewGuid()}.zip");
-        try
+        foreach (var source in NuGetSources)
         {
-            using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-            {
-                var buffer = new byte[8192];
-                long downloaded = 0;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, ct)) > 0)
-                {
-                    await fs.WriteAsync(buffer.AsMemory(0, read), ct);
-                    downloaded += read;
-                    if (totalBytes > 0)
-                    {
-                        int pct = (int)(downloaded * 100L / totalBytes);
-                        progress.Report((baseMin + pct * (baseMax - baseMin) / 200, $"下载 {label}… {pct}%"));
-                    }
-                }
-            }
+            var url = BuildPackageUrl(source, packageId, version);
 
-            ct.ThrowIfCancellationRequested();
-            progress.Report((baseMin + (baseMax - baseMin) / 2, $"解压 {label}…"));
-
-            const string prefix = "build/ytLib/inference/";
-            using var archive = ZipFile.OpenRead(tempPath);
-            foreach (var entry in archive.Entries)
+            for (int attempt = 1; ; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
-                var entryPath = entry.FullName.Replace('\\', '/');
-                if (!entryPath.StartsWith(prefix) || string.IsNullOrEmpty(entryPath))
-                    continue;
-
-                string relativePath = entryPath.Substring(prefix.Length);
-                if (string.IsNullOrEmpty(relativePath)) continue; // 前缀目录自身
-
-                var destPath = Path.Combine(modelsDir, relativePath);
-                // 目录条目或以 / 结尾的视为目录
-                if (string.IsNullOrEmpty(entry.Name) || entryPath.EndsWith("/"))
+                try
                 {
-                    Directory.CreateDirectory(destPath);
+                    progress.Report((baseMin, $"正在连接 {label}…"));
+
+                    using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                    resp.EnsureSuccessStatusCode();
+
+                    long totalBytes = resp.Content.Headers.ContentLength ?? -1;
+                    using var stream = await resp.Content.ReadAsStreamAsync(ct);
+
+                    // 响应体读取单独限时：ResponseHeadersRead 模式下 HttpClient.Timeout 不覆盖体读取，
+                    // 连接挂死后进度会无限冻结；此超时与用户取消并存
+                    using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    readCts.CancelAfter(TimeSpan.FromMinutes(20));
+
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"nupkg_{Guid.NewGuid()}.zip");
+                    try
+                    {
+                        using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+                        {
+                            var buffer = new byte[64 * 1024];
+                            long downloaded = 0;
+                            int lastPct = -1;
+                            int read;
+                            while ((read = await stream.ReadAsync(buffer, readCts.Token)) > 0)
+                            {
+                                await fs.WriteAsync(buffer.AsMemory(0, read), readCts.Token);
+                                downloaded += read;
+                                if (totalBytes > 0)
+                                {
+                                    int pct = (int)(downloaded * 100L / totalBytes);
+                                    if (pct != lastPct) // 节流：百分比变化才上报，避免每 8KB 一次跨线程调用
+                                    {
+                                        lastPct = pct;
+                                        progress.Report((MapPercent(pct, baseMin, baseMax), $"下载 {label}… {pct}%"));
+                                    }
+                                }
+                            }
+                        }
+                        return tempPath;
+                    }
+                    catch
+                    {
+                        try { File.Delete(tempPath); } catch { }
+                        throw;
+                    }
                 }
-                else
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
-                    entry.ExtractToFile(destPath, overwrite: true);
+                    throw; // 用户取消不重试
+                }
+                catch (Exception ex) when (attempt < maxRetries)
+                {
+                    lastError = ex;
+                    progress.Report((baseMin, $"连接失败，正在重试（第 {attempt} 次）…"));
+                    await Task.Delay(TimeSpan.FromSeconds(2 * attempt), ct);
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex; // 当前源重试耗尽，换下一个源
+                    progress.Report((baseMin, $"下载源不可用，正在切换…"));
+                    break;
                 }
             }
         }
-        finally
+
+        throw lastError ?? new HttpRequestException($"所有下载源均失败（{label}）");
+    }
+
+    /// <summary>按 v3-flatcontainer 格式拼接包下载 URL（源与包 ID 大小写无关）</summary>
+    private static string BuildPackageUrl(string source, string packageId, string version)
+    {
+        var id = packageId.ToLowerInvariant();
+        return $"{source}/{id}/{version}/{id}.{version}.nupkg";
+    }
+
+    /// <summary>
+    /// 从已下载的 zip 中按过滤器提取文件到目标目录，报告解压进度。
+    /// selector 把条目的包内路径转换为目标相对路径；目录条目（Name 为空）由调用方过滤器决定。
+    /// 同步执行：调用方保证在后台线程（解压是纯 CPU/磁盘 IO，无异步变体收益）。
+    /// </summary>
+    private static void ExtractFromArchive(
+        string zipPath, string extractDir,
+        Func<ZipArchiveEntry, bool> filter,
+        Func<ZipArchiveEntry, string> selector,
+        string label, int baseMin, int baseMax,
+        IProgress<(int percent, string status)> progress, CancellationToken ct)
+    {
+        using var archive = ZipFile.OpenRead(zipPath);
+
+        // 只取文件条目（目录条目 Name 为空），先落成列表以便报解压进度
+        var candidates = archive.Entries
+            .Where(e => !string.IsNullOrEmpty(e.Name) && filter(e))
+            .ToList();
+        if (candidates.Count == 0)
+            throw new InvalidOperationException($"未在包中找到所需文件（{label}）。");
+
+        progress.Report((MapPercent(0, baseMin, baseMax), $"解压 {label}…"));
+        int done = 0;
+        foreach (var entry in candidates)
         {
-            try { File.Delete(tempPath); } catch { }
+            ct.ThrowIfCancellationRequested();
+
+            var targetPath = Path.Combine(extractDir, selector(entry));
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            entry.ExtractToFile(targetPath, overwrite: true);
+
+            done++;
+            progress.Report((MapPercent(done * 100 / candidates.Count, baseMin, baseMax), $"解压 {label}… {done}/{candidates.Count}"));
         }
     }
 
@@ -263,13 +285,4 @@ public static class EngineDownloader
         int range = baseMax - baseMin;
         return baseMin + subPct * range / 100;
     }
-
-    /// <summary>格式化文件大小</summary>
-    private static string FormatSize(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-        < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
-    };
 }

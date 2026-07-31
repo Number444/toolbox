@@ -36,11 +36,41 @@ public class OcrTool : ITool
     private bool _useHighPrecision;
     private PaddleOcrWrapper? _paddleWrapper;
     private int _ocrVersion; // 防抖/丢弃过期识别结果
+    private bool _downloading; // 引擎下载中，防止重复点击并发下载
 
     public string Name => "截图识字";
     public string Description => "导入截图或照片，离线提取其中的文字（Windows 内置引擎，不上传网络）。";
     public string Category => ToolCategory.Text;
     public string IconGlyph => "🔍";
+
+    /// <summary>
+    /// 卸载高精度引擎并释放原生资源（设置页删除引擎时调用）。
+    /// 释放后引擎按钮恢复"下载"初始态；若 OCR 工具页面尚未创建（控件为空）则仅重置状态。
+    /// </summary>
+    public void UnloadEngine()
+    {
+        _paddleWrapper?.Dispose(); // 释放原生资源 + 恢复 SetDllDirectory 进程级状态
+        _paddleWrapper = null;
+        _highPrecisionAvailable = false;
+        _useHighPrecision = false;
+        if (_engineButton != null)
+            UpdateEngineUi();
+    }
+
+    /// <summary>刷新引擎按钮与状态文字（按当前引擎可用性/模式）</summary>
+    private void UpdateEngineUi()
+    {
+        if (_highPrecisionAvailable)
+        {
+            _engineStatusText!.Text = _useHighPrecision ? "引擎: 高精度模式" : "引擎: Windows 内置";
+            _engineButton!.Content = _useHighPrecision ? "🔄 切换内置引擎" : "🔄 切换高精度引擎";
+        }
+        else
+        {
+            _engineStatusText!.Text = "引擎: Windows 内置";
+            _engineButton!.Content = "📥 下载高精度引擎";
+        }
+    }
 
     public UIElement CreateContent()
     {
@@ -338,13 +368,10 @@ public class OcrTool : ITool
             }
         };
 
-        // 启动时检测已下载的引擎文件并初始化（不自动启用高精度模式）
+        // 启动时检测已下载的引擎文件：UI 先行渲染，引擎在后台线程加载（原生初始化 + 模型读盘耗时数百毫秒至数秒）
         if (EngineDownloader.IsDownloaded && PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory) == null)
         {
-            _paddleWrapper?.Dispose(); // 防御：CreateContent 若被重复调用，先释放旧实例
-            _paddleWrapper = new PaddleOcrWrapper();
-            _highPrecisionAvailable = _paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory);
-            UpdateEngineUi();
+            _ = InitializeEngineAsync();
         }
 
         return _rootGrid;
@@ -516,22 +543,10 @@ public class OcrTool : ITool
             }
         }
 
-        void UpdateEngineUi()
-        {
-            if (_highPrecisionAvailable)
-            {
-                _engineStatusText!.Text = _useHighPrecision ? "引擎: 高精度模式" : "引擎: Windows 内置";
-                _engineButton!.Content = _useHighPrecision ? "🔄 切换内置引擎" : "🔄 切换高精度引擎";
-            }
-            else
-            {
-                _engineStatusText!.Text = "引擎: Windows 内置";
-                _engineButton!.Content = "📥 下载高精度引擎";
-            }
-        }
-
         async void DownloadHighPrecisionEngine()
         {
+            if (_downloading) return; // 下载中防重入：重复点击直接忽略
+
             if (EngineDownloader.IsDownloaded && _paddleWrapper is { IsAvailable: true })
             {
                 // 已下载已加载 → 切换引擎
@@ -540,6 +555,8 @@ public class OcrTool : ITool
                 return;
             }
 
+            _downloading = true;
+            _engineButton!.IsEnabled = false; // 禁用按钮，与 _downloading 双保险
             var dialog = new DownloadDialog("下载高精度引擎",
                 "正在下载离线识别引擎包，请在下载完成后稍等片刻…");
             dialog.Owner = Application.Current?.MainWindow;
@@ -551,40 +568,47 @@ public class OcrTool : ITool
                     dialog.ReportProgress(p.percent, p.status));
 
                 // 引擎未加载 → 始终执行完整下载/解压（DownloadAndExtractAsync 下载成功后整体替换旧引擎）
-                await EngineDownloader.DownloadAndExtractAsync(progress, dialog.Token);
+                // 整个下载/解压/替换在后台线程执行（Task.Run 内无 SynchronizationContext），期间 UI 保持响应
+                await Task.Run(async () =>
+                {
+                    await EngineDownloader.DownloadAndExtractAsync(progress, dialog.Token);
+                });
 
                 if (dialog.Cancelled) return;
 
                 // 加载引擎（先释放旧实例：可能残留加载失败的原生资源，且其 SetDllDirectory 污染需恢复）
-                dialog.ReportProgress(90, "正在初始化识别引擎…");
-                _paddleWrapper?.Dispose();
-                _paddleWrapper = new PaddleOcrWrapper();
-
-                // 先快速检查文件完整性
-                var missing = PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory);
-                if (missing != null)
+                // 引擎初始化（原生库加载 + 3 个模型读盘）同样在后台线程，完成后回 UI 线程刷新
+                dialog.ReportProgress(97, "正在初始化识别引擎（约需数秒）…");
+                var loadResult = await Task.Run(() =>
                 {
-                    dialog.SetResult(false, $"引擎文件不完整：{missing}");
-                    return;
-                }
+                    _paddleWrapper?.Dispose();
+                    _paddleWrapper = new PaddleOcrWrapper();
 
-                if (_paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory))
+                    // 先快速检查文件完整性
+                    var missing = PaddleOcrWrapper.ValidateDirectory(EngineDownloader.DefaultEngineDirectory);
+                    if (missing != null)
+                        return (Ok: false, Message: $"引擎文件不完整：{missing}");
+
+                    if (_paddleWrapper.Load(EngineDownloader.DefaultEngineDirectory))
+                        return (Ok: true, Message: "");
+                    return (Ok: false, Message: $"引擎加载失败：{_paddleWrapper.LastError ?? "未知错误"}");
+                });
+
+                if (loadResult.Ok)
                 {
                     _highPrecisionAvailable = true;
                     _useHighPrecision = true;
-                    UpdateEngineUi();
                     dialog.SetResult(true, "高精度引擎已就绪，识别准确率 98%+");
                 }
                 else
                 {
-                    var detail = _paddleWrapper.LastError ?? "未知错误";
-                    dialog.SetResult(false, $"引擎加载失败：{detail}");
+                    dialog.SetResult(false, loadResult.Message);
                 }
             }
             catch (OperationCanceledException)
             {
                 // 用户取消：CancelAndClose 已触发取消令牌并关闭弹窗；
-                // 引擎按钮/状态文字仍为"下载"初始态，无需额外清理
+                // 引擎按钮/状态文字由 finally 恢复为"下载"初始态
             }
             catch (InvalidOperationException ex)
             {
@@ -593,6 +617,37 @@ public class OcrTool : ITool
             catch (Exception ex)
             {
                 dialog.SetResult(false, $"下载失败：{ex.Message}");
+            }
+            finally
+            {
+                _downloading = false;
+                _engineButton!.IsEnabled = true;
+                UpdateEngineUi();
+            }
+        }
+
+        // 首次打开页面时的引擎后台加载：UI 不阻塞，加载完成后刷新引擎状态
+        async Task InitializeEngineAsync()
+        {
+            try
+            {
+                var result = await Task.Run(() =>
+                {
+                    _paddleWrapper?.Dispose(); // 防御：CreateContent 若被重复调用，先释放旧实例
+                    var wrapper = new PaddleOcrWrapper();
+                    bool ok = wrapper.Load(EngineDownloader.DefaultEngineDirectory);
+                    return (wrapper, ok);
+                });
+
+                if (_downloading) return; // 期间用户发起了下载，加载结果由下载流程接管
+
+                _paddleWrapper = result.wrapper;
+                _highPrecisionAvailable = result.ok;
+                UpdateEngineUi();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"OCR 引擎后台加载失败: {ex.Message}");
             }
         }
     }

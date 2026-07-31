@@ -27,7 +27,7 @@ Toolbox/
 │   └── ToolRegistry.cs                     工具注册中心：单策略插件加载（Assembly.Load 默认加载上下文）+ 反射注册悬浮窗控制器
 │
 ├── Views/
-│   └── SettingsView.xaml (+ .cs)           设置页面：5 个 ToggleSwitch（最小化/自启悬浮窗/自启/鼠标光晕/控件边缘发光）+ ComboBox(悬浮窗大小) + 退出按钮
+│   └── SettingsView.xaml (+ .cs)           设置页面：5 个 ToggleSwitch（最小化/自启悬浮窗/自启/鼠标光晕/控件边缘发光）+ ComboBox(悬浮窗大小) + OCR 引擎管理卡片（状态显示/确认删除）+ 退出按钮
 │
 ├── ViewModels/
 │   └── MainViewModel.cs                    主窗口 ViewModel（工具发现、分组、搜索过滤、UI 缓存）
@@ -98,7 +98,7 @@ Toolbox/
 │       ├── ClickThroughHelper.cs           ★ 新增：悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现）
 │       ├── OcrHelper.cs                    ★ 新增：Windows 内置 OCR 引擎封装（离线识别）
 │       ├── PaddleOcrWrapper.cs             ★ 新增：PaddleOCR 高精度引擎包装（原生库加载/释放）
-│       ├── EngineDownloader.cs             ★ 新增：OCR 引擎/模型下载、校验与解压
+│       ├── EngineDownloader.cs             ★ 新增：OCR 引擎/模型下载、校验与解压（07-31：多下载源——华为云 NuGet 镜像优先 + nuget.org 回退）
 │       └── ImageFileHelper.cs              ★ 新增：图片文件校验与格式判断
 │
 ├── Toolbox.Tests/                          单元测试项目
@@ -114,13 +114,12 @@ Toolbox/
 │   └── publish/                            单文件发布产物
 │
 └── docs/
-    ├── music-float-window-structure.md          悬浮窗结构说明
     ├── changelog-2026-07-21.md                  更新日志
+    ├── changelog-2026-07-31.md                  ★ 新增：每日工作日志（每修复/功能完成后追加当日条目）
     ├── TOOL_DEVELOPMENT_GUIDELINE.md            ★ 新增：新工具开发规范文档
-    ├── ROBUSTNESS_PLAN.md                       鲁棒性加固方案
     ├── EDGE_GLOW_REGRESSION_CHECKLIST.md        边缘发光模块回归检查清单
-    ├── plans/                                   已清空（历史设计文档归档至 待删除/plans/）
-    └── 待删除/                                  归档区（music-float-window-edge-dock-design.md 等已归档；按钮亚克力毛玻璃改造方案.md 已删除）
+    ├── 待解决-2026-07-31.md                     ★ 新增：问题清单（对抗性复核 + 修复逐条勾除）
+    └── 待删除/                                  归档区（已执行/过时文档：架构修复设计、ROBUSTNESS_PLAN、悬浮窗结构说明、历史 plans 等）
 ```
 
 ### 行数概览
@@ -151,9 +150,9 @@ Toolbox/
 | Models/MusicFloatControllerHost.cs | 20 | ★ 新增：悬浮窗控制器静态宿主 |
 | Controls/ThemedMenuWindow.cs | 190 | ★ 新增：深色主题弹出菜单 |
 | Services/JsonSettingsFile.cs | 68 | ★ 新增：泛型 JSON 设置文件读写（原子写入 + .bak 备份回落） |
-| MainViewModel.cs | 179 | 工具分组 + 搜索过滤 + UI 缓存 |
-| SettingsView.xaml | 99 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + 退出按钮） |
-| SettingsView.xaml.cs | 34 | 设置页后置代码 |
+| MainViewModel.cs | 182 | 工具分组 + 搜索过滤 + UI 缓存 + Tools 只读列表暴露（07-31） |
+| SettingsView.xaml | 137 | 设置页 UI（5 个 ToggleSwitch + ComboBox 悬浮窗大小 + OCR 引擎卡片 + 退出按钮） |
+| SettingsView.xaml.cs | 143 | 设置页后置代码（07-31：OCR 引擎状态检测/确认删除，每次进入设置页刷新） |
 | ITool.cs | 21 | 工具接口（含 Category） |
 | ToolCategory.cs | 17 | 7 大分类常量（首页固定最前） |
 | ToolNavigation.cs | 15 | ★ 新增：插件→主窗口导航请求中转（首页卡片点击跳工具） |
@@ -162,24 +161,24 @@ Toolbox/
 | AudioflowSettings.cs | 205 | 悬浮窗独立设置（★ 新增：游戏模式点击穿透 / 悬停播放控制开关） |
 | | | |
 | **插件工具** | | |
-| JunkCleanerTool.cs | 1024 | C盘垃圾清理（最大文件） |
-| SoftwareUninstallTool.cs | 608 | 软件卸载管理器 |
+| JunkCleanerTool.cs | 1028 | C盘垃圾清理（最大文件） |
+| SoftwareUninstallTool.cs | 660 | 软件卸载管理器 |
 | MusicContentControl.xaml.cs | 804 | 悬浮窗内容控件（★ 新增：悬停播放按钮 + 游戏模式适配） |
 | EdgeDockService.cs | 532 | 贴边缩入服务 |
 | SMTCListener.cs | 582 | SMTC 监听器（★ 加固：启动退避重试 + 30s 看门狗自愈 + 休眠唤醒重建） |
-| MusicFloatWindowManager.cs | 514 | 悬浮窗管理器（★ 新增：播放控制转发 + 位置复位 API） |
+| MusicFloatWindowManager.cs | 539 | 悬浮窗管理器（实现 IMusicFloatController；播放控制转发 + 位置复位） |
 | PasswordGeneratorTool.cs | 563 | ★ 新增：密码生成器 |
-| OcrTool.cs | 611 | ★ 新增：截图识字（Windows 内置 OCR 离线识别 + 可选 PaddleOCR 高精度引擎） |
+| OcrTool.cs | 687 | ★ 新增：截图识字（Windows 内置 OCR 离线识别 + 可选 PaddleOCR 高精度引擎；07-31：后台加载/下载防重入/UnloadEngine） |
 | DownloadDialog.cs | 210 | ★ 新增：OCR 引擎下载进度对话框 |
 | OcrHelper.cs | 89 | ★ 新增：Windows 内置 OCR 引擎封装 |
 | PaddleOcrWrapper.cs | 189 | ★ 新增：PaddleOCR 高精度引擎包装 |
-| EngineDownloader.cs | 275 | ★ 新增：OCR 引擎/模型下载、校验与解压 |
+| EngineDownloader.cs | 288 | ★ 新增：OCR 引擎/模型下载、校验与解压（07-31：多下载源 + 重试 + 进度节流） |
 | ImageFileHelper.cs | 83 | ★ 新增：图片文件校验与格式判断 |
 | NeteaseMusicTool.cs | 317 | 悬浮窗工具面板（★ 新增：游戏模式设置） |
-| SoftwareUninstallService.cs | 284 | 卸载服务 |
+| SoftwareUninstallService.cs | 293 | 卸载服务 |
 | NetworkInfoTool.cs | 298 | ★ 新增：网络信息工具 |
 | QrCodeTool.cs | 264 | 深色圆角卡片式 + 竖排按钮，实时生成 + 保存 + 复制 |
-| ShutdownTool.cs | 241 | 卡片式布局 + 主题色统一 + 快捷按钮重排序 |
+| ShutdownTool.cs | 251 | 卡片式布局 + 主题色统一 + 快捷按钮重排序 |
 | AcrylicMusicWindow.xaml.cs | 184 | 毛玻璃窗口（★ 新增：游戏模式点击穿透 + 右键菜单集成） |
 | ScreensaverTool.cs | 186 | 卡片式布局 + 主题色统一 |
 | ClickThroughHelper.cs | 132 | ★ 新增：游戏模式点击穿透（Transparent/Acrylic 两套实现） |
@@ -209,6 +208,8 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 **2026-07 架构变化**：`EdgeGlowLayer` 从 `MainWindow.xaml.cs` 内联实现迁移至 `Toolbox.Core/Helpers/EdgeGlowLayer.cs`，供主窗口与插件悬浮窗共用。新增 `ThemedMenuWindow`、`ThemeColors`、`JsonSettingsFile` 等基础设施至 Core 层，增强核心层复用能力。
 
 **2026-07-31 架构变化**：`DwmHelper` 自插件层整体迁入 `Toolbox.Core/Helpers/DwmHelper.cs`（含 BackdropType / CornerPreference 枚举），主窗口 Acrylic 背景改经 Core 的 DwmHelper 实现；全部 Win32 P/Invoke 收拢于 `Toolbox.Core/Helpers/Win32Native.cs`（唯一声明处），Win32Helper/DwmHelper/ClickThroughHelper/SystemTrayHelper/MainWindow 中的重复声明已删；插件加载收敛为单一策略（`Assembly.Load`，删除 plugins/ 目录与基目录两条 `LoadFrom` 回退）；新增悬浮窗控制器抽象（`IMusicFloatController` + `MusicFloatControllerHost`，主程序不再直接引用插件类型，`FloatSizeMode` 枚举移入 Core）；新增截图识字 OCR 工具（`OcrTool` + Helpers/OcrHelper、PaddleOcrWrapper、EngineDownloader、ImageFileHelper + DownloadDialog）；插件层命名空间统一为 `Toolbox.Plugins.*`（Helpers/Services/Models/Controls），工具类保留 `Toolbox.Tools.*`。
+
+**2026-07-31 OCR 引擎链路性能修复**（对抗性复核 8 条后修 7 项）：PaddleOCRSharp 包由完整下载 3 次合并为 1 次（总流量 317MB→173MB，-45%）；下载/解压/替换/引擎初始化全部移出 UI 线程（消除 5-15s 界面冻结）；首次打开页面引擎后台懒加载；8KB 缓冲→64KB + 进度按百分比节流；网络失败自动重试 3 次 + 响应体读取独立超时；下载中防重入（按钮禁用）；下载源多路（华为云 NuGet 镜像优先，实测 ~5MB/s vs 官方 86KB/s）。设置页新增 OCR 引擎管理卡片：显示引擎状态（路径/占用大小，每次进入设置页经 IsVisibleChanged 刷新）+ 确认弹窗删除（删除前经 `OcrTool.UnloadEngine` 释放原生 DLL 锁，`MainViewModel` 新增 `Tools` 只读列表供定位工具实例）。
 
 **2026-07 鲁棒性加固**（详见 `docs/ROBUSTNESS_PLAN.md`）：`JsonSettingsFile` 升级为原子写入（.tmp→替换）+ `.bak` 备份回落，设置/密码记录不再因断电写半截而丢光；crash.log 增加 2MB 轮转；`SMTCListener` 增加启动退避重试（5/15/30s）、30s 看门狗自愈与休眠唤醒重建，网易云重启/系统休眠后悬浮窗可自动恢复；测试套件修复既有失败恢复 80/80 全绿 baseline。EdgeGlowLayer 改动前必读 `docs/EDGE_GLOW_REGRESSION_CHECKLIST.md`（该模块历史回归率最高）。
 
@@ -319,6 +320,7 @@ App.xaml → App.xaml.cs OnStartup:
 ```
 点击标题栏齿轮按钮 → ContentScrollViewer 隐藏 → SettingsLayer 显示
                    → SettingsView 加载，绑定 AppSettings.Instance
+                   → OCR 引擎状态每次进入设置页刷新（IsVisibleChanged，非启动时一次性检测）
                    → BackButton → BackRequestedEvent → MainWindow 隐藏设置层
                    → 恢复高亮条位置
 ```
@@ -445,7 +447,7 @@ MusicFloatWindowManager (单例)
 
 **核心机制**：
 
-1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `models:GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 10 处（SetIsGlowCard 调用点）：ShutdownTool / Screensaver / QuickSystemTool / HomeDashboardTool / JunkCleaner 主列表 / QrCodeTool / NetworkInfoTool / PasswordGeneratorTool / OcrTool / NeteaseMusicTool 设置卡片。
+1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `models:GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 12 处（SetIsGlowCard 调用点）：ShutdownTool / Screensaver / QuickSystemTool / HomeDashboardTool / JunkCleaner 主列表 / QrCodeTool / NetworkInfoTool / PasswordGeneratorTool / OcrTool / NeteaseMusicTool 设置卡片 / SettingsView 设置卡片 ×2（含 07-31 新增 OCR 引擎卡片）。
    递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，若四角半径不同（如标题栏按钮 0,0,6,6），用 `StreamGeometry` 逐角构造异径圆角矩形描边，逐像素贴合控件玻璃边缘。
 
 2. **径向渐变描边**：描边用 `RadialGradientBrush`（`MappingMode=Absolute`，中心=光标位置）。10 段色标，`alpha × (1-offset)^0.6 × 1.3`，近光心一端形成过曝平台，背光侧完全熄灭——模拟灯光扫过物体。`MaxLitRadius=100px`，大卡片照亮弧段不会超过此范围。
@@ -490,7 +492,7 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
   -o setup/publish -p:DebugType=none
 
 → ISCC.exe setup/ToolboxSetup.iss (LZMA2 最高压缩)
-→ setup/Toolbox_Setup.exe (~54 MB)
+→ setup/Toolbox_Setup.exe (~56 MB)
 ```
 
 ## 全局主题资源（App.xaml 定义）
@@ -533,7 +535,7 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 | **网络信息** | `NetworkInfoTool.cs` | 🌐 网络与开发 | 298 | **★ 新增**：IP/MAC/网关/DNS + 公网 IP 异步获取 + 逐项复制 |
 | 软件卸载管理器 | `SoftwareUninstallTool.cs` | 📁 文件管理 | 608 | 注册表扫描 + 图标提取 + 双击卸载 |
 | **密码生成器** | `PasswordGeneratorTool.cs` | 🔤 文本与数据 | 563 | **★ 新增**：名字种子 SHA256 确定性生成 + 长度/字符集选择 + 历史记录 |
-| **截图识字** | `OcrTool.cs` | 🔤 文本与数据 | 611 | **★ 新增**：导入截图/图片离线提取文字（文件选择 / 拖入虚线框 / 粘贴，Windows 内置 OCR 不上传网络；可选 PaddleOCR 高精度引擎，首次使用自动下载） |
+| **截图识字** | `OcrTool.cs` | 🔤 文本与数据 | 687 | **★ 新增**：导入截图/图片离线提取文字（文件选择 / 拖入虚线框 / 粘贴，Windows 内置 OCR 不上传网络；可选 PaddleOCR 高精度引擎，首次使用自动下载；07-31：后台加载 + 下载防重入 + 设置页可删除引擎） |
 | 网易云音乐悬浮窗 | `NeteaseMusicTool.cs` | 🎵 媒体与娱乐 | 317 | 胶囊开关 + 模式切换 + 悬浮窗设置面板（含游戏模式） |
 
 ## ITool 接口规范

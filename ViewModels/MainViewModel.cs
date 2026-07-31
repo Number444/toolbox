@@ -75,6 +75,9 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>已发现的全部工具实例（设置页等需要访问工具实体的入口）</summary>
+    public IReadOnlyList<ITool> Tools => _registry.Tools;
+
     /// <summary>显示的工具总数（用于状态栏）</summary>
     public int VisibleToolCount => VisibleGroups.Sum(g => g.Tools.Count);
 

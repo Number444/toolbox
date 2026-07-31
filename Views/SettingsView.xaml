@@ -88,6 +88,42 @@
             </StackPanel>
         </Border>
 
+        <!-- OCR 引擎管理 -->
+        <Border Background="{StaticResource BgSurfaceBrush}"
+                CornerRadius="8"
+                Padding="16,14"
+                BorderBrush="{StaticResource BorderSubtleBrush}"
+                BorderThickness="1"
+                models:GlowCardMarker.IsGlowCard="True"
+                Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock Text="OCR 高精度引擎"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="已下载的离线识别引擎（PaddleOCR 模型）。删除后截图识字将回退到 Windows 内置引擎，可随时重新下载。"
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,12"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="DeleteEngineButton" Content="删除 OCR 引擎"
+                            Background="{StaticResource DangerBrush}"
+                            Foreground="White"
+                            Padding="14,7"
+                            FontSize="13"
+                            Cursor="Hand"
+                            Click="DeleteEngineButton_Click"/>
+                    <TextBlock x:Name="EngineStatusText"
+                               FontSize="12"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"
+                               Margin="12,0,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 退出按钮 -->
         <Button x:Name="ExitButton" Content="退出 Toolbox"
                 Background="{StaticResource DangerBrush}"
