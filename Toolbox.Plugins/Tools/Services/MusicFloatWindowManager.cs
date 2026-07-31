@@ -1,8 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.Windows;
-using Toolbox.Controls;
-using Toolbox.Services;
+using Toolbox.Core.Models;
+using Toolbox.Plugins.Controls;
+using Toolbox.Plugins.Services;
 using Toolbox.Tools.Helpers;
 using Toolbox.Tools.Models;
 using Toolbox.Tools.Services;
@@ -14,7 +15,7 @@ namespace Toolbox.Tools.Views;
 /// 音乐悬浮窗管理器（单例）。
 /// 共享 SMTC 监听器，管理透明/毛玻璃两种窗口的创建与切换。
 /// </summary>
-public class MusicFloatWindowManager
+public class MusicFloatWindowManager : IMusicFloatController
 {
     private static readonly Lazy<MusicFloatWindowManager> _instance = new(() => new MusicFloatWindowManager());
     public static MusicFloatWindowManager Instance => _instance.Value;
