@@ -192,17 +192,17 @@ public class JunkCleanerTool : ITool
         transformGroup.Children.Add(scaleTransform);
         _spinner.RenderTransform = transformGroup;
 
-        // 呼吸（10px ↔ 15px，基准 14px）
+        // 呼吸（9px ↔ 14px，基准 14px）
         scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(10.0 / 14.0, 15.0 / 14.0, new Duration(TimeSpan.FromSeconds(0.8)))
+            new DoubleAnimation(9.0 / 14.0, 14.0 / 14.0, new Duration(TimeSpan.FromSeconds(0.8)))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
         scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(10.0 / 14.0, 15.0 / 14.0, new Duration(TimeSpan.FromSeconds(0.8)))
+            new DoubleAnimation(9.0 / 14.0, 14.0 / 14.0, new Duration(TimeSpan.FromSeconds(0.8)))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
 
-        // 粗细同步呼吸（最大时 2.5，最小时 1.0）
+        // 粗细同步呼吸（最大时 2.4，最小时 1.6）
         _spinner.BeginAnimation(System.Windows.Shapes.Ellipse.StrokeThicknessProperty,
-            new DoubleAnimation(1.5, 2.5, new Duration(TimeSpan.FromSeconds(0.8)))
+            new DoubleAnimation(1.6, 2.4, new Duration(TimeSpan.FromSeconds(0.8)))
             { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
 
         _progressText = new TextBlock
@@ -210,18 +210,20 @@ public class JunkCleanerTool : ITool
             FontSize = 13,
             Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
             Margin = new Thickness(8, -1, 0, 0),
-            TextWrapping = TextWrapping.Wrap,
+            // 强制单行：数字必须与文字同一排；超宽时省略尾部而非换行分排
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             Visibility = Visibility.Collapsed
         };
         spinnerRow.Children.Add(_spinner);
         spinnerRow.Children.Add(_progressText);
 
-        // 第二行：状态结果
+        // 第二行：状态结果（上边距与第三行 6px 对称，使文字中心精确落在第一/三行之间正中）
         _statusText = new TextBlock
         {
             FontSize = 12,
             Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
-            Margin = new Thickness(0, -1, 0, 0)
+            Margin = new Thickness(0, 6, 0, 0)
         };
 
         // 第三行：请勿退出提示
@@ -238,6 +240,7 @@ public class JunkCleanerTool : ITool
         statusStack.Children.Add(_statusText);
         statusStack.Children.Add(_doNotCloseText);
         _statusArea.Child = statusStack;
+        GlowCardMarker.SetIsGlowCard(_statusArea, true); // 纳入鼠标光照发光目标
         root.Children.Add(_statusArea);
 
         // 操作栏
@@ -371,7 +374,9 @@ public class JunkCleanerTool : ITool
         _activeOp = ActiveOp.Scanning;
         SetBusy(true);
         HideError();
-        _statusText!.Text = "";
+        // Task.Run 启动前先填充初始状态，避免状态栏出现时第一行空白、第二行无计数
+        ReportProgress($"正在扫描：{_categories[0].Name}");
+        _statusText!.Text = $"已扫描 0/{_categories.Count} 类...";
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
@@ -521,7 +526,9 @@ public class JunkCleanerTool : ITool
         _activeOp = ActiveOp.Cleaning;
         SetBusy(true);
         HideError();
-        _statusText!.Text = "";
+        // Task.Run 启动前先填充初始文字，避免状态栏出现时第一行空白（0/N 由 CleanCategory 预统计后补充）
+        ReportProgress($"正在清理：{selected[0].Name}");
+        _statusText!.Text = $"已清理 0/{selected.Count} 类...";
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
@@ -545,7 +552,16 @@ public class JunkCleanerTool : ITool
                     }
                     else
                     {
-                        skippedItems += CleanCategory(cat, protectRecent, recentThreshold, token);
+                        // 每条目回调一次；50ms 节流合并高频更新，防止 Dispatcher 队列积压
+                        long lastReport = 0;
+                        skippedItems += CleanCategory(cat, protectRecent, recentThreshold, token,
+                            (processed, total) =>
+                            {
+                                long now = Environment.TickCount64;
+                                if (now - lastReport < 50) return;
+                                lastReport = now;
+                                ReportProgress($"正在清理：{cat.Name} {processed}/{total}");
+                            });
                     }
 
                     var c = cat;
@@ -603,9 +619,29 @@ public class JunkCleanerTool : ITool
     /// 返回因被占用/权限不足/受保护而跳过的条目数。
     /// </summary>
     private static int CleanCategory(
-        JunkCategory cat, bool protectRecent, DateTime recentThreshold, CancellationToken token)
+        JunkCategory cat, bool protectRecent, DateTime recentThreshold, CancellationToken token,
+        Action<int, int>? reportProgress = null)
     {
         int skipped = 0;
+        int processed = 0;
+
+        // 预统计该类别的待清理条目总数，用于进度显示（"已处理/总数"）
+        int total = 0;
+        foreach (var root in cat.Roots())
+        {
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                if (cat.FileFilter is { Length: > 0 } filter)
+                    total += filter.SelectMany(p => Directory.EnumerateFiles(root, p)).Count();
+                else
+                    total += Directory.EnumerateFileSystemEntries(root).Count();
+            }
+            catch { }  // 统计失败不影响后续清理
+        }
+
+        // 首个条目处理前先报告 0/N，避免开始时进度文字无计数
+        reportProgress?.Invoke(0, total);
 
         foreach (var root in cat.Roots())
         {
@@ -622,6 +658,7 @@ public class JunkCleanerTool : ITool
                 foreach (var file in matched)
                 {
                     token.ThrowIfCancellationRequested();
+                    processed++;
                     try
                     {
                         if (protectRecent && File.GetLastWriteTime(file) > recentThreshold)
@@ -635,6 +672,7 @@ public class JunkCleanerTool : ITool
                     {
                         skipped++;  // 被占用/权限不足，跳过
                     }
+                    reportProgress?.Invoke(processed, total);
                 }
                 continue;
             }
@@ -648,6 +686,7 @@ public class JunkCleanerTool : ITool
             foreach (var entry in entries)
             {
                 token.ThrowIfCancellationRequested();
+                processed++;
                 bool isDir = Directory.Exists(entry);
                 try
                 {
@@ -673,6 +712,7 @@ public class JunkCleanerTool : ITool
                 {
                     skipped++;  // 被占用/权限不足，跳过
                 }
+                reportProgress?.Invoke(processed, total);
             }
         }
 
@@ -857,6 +897,12 @@ public class JunkCleanerTool : ITool
         if (busy && _statusArea != null) _statusArea.Visibility = Visibility.Visible;
         if (_spinner != null) _spinner.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         if (_doNotCloseText != null) _doNotCloseText.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        // 第三行可见时（进行中），"已清理"居中于第一/三行之间；第三行隐藏后恢复紧凑，
+        // 避免清理完成时"删除成功"因 6px 上边距向下偏离
+        if (_statusText != null)
+            _statusText.Margin = busy
+                ? new Thickness(0, 6, 0, 0)
+                : new Thickness(0, -1, 0, 0);
 
         if (!busy) UpdateCleanButton();
     }
