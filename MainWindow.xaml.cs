@@ -29,8 +29,9 @@ public partial class MainWindow : Window
         // 窗口加载后，通过 P/Invoke 启用 Win11 圆角和 Mica 材质
         Loaded += (_, _) =>
         {
-            // 整段 DWM/Win32 调用链外包 try-catch：任一步失败（DWM 未运行、
-            // 远程桌面、低版本 Windows）不崩应用，静默继续
+            // 2026-08-03（审查 P1-7）：DWM/Win32 链独立 try-catch——任一步失败
+            // （DWM 未运行/远程桌面/低版本）不崩应用，且**不再连带吞掉**后续的事件
+            // 订阅与悬浮窗自启（原实现：前半段失败 = 后半段功能静默丢失）。
             try
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -48,46 +49,58 @@ public partial class MainWindow : Window
                 {
                     hwndTarget.BackgroundColor = Colors.Transparent;
                 }
-
-                // 更新四角落遮盖（等窗口实际尺寸确定后）
-                Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
-
-                // 初始化分组高度（展开的为 Auto，折叠的为 0）
-                Dispatcher.BeginInvoke(new Action(InitGroupHeights),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
-
-                // 初始化导航高亮位置（等布局完成后）
-                Dispatcher.BeginInvoke(new Action(InitHighlight),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
-
-                // 设置页返回事件
-                SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
-
-                // 插件经 Core 中转的导航请求（如首页仪表盘卡片点击跳转工具）
-                Models.ToolNavigation.NavigateRequested += OnToolNavigateRequested;
-
-                // 启动时自动打开悬浮窗
-                if (AppSettings.Instance.AutoOpenFloatWindow)
-                {
-                    var savedMode = AppSettings.Instance.MusicFloatSizeMode;
-                    var mode = savedMode == "Compact"
-                        ? FloatSizeMode.Compact
-                        : FloatSizeMode.Large;
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        // 加载悬浮窗独立配置
-                        AudioflowSettings.Instance.Load();
-                        var mgr = MusicFloatControllerHost.Current;
-                        if (mgr == null) return; // 控制器未注册（插件加载失败）时静默跳过
-                        mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
-                        mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainWindow] 窗口初始化失败: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] DWM/Win32 初始化失败: {ex.Message}");
+            }
+
+            // ── 非 DWM 初始化（原在同一个 try 内，现独立执行，任一步失败不互拖）──
+
+            // 更新四角落遮盖（等窗口实际尺寸确定后）
+            Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // 初始化分组高度（展开的为 Auto，折叠的为 0）
+            Dispatcher.BeginInvoke(new Action(InitGroupHeights),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // 初始化导航高亮位置（等布局完成后）
+            Dispatcher.BeginInvoke(new Action(InitHighlight),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // 设置页返回事件
+            SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
+
+            // 插件经 Core 中转的导航请求（如首页仪表盘卡片点击跳转工具）
+            Models.ToolNavigation.NavigateRequested += OnToolNavigateRequested;
+
+            // 启动自检（审查 P1-4）：工具发现失败时不再静默空白
+            if (DataContext is ViewModels.MainViewModel vm && vm.Tools.Count == 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "工具加载失败：未发现任何可用工具，请检查安装完整性后重启。",
+                    $"{App.WindowTitle} 警告",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+            }
+
+            // 启动时自动打开悬浮窗
+            if (AppSettings.Instance.AutoOpenFloatWindow)
+            {
+                var savedMode = AppSettings.Instance.MusicFloatSizeMode;
+                var mode = savedMode == "Compact"
+                    ? FloatSizeMode.Compact
+                    : FloatSizeMode.Large;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    // 加载悬浮窗独立配置
+                    AudioflowSettings.Instance.Load();
+                    var mgr = MusicFloatControllerHost.Current;
+                    if (mgr == null) return; // 控制器未注册（插件加载失败）时静默跳过
+                    mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
+                    mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
         };
 
@@ -518,9 +531,7 @@ public partial class MainWindow : Window
         if (AppSettings.Instance.MinimizeOnClose)
         {
             e.Cancel = true;
-            Hide();
-            ShowInTaskbar = false;
-            SystemTrayHelper.Instance.Show(
+            bool trayOk = SystemTrayHelper.Instance.Show(
                 tooltip: $"{App.WindowTitle} - \u70B9\u51FB\u6062\u590D",
                 onDoubleClick: () =>
                 {
@@ -537,6 +548,17 @@ public partial class MainWindow : Window
                 {
                     Dispatcher.Invoke(() => { Shutdown(); });
                 });
+            if (trayOk)
+            {
+                // \u6258\u76D8\u53EF\u7528\u624D\u9690\u85CF\u7A97\u53E3\uFF1B\u5426\u5219\u4FDD\u6301\u4EFB\u52A1\u680F\u53EF\u89C1\uFF08\u907F\u514D\u5E94\u7528\u4E0D\u53EF\u8FBE\uFF0C
+                // 2026-08-03 \u5BA1\u67E5\u53D1\u73B0\uFF1ANIM_ADD \u5931\u8D25 + \u9690\u85CF\u7A97\u53E3 + \u5355\u5B9E\u4F8B\u4E92\u65A5\u9501 = \u5E94\u7528\u84B8\u53D1\uFF09
+                Hide();
+                ShowInTaskbar = false;
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[MainWindow] \u6258\u76D8\u56FE\u6807\u521B\u5EFA\u5931\u8D25\uFF0C\u4FDD\u6301\u7A97\u53E3\u53EF\u89C1");
+            }
             return;
         }
 
@@ -548,11 +570,20 @@ public partial class MainWindow : Window
         _isShuttingDown = true;
         AppSettings.Instance.Save();
 
-        if (Helpers.SystemTrayHelper.Instance.IsVisible)
-            Helpers.SystemTrayHelper.Instance.Hide();
+        // 2026-08-03（审查 P1-7）：退出路径绝不允许被业务异常阻断——插件 Close()
+        // 抛异常曾导致 Application.Shutdown 永不执行（点退出无反应）
+        try
+        {
+            if (Helpers.SystemTrayHelper.Instance.IsVisible)
+                Helpers.SystemTrayHelper.Instance.Hide();
 
-        // 关闭悬浮窗释放 SMTC 监听
-        MusicFloatControllerHost.Current?.Close();
+            // 关闭悬浮窗释放 SMTC 监听
+            MusicFloatControllerHost.Current?.Close();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] 退出清理失败（继续退出）: {ex.Message}");
+        }
 
         Application.Current.Shutdown();
     }

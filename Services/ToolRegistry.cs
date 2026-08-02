@@ -29,10 +29,19 @@ public class ToolRegistry
             return;
         }
 
-        // 注册悬浮窗控制器（反射获取插件实现，保持 ToolRegistry 只编译期依赖 Core）
-        var controllerType = pluginAssembly.GetType("Toolbox.Tools.Views.MusicFloatWindowManager");
-        if (controllerType?.GetProperty("Instance")?.GetValue(null) is IMusicFloatController controller)
-            MusicFloatControllerHost.Register(controller);
+        // 注册悬浮窗控制器（反射获取插件实现，保持 ToolRegistry 只编译期依赖 Core）。
+        // 独立 try-catch：控制器静态构造（Lazy 缓存异常）/反射任一步失败只跳过控制器，
+        // 绝不允许拖垮全部工具发现（2026-08-03 审查发现：异常冒泡 = 主窗口 0 工具空白）。
+        try
+        {
+            var controllerType = pluginAssembly.GetType("Toolbox.Tools.Views.MusicFloatWindowManager");
+            if (controllerType?.GetProperty("Instance")?.GetValue(null) is IMusicFloatController controller)
+                MusicFloatControllerHost.Register(controller);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ToolRegistry] 悬浮窗控制器注册失败，已跳过: {ex.Message}");
+        }
 
         // GetTypes() 遇到旧版 DLL（缺少 Category 实现等）会抛出 ReflectionTypeLoadException
         // 取已成功加载的类型子集继续扫描，失败的自动跳过

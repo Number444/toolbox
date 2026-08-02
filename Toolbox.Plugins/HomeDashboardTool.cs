@@ -171,7 +171,13 @@ public class HomeDashboardTool : ITool
                     WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                 });
             }
-            catch { /* 关机进程启动失败:静默,系统无任何变化 */ }
+            catch (Exception ex)
+            {
+                // 2026-08-03：关机启动失败不再静默（原为空 catch = 用户点击无任何反馈）
+                System.Diagnostics.Debug.WriteLine($"[HomeDashboard] 关机失败: {ex.Message}");
+                System.Windows.MessageBox.Show($"关机操作失败：{ex.Message}", "Toolbox",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            }
         };
 
         var grid = new Grid();

@@ -629,25 +629,30 @@ public class OcrTool : ITool
         // 首次打开页面时的引擎后台加载：UI 不阻塞，加载完成后刷新引擎状态
         async Task InitializeEngineAsync()
         {
+            PaddleOcrWrapper? attempted = null; // 本次尝试加载的实例（失败时取 LastError）
             try
             {
                 var result = await Task.Run(() =>
                 {
                     _paddleWrapper?.Dispose(); // 防御：CreateContent 若被重复调用，先释放旧实例
-                    var wrapper = new PaddleOcrWrapper();
-                    bool ok = wrapper.Load(EngineDownloader.DefaultEngineDirectory);
-                    return (wrapper, ok);
+                    attempted = new PaddleOcrWrapper();
+                    bool ok = attempted.Load(EngineDownloader.DefaultEngineDirectory);
+                    return (attempted, ok);
                 });
 
                 if (_downloading) return; // 期间用户发起了下载，加载结果由下载流程接管
 
-                _paddleWrapper = result.wrapper;
+                _paddleWrapper = result.attempted;
                 _highPrecisionAvailable = result.ok;
                 UpdateEngineUi();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"OCR 引擎后台加载失败: {ex.Message}");
+                // 2026-08-03（审查 P1-5）："已下载但加载失败"不再静默——用户可区分
+                // "从未下载"（按钮显示下载态）与"文件损坏/不兼容"（明确提示）
+                string detail = attempted?.LastError ?? ex.Message;
+                System.Diagnostics.Debug.WriteLine($"OCR 引擎后台加载失败: {detail}");
+                SetStatus($"检测到引擎文件但加载失败：{detail}，可点击重新下载", ThemeColors.Danger);
             }
         }
     }

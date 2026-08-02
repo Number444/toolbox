@@ -75,9 +75,11 @@ public sealed class SystemTrayHelper : IDisposable
 
     public bool IsVisible => _added;
 
-    public void Show(string tooltip, Action onDoubleClick, Action onExitClick)
+    /// <summary>显示托盘图标；返回图标是否添加成功（NIM_ADD 失败时调用方不得隐藏主窗口，
+    /// 否则应用不可达——2026-08-03 审查发现）</summary>
+    public bool Show(string tooltip, Action onDoubleClick, Action onExitClick)
     {
-        if (_added) return;
+        if (_added) return true;
 
         _onDoubleClick = onDoubleClick;
         _onExitClick = onExitClick;
@@ -112,6 +114,9 @@ public sealed class SystemTrayHelper : IDisposable
         };
 
         _added = Shell_NotifyIconW(NIM_ADD, ref data);
+        if (!_added)
+            System.Diagnostics.Debug.WriteLine("[SystemTrayHelper] 托盘图标添加失败（NIM_ADD）");
+        return _added;
     }
 
     public void Hide()

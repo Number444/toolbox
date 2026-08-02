@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using Toolbox.Core.Models;
 using Toolbox.Models;
 using Toolbox.Services;
 
@@ -50,8 +51,25 @@ public class MainViewModel : INotifyPropertyChanged
             // 相同工具只创建一次 UI，避免 TransitioningContentControl 因新对象而反复淡入
             if (_selectedTool != _cachedTool || _cachedContent == null)
             {
-                _cachedContent = _selectedTool.CreateContent();
-                _cachedTool = _selectedTool;
+                try
+                {
+                    _cachedContent = _selectedTool.CreateContent();
+                    _cachedTool = _selectedTool;
+                }
+                catch (Exception ex)
+                {
+                    // 2026-08-03（审查 P1-6）：CreateContent 异常被 WPF 绑定引擎静默吞掉 =
+                    // 内容区空白无提示。改为错误占位；失败不缓存，下次切换重试。
+                    System.Diagnostics.Debug.WriteLine($"[MainViewModel] 工具 {_selectedTool.Name} 内容创建失败: {ex.Message}");
+                    _cachedTool = null;
+                    return new System.Windows.Controls.TextBlock
+                    {
+                        Text = $"⚠️ 工具「{_selectedTool.Name}」加载失败：{ex.Message}",
+                        Foreground = new System.Windows.Media.SolidColorBrush(ThemeColors.Warning),
+                        TextWrapping = System.Windows.TextWrapping.Wrap,
+                        Margin = new System.Windows.Thickness(12)
+                    };
+                }
             }
             return _cachedContent;
         }

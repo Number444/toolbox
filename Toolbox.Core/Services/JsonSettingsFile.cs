@@ -10,7 +10,16 @@ namespace Toolbox.Core.Services;
 /// </summary>
 public static class JsonSettingsFile
 {
-    private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
+    /// <summary>
+    /// 读写共用 options。AllowNamedFloatingPointLiterals：设置类中未初始化的 double 坐标为
+    /// NaN 时也能正常序列化/反序列化（此前 NaN 序列化抛 JsonException → 整个设置文件保存
+    /// 静默失败，2026-08-03 审查高危；如 AudioflowSettings.FloatWindowLeft 默认 NaN）。
+    /// </summary>
+    private static readonly JsonSerializerOptions IndentedOptions = new()
+    {
+        WriteIndented = true,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+    };
 
     /// <summary>读取并反序列化 JSON 设置文件；文件不存在或任何异常（损坏/占用）时回落 .bak，仍失败返回 default</summary>
     public static T? Load<T>(string path)
@@ -58,7 +67,8 @@ public static class JsonSettingsFile
         {
             if (!File.Exists(path)) return (false, default);
             var json = File.ReadAllText(path);
-            return (true, JsonSerializer.Deserialize<T>(json));
+            // 必须复用同一 options：写出的 "NaN" 字面量只有配 AllowNamedFloatingPointLiterals 才能读回
+            return (true, JsonSerializer.Deserialize<T>(json, IndentedOptions));
         }
         catch
         {

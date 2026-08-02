@@ -123,7 +123,8 @@ public class QuickSystemTool : ITool
     {
         try
         {
-            // Step 1: 结束 explorer.exe
+            bool killOk = true;
+            // Step 1: 结束 explorer.exe（WaitForExit(5000) 防挂起；explorer 未运行 = 合理前置，不视为失败）
             var killProc = Process.Start(new ProcessStartInfo
             {
                 FileName = "taskkill",
@@ -132,7 +133,13 @@ public class QuickSystemTool : ITool
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
             });
-            killProc?.WaitForExit();
+            if (killProc != null)
+            {
+                // 超时（WaitForExit=false，explorer 未退出）或非 0 退出码 → 不算成功（2026-08-03 审查：
+                // 两个失败分支都要捕获，超时漏判会假报成功）
+                if (!killProc.WaitForExit(5000) || killProc.ExitCode != 0)
+                    killOk = false;
+            }
 
             // Step 2: 等待 500ms 确保进程已退出
             System.Threading.Thread.Sleep(500);
@@ -144,8 +151,10 @@ public class QuickSystemTool : ITool
                 UseShellExecute = true
             });
 
-            resultBlock.Text = "✅ 资源管理器已重启";
-            resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+            resultBlock.Text = killOk
+                ? "✅ 资源管理器已重启"
+                : "⚠️ explorer 未在运行或终止失败，已尝试重新启动";
+            resultBlock.Foreground = new SolidColorBrush(killOk ? ThemeColors.Success : ThemeColors.Warning);
         }
         catch (Exception ex)
         {

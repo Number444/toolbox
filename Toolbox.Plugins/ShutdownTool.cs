@@ -82,15 +82,19 @@ public class ShutdownTool : ITool
                 int seconds = minutes * 60;
                 try
                 {
-                    Process.Start(new ProcessStartInfo
+                    var proc = Process.Start(new ProcessStartInfo
                     {
                         FileName = "shutdown",
                         Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
                         UseShellExecute = true,
                         CreateNoWindow = true
                     });
-                    resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
-                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+                    // 2026-08-03：校验退出码，不再"启动了就算成功"（shutdown 参数错误/权限失败会返回非 0）
+                    bool ok = proc != null && proc.WaitForExit(10000) && proc.ExitCode == 0;
+                    resultBlock.Text = ok
+                        ? $"✅ 已设置 {minutes} 分钟后关机"
+                        : "❌ 设置失败：shutdown 命令执行失败（退出码非 0）";
+                    resultBlock.Foreground = new SolidColorBrush(ok ? ThemeColors.Success : ThemeColors.Danger);
                 }
                 catch (Exception ex)
                 {
@@ -135,15 +139,19 @@ public class ShutdownTool : ITool
                 int seconds = minutes * 60;
                 try
                 {
-                    Process.Start(new ProcessStartInfo
+                    var proc = Process.Start(new ProcessStartInfo
                     {
                         FileName = "shutdown",
                         Arguments = $"/s /t {seconds} /c \"定时关机：{minutes} 分钟后\"",
                         UseShellExecute = true,
                         CreateNoWindow = true
                     });
-                    resultBlock.Text = $"✅ 已设置 {minutes} 分钟后关机";
-                    resultBlock.Foreground = new SolidColorBrush(ThemeColors.Success);
+                    // 2026-08-03：校验退出码，不再"启动了就算成功"（shutdown 参数错误/权限失败会返回非 0）
+                    bool ok = proc != null && proc.WaitForExit(10000) && proc.ExitCode == 0;
+                    resultBlock.Text = ok
+                        ? $"✅ 已设置 {minutes} 分钟后关机"
+                        : "❌ 设置失败：shutdown 命令执行失败（退出码非 0）";
+                    resultBlock.Foreground = new SolidColorBrush(ok ? ThemeColors.Success : ThemeColors.Danger);
                 }
                 catch (Exception ex)
                 {
