@@ -23,6 +23,12 @@
 | JsonSettingsFile | 历史记录持久化 |
 | ThemeColors / GlowCardMarker | UI 一致性 |
 
+## 已知问题（未解决）
+
+- **P2-4**：密码明文落盘 passwords.json——明文 JSON 含名字→密码映射，任何读 LocalAppData 的程序可取（UI 已有明文警告，已知权衡）
+- 见 `docs/待解决-2026-07-31.md`
+
 ## 相关文档
+
 
 - 插件层总览 → [../04-plugins.md](../04-plugins.md)

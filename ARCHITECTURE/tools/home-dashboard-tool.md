@@ -1,7 +1,7 @@
 # 工具 · 首页仪表盘（HomeDashboardTool）
 
 - **分类**：📊 首页（Home）
-- **文件**：`Toolbox.Plugins/HomeDashboardTool.cs`（328 行）
+- **文件**：`Toolbox.Plugins/HomeDashboardTool.cs`（397 行）
 - **状态**：★ 新增（2026-07）
 
 ## 功能

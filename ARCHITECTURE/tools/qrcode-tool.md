@@ -1,7 +1,7 @@
 # 工具 · 二维码生成（QrCodeTool）
 
 - **分类**：🌐 网络与开发（Network）
-- **文件**：`Toolbox.Plugins/QrCodeTool.cs`（264 行）+ `Toolbox.Plugins/QrCodeHelper.cs`
+- **文件**：`Toolbox.Plugins/QrCodeTool.cs`（265 行）+ `Toolbox.Plugins/QrCodeHelper.cs`
 
 ## 功能
 

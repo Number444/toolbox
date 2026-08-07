@@ -10,7 +10,7 @@
 | ToolGroup.cs | 66 | 工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon / CategoryColor） |
 | ToolCategory.cs | 17 | 工具分类常量（7 大类，首页固定最前） |
 | GlowCardMarker.cs | 24 | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
-| ThemeColors.cs | 28 | 统一主题色常量（供新工具使用，避免硬编码） |
+| ThemeColors.cs | 35 | 统一主题色常量（供新工具使用，避免硬编码） |
 | FloatSizeMode.cs | 4 | 悬浮窗大小模式枚举（Large / Compact），自插件层移入 Core |
 | IMusicFloatController.cs | 35 | 悬浮窗控制器接口（主程序经此控制悬浮窗，不引用插件类型） |
 | MusicFloatControllerHost.cs | 20 | 悬浮窗控制器静态宿主（插件加载后由 ToolRegistry 注册实现） |

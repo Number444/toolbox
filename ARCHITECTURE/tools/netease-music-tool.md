@@ -77,7 +77,16 @@ Tools/
 | ClickThroughHelper / MonitorHelper / ThemedMenuWindow | 穿透 / 多屏 / 右键菜单 |
 | ThemeColors / GlowCardMarker | UI 一致性 |
 
+## 已知问题（未解决）
+
+- **P2-12**：ToggleBlur/SetSizeMode 失败回滚路径泄漏半成品新窗口——`newWindow.Show()` 抛异常后回滚只重挂旧窗口，newWindow 未 Close（极端低概率）
+- **P2-14**：SMTCListener 并发小噪音——Stop 置空竞态下 `_session!` 可能 NRE（被 catch 吞）；StartAsync 重试可能短暂重复订阅（均被兜住，无实际危害）
+- **P2-16**：MusicFloatWindow.xaml/.cs 是仅供测试实例化的废弃死代码，未标记废弃（生产只创建 Acrylic/Transparent；移动/删除前须先改测试）
+- **P2-17**：悬浮窗首次 Save 静默失败——Save() 无条件写入位置 NaN，.NET 9 STJ Strict 模式序列化 NaN 抛异常被 JsonSettingsFile catch 吞掉，未拖过悬浮窗时切换设置不持久化
+- 见 `docs/待解决-2026-07-31.md`
+
 ## 相关文档
+
 
 - 插件层总览 → [../04-plugins.md](../04-plugins.md)
 - 关键流程（悬浮窗架构）→ [../06-flows.md](../06-flows.md)

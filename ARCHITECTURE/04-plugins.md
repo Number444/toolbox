@@ -25,10 +25,10 @@
 
 | 文件 | 行数 | 职责 |
 |------|:----:|------|
-| SystemPowerHelper.cs | 50 | 系统电源操作：Lock / TurnOffMonitor / Sleep（插件层自含 P/Invoke） |
-| SystemInfoHelper.cs | 93 | 轻量系统信息：内存占用%/运行时长/磁盘空间/本机 IPv4 |
-| MonitorHelper.cs | 81 | 多屏工作区查询（MonitorFromWindow + GetMonitorInfo） |
-| ClickThroughHelper.cs | 132 | 悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现） |
+| SystemPowerHelper.cs | 48 | 系统电源操作：Lock / TurnOffMonitor / Sleep（插件层自含 P/Invoke） |
+| SystemInfoHelper.cs | 137 | 轻量系统信息：内存占用%/运行时长/磁盘空间/本机 IPv4 |
+| MonitorHelper.cs | 104 | 多屏工作区查询（MonitorFromWindow + GetMonitorInfo） |
+| ClickThroughHelper.cs | 129 | 悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现） |
 | OcrHelper.cs | 89 | Windows 内置 OCR 引擎封装（离线识别） |
 | PaddleOcrWrapper.cs | 189 | PaddleOCR 高精度引擎包装（原生库加载/释放） |
 | EngineDownloader.cs | 288 | OCR 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
@@ -52,7 +52,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|:----:|------|
-| ConfirmDialog.cs | 112 | 统一深色主题确认弹窗（通用删除/清空确认） |
+| ConfirmDialog.cs | 113 | 统一深色主题确认弹窗（通用删除/清空确认） |
 | DownloadDialog.cs | 210 | OCR 引擎下载进度对话框（进度条 + 取消） |
 
 ## Models/
@@ -61,7 +61,7 @@
 |------|------|
 | InstalledSoftware.cs | 已安装软件数据模型 |
 | SortMode.cs | 排序模式枚举 + 扩展方法 |
-| Tools/Models/NowPlayingInfo.cs | 当前播放信息模型 |
+| Toolbox.Plugins/Tools/Models/NowPlayingInfo.cs | 当前播放信息模型 |
 
 ## 命名空间约定
 

@@ -18,7 +18,7 @@
 | 文件 | 行数 | 职责 |
 |------|:----:|------|
 | Win32Helper.cs | 143 | Win32 业务封装（圆角/深色模式/帧扩展/窗口查找 + WndProc 消息钩子；P/Invoke 声明统一在 Core 的 Win32Native） |
-| SystemTrayHelper.cs | 237 | 纯 Win32 系统托盘图标（不依赖 WinForms） |
+| SystemTrayHelper.cs | 233 | 纯 Win32 系统托盘图标（不依赖 WinForms） |
 | CustomScrollBar.cs | 318 | 自定义迷你滚动条（深色主题，替代系统 ScrollBar） |
 | TransitioningContentControl.cs | 53 | 内容切换淡入动画控件 |
 | TextBoxContextMenuHelper.cs | 91 | 统一深色主题 TextBox 右键菜单 |
@@ -29,7 +29,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|:----:|------|
-| ToolRegistry.cs | 85 | 工具注册中心：单策略插件加载（Assembly.Load 默认加载上下文）+ 反射注册悬浮窗控制器 |
+| ToolRegistry.cs | 84 | 工具注册中心：单策略插件加载（Assembly.Load 默认加载上下文）+ 反射注册悬浮窗控制器 |
 
 ## Views / ViewModels
 
