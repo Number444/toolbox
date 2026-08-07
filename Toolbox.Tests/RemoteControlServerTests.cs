@@ -304,11 +304,11 @@ public class RemoteControlServerTests : IDisposable
     [Fact]
     public async Task KnownDevice_GetsAutoKeyInjected()
     {
-        // 认证成功 = 设备被记录 → GET / 注入真实密钥（自动填密钥）
+        // 认证成功 = 设备被记录 → GET / 注入真实密钥（自动填密钥，JSON 字面量转义形式）
         await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
 
         var html = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
-        Assert.Contains($"__AUTO_KEY__ = '{TestToken}'", html);
+        Assert.Contains($"__AUTO_KEY__ = {JsonSerializer.Serialize(TestToken)};", html);
     }
 
     [Fact]
@@ -416,6 +416,39 @@ public class RemoteControlServerTests : IDisposable
         Assert.True(server.IsNoKeyMode);
         Assert.NotNull(server.Token);
         Assert.Equal(16, server.Token!.Length); // Guid.N[..16]
+
+        server.Stop();
+    }
+
+    [Fact]
+    public void Start_EmptyStringKey_NormalizedToNoKeyMode()
+    {
+        // API 规范化：空串密钥视为未指定 → 免登录（防锁死，审查 P2-9）
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "empty-key.json"));
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, "   "); // 空白串
+
+        Assert.True(server.IsNoKeyMode);
+        server.Stop();
+    }
+
+    [Fact]
+    public async Task AutoKeyInjection_SpecialChars_EscapedAsJsonLiteral()
+    {
+        // 密钥含引号/反斜杠：注入必须为合法 JS 字符串字面量，不破坏控制页 script（审查 P1-1）
+        const string trickyKey = "abc'def\"gh\\ij";
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "tricky-key.json"));
+        settings.RecordDevice("127.0.0.1", "test"); // 预置已记录设备（触发注入）
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, trickyKey);
+
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.ActualPort}") };
+        var html = await (await client.GetAsync("/")).Content.ReadAsStringAsync();
+
+        // JSON 序列化注入：引号/反斜杠全部转义为合法 JS 字符串
+        var expected = $"window.__AUTO_KEY__ = {JsonSerializer.Serialize(trickyKey)};";
+        Assert.Contains(expected, html);
+        Assert.DoesNotContain($"__AUTO_KEY__ = '{trickyKey}'", html); // 旧裸引号注入已不存在
 
         server.Stop();
     }

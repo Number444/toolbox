@@ -112,8 +112,9 @@ public sealed class RemoteControlSettings
     {
         try
         {
+            // 锁内快照（ToList）：序列化在锁外进行，防止并发 RecordDevice 修改同一 List 导致序列化异常（审查 P2-3）
             List<DeviceRecord> devices;
-            lock (_devicesLock) devices = _knownDevices;
+            lock (_devicesLock) devices = _knownDevices.ToList();
             JsonSettingsFile.Save(_settingsPath, new SettingsData
             {
                 LastKey = _lastKey,

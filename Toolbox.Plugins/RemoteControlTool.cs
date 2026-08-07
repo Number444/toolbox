@@ -216,7 +216,24 @@ public class RemoteControlTool : ITool
         _keyBox.GotKeyboardFocus += (_, _) => _keyHint.Visibility = Visibility.Collapsed;
         _keyBox.LostKeyboardFocus += (_, _) => UpdateHint();
         UpdateHint();
-        return container;
+
+        // 复制密钥按钮：位于密钥输入框右侧（与输入框同一行）
+        _copyKeyButton = new Button
+        {
+            Content = "📋 复制密钥",
+            FontSize = 12,
+            Padding = new Thickness(10, 4, 10, 4),
+            Height = 30,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+            IsEnabled = false
+        };
+        _copyKeyButton.Click += (_, _) => CopyKey();
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(container);
+        row.Children.Add(_copyKeyButton);
+        return row;
     }
 
     private CheckBox BuildAutoGenerateRow()
@@ -260,21 +277,8 @@ public class RemoteControlTool : ITool
         };
         _stopButton.Click += (_, _) => StopService();
 
-        _copyKeyButton = new Button
-        {
-            Content = "📋 复制密钥",
-            FontSize = 13,
-            Padding = new Thickness(10, 4, 10, 4),
-            Height = 32,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(10, 0, 0, 0),
-            IsEnabled = false
-        };
-        _copyKeyButton.Click += (_, _) => CopyKey();
-
         row.Children.Add(_startButton);
         row.Children.Add(_stopButton);
-        row.Children.Add(_copyKeyButton);
         return row;
     }
 

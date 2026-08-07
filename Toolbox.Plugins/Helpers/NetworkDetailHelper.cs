@@ -57,7 +57,8 @@ public static class NetworkDetailHelper
         return snapshot;
     }
 
-    private static string? GetPublicIpCached()
+    /// <summary>公网 IP 统一缓存入口（StatusCommandHandler 与 network 指令共用同一缓存，避免双实现——审查 P2-4）</summary>
+    public static string? GetPublicIpCached()
     {
         lock (CacheSync)
         {

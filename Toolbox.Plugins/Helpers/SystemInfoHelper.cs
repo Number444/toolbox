@@ -158,6 +158,10 @@ public static class SystemInfoHelper
     {
         if (!GetSystemPowerStatus(out var status)) return null;
 
+        // 0xFF = 状态未知（硬件不支持/驱动异常）——先于 0x80 判断，避免误判为"无电池"（审查 P2-7）
+        if (status.BatteryFlag == 0xFF)
+            return new BatteryInfo { Percent = null, Status = "状态未知", IsBatteryPresent = true };
+
         // 0x80 = 无电池（桌面机/未装电池）
         if ((status.BatteryFlag & 0x80) != 0)
             return new BatteryInfo { Percent = null, Status = "无电池", IsBatteryPresent = false };

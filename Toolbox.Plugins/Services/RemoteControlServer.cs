@@ -119,6 +119,7 @@ public sealed class RemoteControlServer
     public void Start(int port, string? token = null, bool generateKey = true)
     {
         if (IsRunning) return; // 幂等
+        if (string.IsNullOrWhiteSpace(token)) token = null; // API 规范化：空串视为未指定 → 免登录（审查 P2-9）
         _noKeyMode = token == null;
         _token = token ?? (generateKey ? Guid.NewGuid().ToString("N")[..16] : null);
         _sessions.Clear();
@@ -247,6 +248,7 @@ public sealed class RemoteControlServer
             DeviceName = deviceName,
             LastActive = DateTime.Now
         };
+        CleanupExpiredSessions(); // 免登录模式下 RequireSession 短路不清理，认证成功后必须补清理（审查 P2-2）
         _settings.RecordDevice(ip, deviceName);
 
         var response = new RemoteHttpResponse { Body = """{"success":true,"data":null,"error":null}""" };
@@ -274,14 +276,17 @@ public sealed class RemoteControlServer
 
         session.LastActive = DateTime.Now; // 活跃度刷新（ConcurrentDictionary 值对象引用，写字段安全）
 
-        // 惰性清理过期会话（防字典无限增长；ConcurrentDictionary 枚举线程安全）
-        if (_sessions.Count > 200)
-        {
-            var now = DateTime.Now;
-            foreach (var expired in _sessions.Where(kv => kv.Value.Expires < now).Select(kv => kv.Key).ToList())
-                _sessions.TryRemove(expired, out _);
-        }
+        CleanupExpiredSessions();
         return action();
+    }
+
+    /// <summary>惰性清理过期会话（防字典无限增长；ConcurrentDictionary 枚举线程安全）</summary>
+    private void CleanupExpiredSessions()
+    {
+        if (_sessions.Count <= 200) return;
+        var now = DateTime.Now;
+        foreach (var expired in _sessions.Where(kv => kv.Value.Expires < now).Select(kv => kv.Key).ToList())
+            _sessions.TryRemove(expired, out _);
     }
 
     private bool TryGetSessionId(RemoteHttpRequest request, out string sessionId)
@@ -394,10 +399,18 @@ public sealed class RemoteControlServer
         RemoteControlResponse result;
         try
         {
-            // 指令串行执行：避免并发关机/重启竞态
-            _commandLock.Wait();
-            try { result = handler.Execute(commandName, args); }
-            finally { _commandLock.Release(); }
+            // 只读指令（status/network，可能含外网请求）锁外执行——避免阻塞关机/重启指令（审查 P2-5）；
+            // 写指令串行执行：避免并发关机/重启竞态
+            if (commandName is "status" or "network")
+            {
+                result = handler.Execute(commandName, args);
+            }
+            else
+            {
+                _commandLock.Wait();
+                try { result = handler.Execute(commandName, args); }
+                finally { _commandLock.Release(); }
+            }
         }
         catch (Exception ex)
         {
@@ -438,9 +451,10 @@ public sealed class RemoteControlServer
 
         var html = Encoding.UTF8.GetString(_htmlBytes);
 
-        // 已记录设备：注入真实密钥，页面自动填入（用户决策 2026-08-08；踢出即撤销）
+        // 已记录设备：注入真实密钥，页面自动填入（用户决策 2026-08-08；踢出即撤销）。
+        // JSON 序列化注入：含引号/反斜杠/</script> 的密钥转义为合法 JS 字符串字面量（审查 P1-1）
         if (_token != null && _settings.IsKnownDevice(request.RemoteIp))
-            html = html.Replace(AutoKeyPlaceholder, $"window.__AUTO_KEY__ = '{_token}';");
+            html = html.Replace(AutoKeyPlaceholder, $"window.__AUTO_KEY__ = {JsonSerializer.Serialize(_token)};");
 
         return new RemoteHttpResponse
         {

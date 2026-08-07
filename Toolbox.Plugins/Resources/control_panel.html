@@ -283,15 +283,6 @@
     return json;
   }
 
-  // 低风险一键指令
-  async function quick(command) {
-    try {
-      await sendCommand(command, {});
-      flash('✅ ' + command + ' 已执行');
-      refreshLogs();
-    } catch (e) { flash('❌ ' + e.message); }
-  }
-
   // ==================== 通用 fetch（带超时，防服务停止时请求挂起数十秒） ====================
   async function fetchWithTimeout(url, options, timeoutMs) {
     const controller = new AbortController();

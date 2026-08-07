@@ -12,12 +12,6 @@ namespace Toolbox.Plugins.Handlers;
 /// </summary>
 public sealed class StatusCommandHandler : IRemoteCommandHandler
 {
-    /// <summary>公网 IP 缓存：status 每 1.2s 轮询一次，直接请求外网会阻塞轮询线程，30s 缓存降频</summary>
-    private static readonly object PublicIpLock = new();
-    private static string? _cachedPublicIp;
-    private static DateTime _publicIpExpires = DateTime.MinValue;
-    private static readonly TimeSpan PublicIpCacheDuration = TimeSpan.FromSeconds(30);
-
     private readonly Func<SystemStatusSnapshot> _statusSource;
     private readonly Func<NetworkDetailSnapshot> _networkSource;
 
@@ -78,29 +72,13 @@ public sealed class StatusCommandHandler : IRemoteCommandHandler
 
     /// <summary>
     /// 公网 IPv4（status 快照的 ipv4 字段）：优先公共方法 <see cref="SystemInfoHelper.GetPublicIPv4Async"/>
-    /// （双源 fallback + 5s 超时）；失败时私有兜底为局域网 IPv4（公网不可达时的可识别地址）。
-    /// 不调用其他工具类（零耦合）；30s 缓存防 1.2s 轮询阻塞。
+    /// （双源 fallback + 5s 超时，30s 缓存经 NetworkDetailHelper 统一实现，与 network 指令共用）；
+    /// 失败时私有兜底为局域网 IPv4（公网不可达时的可识别地址）。不调用其他工具类（零耦合）。
     /// </summary>
     private static string? GetPublicIpWithFallback()
     {
-        lock (PublicIpLock)
-        {
-            if (DateTime.Now < _publicIpExpires) return _cachedPublicIp;
-            string? ip = null;
-            try
-            {
-                ip = SystemInfoHelper.GetPublicIPv4Async().GetAwaiter().GetResult();
-            }
-            catch (Exception)
-            {
-                // 网络异常走兜底
-            }
-            if (string.IsNullOrEmpty(ip))
-                ip = SystemInfoHelper.GetLocalIPv4();
-            _cachedPublicIp = ip;
-            _publicIpExpires = DateTime.Now.Add(PublicIpCacheDuration);
-            return ip;
-        }
+        var ip = NetworkDetailHelper.GetPublicIpCached();
+        return string.IsNullOrEmpty(ip) ? SystemInfoHelper.GetLocalIPv4() : ip;
     }
 
     private static NetworkDetailSnapshot BuildNetworkSnapshot() => NetworkDetailHelper.Collect();
