@@ -78,6 +78,17 @@ public class PowerCommandHandlerTests
     }
 
     [Fact]
+    public void Shutdown_DelayAtMaxBoundary_Allowed()
+    {
+        // 正边界：86400s（24h）允许（审查 P2-7 边界补全）
+        var handler = CreateHandler();
+        var result = handler.Execute("shutdown", Args(("delaySeconds", Json(86400)), ("confirm", Json(true))));
+
+        Assert.True(result.Success);
+        Assert.Contains("/s /t 86400", Assert.Single(_started).Arguments);
+    }
+
+    [Fact]
     public void Shutdown_DelayNotNumber_Rejected()
     {
         var handler = CreateHandler();

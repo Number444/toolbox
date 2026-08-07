@@ -47,11 +47,15 @@ public class RemoteControlTool : ITool
         TryAutoStart();
     }
 
+    /// <summary>最近一次自动启动失败原因（面板可见化，审查 P2-5：失败必带原因）</summary>
+    private static string? _lastAutoStartError;
+
     /// <summary>设置页"启动 Toolbox 时自动启动服务"开关生效点（默认端口/密钥来自 AppSettings）</summary>
     private static void TryAutoStart()
     {
         try
         {
+            _lastAutoStartError = null;
             if (!AppSettings.Instance.AutoStartRemoteControl || SharedServer.IsRunning) return;
             var port = int.TryParse(AppSettings.Instance.RemoteControlDefaultPort, out var p) && p is >= 1 and <= 65535
                 ? p
@@ -63,7 +67,8 @@ public class RemoteControlTool : ITool
         }
         catch (Exception ex)
         {
-            // 自动启动失败（端口冲突等）不打断工具加载，用户可手动启动
+            // 自动启动失败（端口冲突等）不打断工具加载；原因记录供面板展示（用户可手动启动）
+            _lastAutoStartError = ex.Message;
             Debug.WriteLine($"[RemoteControlTool] 自动启动失败: {ex.Message}");
         }
     }
@@ -75,7 +80,7 @@ public class RemoteControlTool : ITool
         // ① 说明文字
         panel.Children.Add(new TextBlock
         {
-            Text = "启动服务后，同一局域网内的手机/电脑用浏览器访问下方地址，输入密钥即可远程控制本机。服务启动后常驻（切换工具不停止），仅手动停止或关闭 Toolbox 时终止。",
+            Text = "启动服务后，同一局域网内的手机/电脑用浏览器访问下方地址，输入密钥即可远程控制本机。服务启动后常驻（切换工具不停止），仅手动停止或关闭 Toolbox 时终止。注意：密钥与指令为明文 HTTP 传输，请勿在不可信网络（如公共 WiFi）使用。",
             TextWrapping = TextWrapping.Wrap,
             Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 0, 0, 16)
@@ -145,6 +150,11 @@ public class RemoteControlTool : ITool
 
         RefreshUi();
         RefreshDevices();
+
+        // 自动启动失败原因可见化（服务未运行且存在失败记录时显示）
+        if (!SharedServer.IsRunning && _lastAutoStartError != null)
+            SetStatus($"⚠️ 自动启动失败：{_lastAutoStartError}（可手动启动）", ThemeColors.Warning);
+
         return panel;
     }
 
@@ -176,7 +186,8 @@ public class RemoteControlTool : ITool
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center
         };
-        _portBox.TextChanged += (_, _) => RemoteControlSettings.Instance.LastPort = _portBox.Text.Trim();
+        // 失焦时才落盘（避免逐键 3 次文件 IO 写放大，审查 P3-1）
+        _portBox.LostFocus += (_, _) => RemoteControlSettings.Instance.LastPort = _portBox.Text.Trim();
         return _portBox;
     }
 
@@ -413,6 +424,11 @@ public class RemoteControlTool : ITool
     {
         try
         {
+            if (SharedServer.IsNoKeyMode)
+            {
+                SetStatus("ℹ️ 免登录模式无密钥认证，无需复制", ThemeColors.Warning);
+                return;
+            }
             var key = SharedServer.Token;
             if (string.IsNullOrEmpty(key)) return;
             Clipboard.SetText(key);
@@ -429,6 +445,18 @@ public class RemoteControlTool : ITool
     private void RefreshDevices()
     {
         _deviceItems!.Children.Clear();
+
+        // 免登录模式无会话：设备列表恒空且无管理意义，直接说明（审查 P2-4）
+        if (SharedServer.IsNoKeyMode)
+        {
+            _deviceItems.Children.Add(new TextBlock
+            {
+                Text = "（免登录模式：无会话，设备管理不适用）",
+                FontSize = 13,
+                Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
+            });
+            return;
+        }
 
         var connected = SharedServer.ConnectedDevices;
         var known = SharedServer.KnownDevices;
@@ -501,10 +529,13 @@ public class RemoteControlTool : ITool
 
         _startButton!.IsEnabled = !running;
         _stopButton!.IsEnabled = running;
-        _copyKeyButton!.IsEnabled = running;
+        // 免登录模式不展示/不复制密钥（避免"显示密钥但根本不校验"的安全误导，审查 P1-1）
+        _copyKeyButton!.IsEnabled = running && !SharedServer.IsNoKeyMode;
         _portBox!.IsEnabled = !running; // 运行中锁定输入（改动须停止后生效）
         _keyBox!.IsEnabled = !running;
-        _keyValue!.Text = running ? SharedServer.Token ?? "" : "—";
+        _keyValue!.Text = running
+            ? (SharedServer.IsNoKeyMode ? "免登录（无密钥）" : SharedServer.Token ?? "—")
+            : "—";
 
         _urlList!.Items.Clear();
         if (running)

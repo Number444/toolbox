@@ -245,7 +245,12 @@
         body: JSON.stringify({ token: key }) // 协议字段名 token（服务端解析），界面文案均为"密钥"
       });
       const json = await res.json();
-      if (!json.success) { document.getElementById('auth-msg').textContent = json.error || '认证失败'; return; }
+      if (!json.success) {
+        const msg = document.getElementById('auth-msg');
+        msg.textContent = json.error || '认证失败';
+        msg.style.color = 'var(--danger)'; // 重置自动填密钥时染绿的残留颜色（审查 P3-3）
+        return;
+      }
       hideAuth();
       refreshStatus();
       refreshLogs();
@@ -269,14 +274,15 @@
 
   // ==================== 指令 ====================
   async function sendCommand(command, args) {
-    const res = await fetch('/api/command', {
+    // 5s 超时：指令请求不挂起（审查 P3-4，与状态轮询同款保护）
+    const res = await fetchWithTimeout('/api/command', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'RemoteControl'
       },
       body: JSON.stringify({ command, args: args || {} })
-    });
+    }, 5000);
     if (handleUnauthorized(res)) return null;
     const json = await res.json();
     if (!json.success) throw new Error(json.error || '执行失败');

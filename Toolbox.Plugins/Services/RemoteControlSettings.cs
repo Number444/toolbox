@@ -48,12 +48,19 @@ public sealed class RemoteControlSettings
         get { lock (_devicesLock) return _knownDevices.ToArray(); }
     }
 
-    /// <summary>已记录设备（IP 匹配）？——控制页自动填密钥判断</summary>
+    /// <summary>
+    /// 自动填密钥资格：IP 匹配且 7 天内活跃（审查 P1-2 缓解：DHCP 轮换后旧 IP 的"新设备"不再自动获得密钥；
+    /// 设备仍保留在列表中，重新认证即刷新 LastSeen 恢复资格）。
+    /// </summary>
     public bool IsKnownDevice(string ip)
     {
         if (string.IsNullOrEmpty(ip)) return false;
-        lock (_devicesLock) return _knownDevices.Any(d => d.Ip == ip);
+        lock (_devicesLock)
+            return _knownDevices.Any(d => d.Ip == ip && DateTime.Now - d.LastSeen <= DeviceGracePeriod);
     }
+
+    /// <summary>设备记录免活跃宽限期（7 天未活跃 → 不再自动投递密钥）</summary>
+    private static readonly TimeSpan DeviceGracePeriod = TimeSpan.FromDays(7);
 
     /// <summary>记录/更新设备（认证成功时调用）；同 IP 刷新设备名与最后时间</summary>
     public void RecordDevice(string ip, string deviceName)

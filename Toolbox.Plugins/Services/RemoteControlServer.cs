@@ -280,13 +280,26 @@ public sealed class RemoteControlServer
         return action();
     }
 
-    /// <summary>惰性清理过期会话（防字典无限增长；ConcurrentDictionary 枚举线程安全）</summary>
+    /// <summary>
+    /// 惰性清理：过期会话（>200 条时）+ 认证失败状态（_authByIp 只增不清，审查 P2-6——
+    /// 锁定已过期且无进行中失败计数的条目可安全移除；FailCount>0 表示爆破进行中，保留）。
+    /// </summary>
     private void CleanupExpiredSessions()
     {
-        if (_sessions.Count <= 200) return;
         var now = DateTime.Now;
-        foreach (var expired in _sessions.Where(kv => kv.Value.Expires < now).Select(kv => kv.Key).ToList())
-            _sessions.TryRemove(expired, out _);
+        if (_sessions.Count > 200)
+        {
+            foreach (var expired in _sessions.Where(kv => kv.Value.Expires < now).Select(kv => kv.Key).ToList())
+                _sessions.TryRemove(expired, out _);
+        }
+
+        lock (_authLock)
+        {
+            foreach (var stale in _authByIp
+                         .Where(kv => kv.Value.LockedUntil < now && kv.Value.FailCount == 0)
+                         .Select(kv => kv.Key).ToList())
+                _authByIp.Remove(stale);
+        }
     }
 
     private bool TryGetSessionId(RemoteHttpRequest request, out string sessionId)
