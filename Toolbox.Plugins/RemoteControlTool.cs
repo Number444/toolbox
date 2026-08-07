@@ -101,7 +101,17 @@ public class RemoteControlTool : ITool
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap
         }));
-        accessInner.Children.Add(AddConfigRow("访问地址", BuildUrlList()));
+
+        // 当前密钥与访问地址之间 2px 浅灰分割线
+        accessInner.Children.Add(new Border
+        {
+            Height = 2,
+            Background = new SolidColorBrush(ThemeColors.BorderSubtle),
+            Margin = new Thickness(0, 2, 0, 10)
+        });
+
+        // 访问地址行：标签顶部对齐第一行地址（多行地址时标签不垂直居中）
+        accessInner.Children.Add(BuildUrlRowWithLabel());
         accessCard.Margin = new Thickness(0, 0, 0, 12);
         panel.Children.Add(accessCard);
 
@@ -274,6 +284,23 @@ public class RemoteControlTool : ITool
         return _urlList;
     }
 
+    /// <summary>"访问地址"标签 + 地址列表：标签顶部对齐第一行地址文字（Margin 微调对齐基线）</summary>
+    private UIElement BuildUrlRowWithLabel()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+        row.Children.Add(new TextBlock
+        {
+            Text = "访问地址",
+            FontSize = 13,
+            Width = 72,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 4, 0, 0), // 与首行地址文字基线对齐
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
+        });
+        row.Children.Add(BuildUrlList());
+        return row;
+    }
+
     /// <summary>地址行：地址文本 + 独立复制按钮（每行可复制）</summary>
     private static UIElement BuildUrlRow(string url)
     {
@@ -335,20 +362,21 @@ public class RemoteControlTool : ITool
                 return;
             }
 
+            // 无密钥永远可启动（免登录模式）；开关控制"是否生成随机密钥"，不拦截启动
             var manualKey = _keyBox!.Text.Trim();
-            if (string.IsNullOrEmpty(manualKey) && !RemoteControlSettings.Instance.AutoGenerateKey)
-            {
-                SetStatus("⚠️ 未填写密钥且关闭了自动生成，请填写密钥或开启自动生成", ThemeColors.Warning);
-                return;
-            }
+            SharedServer.Start(port,
+                string.IsNullOrEmpty(manualKey) ? null : manualKey,
+                generateKey: RemoteControlSettings.Instance.AutoGenerateKey);
 
-            SharedServer.Start(port, string.IsNullOrEmpty(manualKey) ? null : manualKey);
-
-            // 记录本次使用的密钥与端口（明文落盘，上次值回填输入框）
-            RemoteControlSettings.Instance.LastKey = SharedServer.Token ?? "";
+            // 记录本次使用的端口；密钥仅手动指定时落盘——
+            // 免登录（自动生成）的随机密钥不落盘，防止下次输入框回填后误成带密钥启动
             RemoteControlSettings.Instance.LastPort = port.ToString();
+            if (!SharedServer.IsNoKeyMode)
+                RemoteControlSettings.Instance.LastKey = SharedServer.Token ?? "";
 
-            SetStatus("✅ 服务已启动，请在浏览器打开下方地址并输入密钥", ThemeColors.Success);
+            SetStatus(SharedServer.IsNoKeyMode
+                ? "✅ 服务已启动（免登录模式：未指定密钥，局域网内可直接访问）"
+                : "✅ 服务已启动，请在浏览器打开下方地址并输入密钥", ThemeColors.Success);
         }
         catch (Exception ex)
         {

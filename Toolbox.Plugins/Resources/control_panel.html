@@ -97,6 +97,17 @@
   #confirm-box p { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
   #confirm-box .row { display: flex; gap: 10px; }
   #confirm-box .row button { flex: 1; }
+  /* 断开连接提示弹窗（服务停止/进程关闭时自绘提示，非浏览器控件） */
+  #conn-cover {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: none; align-items: center; justify-content: center; z-index: 20;
+  }
+  #conn-cover.show { display: flex; }
+  #conn-box { width: 320px; max-width: 90vw; background: var(--card); border-radius: 10px; padding: 18px; }
+  #conn-box h3 { font-size: 15px; margin-bottom: 10px; }
+  #conn-box p { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+  #conn-box .row { display: flex; gap: 10px; }
+  #conn-box .row button { flex: 1; }
   /* 设备卡片 */
   #device-list div { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #3a3a3a; font-size: 12px; color: var(--text-dim); }
   #device-list button { flex: 0 0 auto; min-width: 0; padding: 4px 10px; font-size: 12px; }
@@ -133,12 +144,12 @@
   <!-- 分割细线：快捷区与自定义区分隔 -->
   <div class="divider"></div>
   <!-- 自定义分钟数 + 定时关机 + 取消关机 同一行（对齐原 ShutdownTool 输入行，输入框左右 margin 对称） -->
-  <!-- 自定义分钟行：label 与输入框间距收紧（gap 4px），输入框相应增大 -->
-  <div style="display:flex;align-items:center;gap:4px">
-    <span style="font-size:13px;color:var(--text-dim);flex:0 0 auto">分钟数：</span>
+  <!-- 自定义分钟行：组件间距与其他行一致（gap 8px），按钮等宽统一高度 -->
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font-size:13px;color:var(--text-dim);flex:0 0 auto">分钟：</span>
     <input id="delay-input" type="number" min="1" max="1440" placeholder="1~1440" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--text-dim);border-radius:6px;padding:9px 10px;font-size:14px">
-    <button onclick="customShutdown()" style="flex:0 0 auto">🔌 定时关机</button>
-    <button class="danger" onclick="quick('cancel_shutdown')" style="flex:0 0 auto">🛑 取消关机</button>
+    <button onclick="customShutdown()" style="flex:0 0 auto;min-width:104px">🔌 定时关机</button>
+    <button class="danger" onclick="quick('cancel_shutdown')" style="flex:0 0 auto;min-width:104px">🛑 取消关机</button>
   </div>
   <div class="btns" style="margin-top:10px">
     <button class="danger" onclick="dangerous('shutdown', { delaySeconds: 0 })">立即关机</button>
@@ -154,6 +165,18 @@
     <div class="row">
       <button class="danger" onclick="confirmAction()">确认</button>
       <button class="ghost" onclick="hideConfirm()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 断开连接提示弹窗（服务停止/进程关闭） -->
+<div id="conn-cover">
+  <div id="conn-box">
+    <h3>⚠️ 连接已断开</h3>
+    <p>无法连接到 Toolbox 服务。请确认服务仍在运行、电脑未关机。</p>
+    <div class="row">
+      <button class="danger" onclick="retryConn()">尝试重新连接</button>
+      <button class="ghost" onclick="hideConnLost()">确定</button>
     </div>
   </div>
 </div>
@@ -230,7 +253,11 @@
   function hideAuth() { document.getElementById('auth-cover').classList.remove('show'); }
 
   function handleUnauthorized(res) {
-    if (res.status === 401) { showAuth(); return true; }
+    if (res.status === 401) {
+      // 断连弹窗期间抑制登录遮罩（服务重启瞬间可能先 401 后断开，避免遮罩叠加/自动回登录界面）
+      if (!connLostShown) showAuth();
+      return true;
+    }
     return false;
   }
 
@@ -257,6 +284,17 @@
       flash('✅ ' + command + ' 已执行');
       refreshLogs();
     } catch (e) { flash('❌ ' + e.message); }
+  }
+
+  // ==================== 通用 fetch（带超时，防服务停止时请求挂起数十秒） ====================
+  async function fetchWithTimeout(url, options, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, Object.assign({ signal: controller.signal }, options || {}));
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // ==================== 指令 ====================
@@ -326,15 +364,43 @@
   }
 
   // ==================== 状态 ====================
+  let connLostShown = false;
+  let connFailCount = 0; // 连续无响应计数：第 4 次才判定断开（≈4.8s，避免瞬时抖动误报）
+
+  // 断连提示弹窗（只弹一次，连接恢复自动关闭）
+  function showConnLost() {
+    if (connLostShown) return;
+    connLostShown = true;
+    document.getElementById('conn-cover').classList.add('show');
+  }
+
+  function hideConnLost() {
+    connLostShown = false;
+    document.getElementById('conn-cover').classList.remove('show');
+  }
+
+  function retryConn() {
+    // 直接刷新页面：重新走完整流程（自动填密钥/登录遮罩按正常逻辑），避免残留状态
+    hideConnLost();
+    location.reload();
+  }
+
   async function refreshStatus() {
     try {
-      const res = await fetch('/api/status');
+      // 2s 超时：服务停止/网络中断时单次请求最多 2s 即失败，4 次判定 ≈ 6-8s（修复判定时间远超预期）
+      const res = await fetchWithTimeout('/api/status', {}, 2000);
       if (handleUnauthorized(res)) return;
       const json = await res.json();
       if (!json.success) return;
+      connFailCount = 0; // 请求成功：清零连续失败计数
       renderStatus(json.data);
       setConn(true);
-    } catch (e) { setConn(false); }
+      if (connLostShown) { hideConnLost(); flash('✅ 连接已恢复'); }
+    } catch (e) {
+      setConn(false);
+      connFailCount++;
+      if (connFailCount >= 4) showConnLost(); // 连续第 4 次无响应才判定断开
+    }
   }
 
   function renderStatus(data) {
@@ -362,9 +428,9 @@
       setMeter('battery', '无电池', 100);
       batteryBar.style.background = 'var(--gray-dim)'; // 浅灰：无电池占位
     }
-    // 运行时长 / IPv4（textContent 拼接，防未来字段引入注入面）
+    // 运行时长 / 公网 IP（textContent 拼接，防未来字段引入注入面）
     document.getElementById('status-msg').textContent =
-      '运行时长：' + (data.uptime || '--') + '　IPv4：' + (data.ipv4 || '--');
+      '运行时长：' + (data.uptime || '--') + '　公网 IP：' + (data.ipv4 || '--');
   }
 
   function setMeter(id, label, pct) {
@@ -381,7 +447,7 @@
   // ==================== 日志 ====================
   async function refreshLogs() {
     try {
-      const res = await fetch('/api/events');
+      const res = await fetchWithTimeout('/api/events', {}, 5000);
       if (handleUnauthorized(res)) return;
       const json = await res.json();
       if (!json.success) return;

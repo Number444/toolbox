@@ -347,6 +347,79 @@ public class RemoteControlServerTests : IDisposable
         Assert.StartsWith("Forbidden", kick);
     }
 
+    // ==================== 免登录模式（无密钥启动） ====================
+
+    [Fact]
+    public async Task NoKeyMode_NoAuthRequired_AndFlagSet()
+    {
+        // 无密钥启动（token 为 null = 自动生成）→ 免登录模式
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "no-key-mode.json"));
+        var power = new PowerCommandHandler(new PowerActions(_ => 0), _ => true);
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, power, new StatusCommandHandler());
+        server.Start(0, null);
+
+        Assert.True(server.IsNoKeyMode);
+        Assert.NotNull(server.Token); // 自动生成
+
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.ActualPort}") };
+        client.DefaultRequestHeaders.Add("X-Requested-With", "RemoteControl"); // CSRF 头独立于认证，仍必须
+        var status = await client.GetAsync("/api/status");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode); // 免认证直接放行
+        var events = await client.GetAsync("/api/events");
+        Assert.Equal(HttpStatusCode.OK, events.StatusCode);
+        var command = await PostJsonAsync(client, "/api/command",
+            """{"command":"shutdown","args":{"delaySeconds":1,"confirm":true}}""");
+        Assert.StartsWith("OK", command);
+
+        server.Stop();
+        Assert.False(server.IsNoKeyMode);
+    }
+
+    [Fact]
+    public void KeyMode_NoKeyModeFlagFalse()
+    {
+        // 手动指定密钥 → 非免登录模式
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "key-mode.json"));
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, "manual-key");
+
+        Assert.False(server.IsNoKeyMode);
+        server.Stop();
+    }
+
+    [Fact]
+    public async Task NoKeyMode_GenerateKeyOff_TokenIsNull()
+    {
+        // 开关"无密钥时自动生成随机密钥"关：免登录启动且不生成密钥（面板显示"—"）
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "no-key-no-gen.json"));
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, null, generateKey: false);
+
+        Assert.True(server.IsNoKeyMode);
+        Assert.Null(server.Token); // 不生成密钥
+
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.ActualPort}") };
+        var status = await client.GetAsync("/api/status");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode); // 免登录放行
+
+        server.Stop();
+    }
+
+    [Fact]
+    public void NoKeyMode_GenerateKeyOn_TokenGenerated()
+    {
+        // 开关开（默认）：免登录启动且生成随机密钥（面板可展示/复制）
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "no-key-gen.json"));
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, null); // generateKey 默认 true
+
+        Assert.True(server.IsNoKeyMode);
+        Assert.NotNull(server.Token);
+        Assert.Equal(16, server.Token!.Length); // Guid.N[..16]
+
+        server.Stop();
+    }
+
     // ==================== 生命周期幂等 ====================
 
     [Fact]

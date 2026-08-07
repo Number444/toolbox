@@ -59,6 +59,9 @@ public sealed class RemoteControlServer
     private string? _token;
     private byte[]? _htmlBytes;
 
+    /// <summary>免登录模式：无密钥启动（自动生成随机密钥）时不要求认证（用户决策 2026-08-08）</summary>
+    private bool _noKeyMode;
+
     public RemoteControlServer(IRemoteHttpServer http, params IRemoteCommandHandler[] handlers)
         : this(http, RemoteControlSettings.Instance, handlers)
     { }
@@ -80,6 +83,9 @@ public sealed class RemoteControlServer
 
     /// <summary>当前密钥（未启动为 null）</summary>
     public string? Token => _token;
+
+    /// <summary>是否免登录模式（无密钥启动，局域网内可直接访问不弹登录界面）</summary>
+    public bool IsNoKeyMode => _noKeyMode;
 
     /// <summary>最近操作日志快照（最新在前）</summary>
     public IReadOnlyList<LogEntry> Logs => _logs.Reverse().ToArray();
@@ -105,11 +111,16 @@ public sealed class RemoteControlServer
         _settings.RemoveDevice(ip);
     }
 
-    /// <summary>启动服务（幂等）。token 为空时自动生成随机密钥</summary>
-    public void Start(int port, string? token = null)
+    /// <summary>
+    /// 启动服务（幂等）。token 为空时进入免登录模式（不弹登录界面）：
+    /// generateKey=true（默认，开关"无密钥时自动生成随机密钥"开）→ 生成随机密钥供面板展示/复制；
+    /// generateKey=false（开关关）→ 不生成，密钥为 null，面板显示"—"。
+    /// </summary>
+    public void Start(int port, string? token = null, bool generateKey = true)
     {
         if (IsRunning) return; // 幂等
-        _token = token ?? Guid.NewGuid().ToString("N")[..16];
+        _noKeyMode = token == null;
+        _token = token ?? (generateKey ? Guid.NewGuid().ToString("N")[..16] : null);
         _sessions.Clear();
         _logs.Clear();
         lock (_authLock) _authByIp.Clear();
@@ -121,6 +132,7 @@ public sealed class RemoteControlServer
     {
         _http.Stop();
         _token = null;
+        _noKeyMode = false;
         _sessions.Clear();
         _logs.Clear();
         lock (_authLock) _authByIp.Clear();
@@ -251,6 +263,9 @@ public sealed class RemoteControlServer
 
     private RemoteHttpResponse RequireSession(RemoteHttpRequest request, Func<RemoteHttpResponse> action)
     {
+        // 免登录模式（无密钥启动）：任何请求直接放行，不弹登录界面
+        if (_noKeyMode) return action();
+
         if (!TryGetSessionId(request, out var sessionId) ||
             !_sessions.TryGetValue(sessionId, out var session) || DateTime.Now > session.Expires)
             return JsonError(401, "unauthorized");
