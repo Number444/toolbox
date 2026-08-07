@@ -14,19 +14,20 @@
 | C盘垃圾清理 | [tools/junk-cleaner-tool.md](tools/junk-cleaner-tool.md) | ⚙️ 系统维护 |
 | 二维码生成 | [tools/qrcode-tool.md](tools/qrcode-tool.md) | 🔤 文本与数据 |
 | 网络信息 | [tools/network-info-tool.md](tools/network-info-tool.md) | 🌐 网络与开发 |
+| 远程控制 | [tools/remote-control-tool.md](tools/remote-control-tool.md) | 🌐 网络与开发 |
 | 软件卸载管理器 | [tools/software-uninstall-tool.md](tools/software-uninstall-tool.md) | 📁 文件管理 |
 | 密码生成器 | [tools/password-generator-tool.md](tools/password-generator-tool.md) | 🔤 文本与数据 |
 | 截图识字 | [tools/ocr-tool.md](tools/ocr-tool.md) | 🔤 文本与数据 |
 | 网易云音乐悬浮窗 | [tools/netease-music-tool.md](tools/netease-music-tool.md) | 🎵 媒体与娱乐 |
 
-> 统计口径：11 个工具 + 悬浮窗子模块 + OCR 引擎子系统。新增工具时在此表登记（见 09-tool-dev.md）。
+> 统计口径：12 个工具 + 悬浮窗子模块 + OCR 引擎子系统。新增工具时在此表登记（见 09-tool-dev.md）。
 
 ## 共享 Helpers/（非工具，归入层概览）
 
 | 文件 | 职责 |
 |------|------|
 | SystemPowerHelper.cs | 系统电源操作：Lock / TurnOffMonitor / Sleep（插件层自含 P/Invoke） |
-| SystemInfoHelper.cs | 轻量系统信息：内存占用%/运行时长/磁盘空间/本机 IPv4 |
+| SystemInfoHelper.cs | 轻量系统信息：内存占用%/运行时长/磁盘空间/本机 IPv4/公网 IP/电池（GetBatteryInfo） |
 | MonitorHelper.cs | 多屏工作区查询（MonitorFromWindow + GetMonitorInfo） |
 | ClickThroughHelper.cs | 悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现） |
 | OcrHelper.cs | Windows 内置 OCR 引擎封装（离线识别） |

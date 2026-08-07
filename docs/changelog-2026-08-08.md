@@ -35,5 +35,6 @@
 
 ## 3. 发布
 
-- 版本号维持 1.0.0
-- 产物：`setup/Toolbox_Setup.exe`（self-contained 单文件）
+- 版本号更新 **v1.0.0 → v1.5**（setup/ToolboxSetup.iss）
+- 产物：`setup/Toolbox_Setup.exe`（self-contained 单文件，55.9MB）
+- 已 push 云端（12 commit，1ad2c84..2d7fdeb）

@@ -178,6 +178,8 @@ SystemInfoHelper.GetMemoryUsagePercent();  // 内存占用 %(int?)
 SystemInfoHelper.GetUptime();              // 运行时长 TimeSpan
 SystemInfoHelper.GetDriveSpace("C:");      // (free, total) 字节
 SystemInfoHelper.GetLocalIPv4();           // 本机首个有网关网卡的 IPv4
+SystemInfoHelper.GetPublicIPv4Async();     // 公网 IPv4（双源 fallback，5s 超时）
+SystemInfoHelper.GetBatteryInfo();         // 电池剩余%+状态（笔记本；桌面机 IsBatteryPresent=false）
 ```
 
 ### 3.8.3 工具间导航 —— `ToolNavigation`
