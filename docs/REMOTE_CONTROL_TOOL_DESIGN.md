@@ -1,6 +1,7 @@
 # RemoteControlTool 设计文档（局域网远程控制）
 
 > 状态：设计阶段 | 日期：2026-08-07 | 目标平台：Windows 10 19041+ / .NET 9 / WPF
+> 本页为 RemoteControlTool 的唯一设计事实源；实现过程中如变更决策，同步回填本节与第 13 章决策记录。
 
 ## 1. 概述
 
@@ -22,12 +23,16 @@
 
 ### FR-1 服务管理
 - 工具面板显示：服务状态（已停止/运行中）、监听端口（可配置，默认 8090）、访问 URL
-- 按钮：启动 / 停止服务；复制访问地址
+- 按钮：启动 / 停止服务；复制访问地址；**复制当前 Token**（Token 展示见 FR-4）
 - 服务生命周期（避免后台残留监听）：
   - 面板提供手动"停止"按钮
   - 工具内容 UI 的 **Unloaded 事件**（切换工具/关闭时触发）自动 Stop()
   - ⚠️ 注意：主窗口对工具内容有缓存复用机制，Stop 须挂在 Unloaded 事件，
     不能依赖工具实例销毁（实例可能一直存活）
+  - **Stop() 必须幂等**（Unloaded 在 TransitioningContentControl 过渡中可能多次触发，
+    重复调用无害）；Start() 在已运行时调用同样无害（忽略或返回当前状态）
+  - **服务状态显示以 `RemoteControlServer.IsRunning` 为唯一事实源**，
+    面板不得用本地 bool 字段记忆状态——缓存复用/重建下 UI 与实际状态永不脱节
 
 ### FR-2 系统控制指令
 | 指令 | 行为 | 实现方式（遵守项目修改规范） |
@@ -51,7 +56,7 @@
 | status | 磁盘各分区剩余、系统运行时长、IPv4 | ✅ 公共 Helper：`SystemInfoHelper.GetUptime() / GetDriveSpace() / GetLocalIPv4()` |
 | status | CPU 占用 | 插件内自实现（公共类未提供）：本工具私有 `SystemMetricsHelper`（GetSystemTimes P/Invoke，零第三方依赖） |
 | network | MAC / 网关 / DNS | 插件内自实现：`NetworkInterface.GetAllNetworkInterfaces()` 等 .NET 公共 API |
-| network | 公网 IP | 插件内自实现：HttpClient 请求公共 IP 服务（try-catch + 超时） |
+| network | 公网 IP | 插件内自实现：HttpClient 请求公共 IP 服务（try-catch + 超时，离线时降级返回 null 不阻塞） |
 
 状态页面支持**自动刷新**（前端 3s 轮询或 SSE），便于远程盯屏。
 
@@ -59,6 +64,10 @@
 - 启动服务时自动生成 Token（也可手动指定），控制页首次访问需输入 Token
 - 未认证请求返回 401；认证后浏览器会话内有效（Cookie/会话缓存）
 - 状态查询与指令执行共用同一 Token
+- **Token 可见性**：服务启动后，工具面板必须展示当前 Token 并提供"复制"按钮
+  （用户需凭它登录控制页；仅服务停止后重新启动时重新生成才隐藏）
+- **手动指定 Token 仅当前会话有效**：不落盘，服务重启后回到随机生成；
+  保持"Token 不落盘"安全红线（用户如需固定 Token，每次启动前手动填写）
 
 ### FR-5 审计与容错
 - 控制页显示最近操作记录（指令、时间、来源 IP）
@@ -73,7 +82,7 @@
   | 维度 | HttpListener | TcpListener 手写 |
   |------|-------------|-----------------|
   | URL ACL 权限 | ❌ 监听非 localhost 需 http.sys 保留权，普通权限可能 Access Denied（需 netsh/管理员） | ✅ 无此限制，普通权限即可监听 |
-  | 服务骨架代码量 | 少（~50 行） | 需自研协议解析（~200 行一次性成本） |
+  | 服务骨架代码量 | 少 | 需自研协议解析（一次性成本，见 10 章 M1） |
   | 协议健壮性 | 系统级，成熟 | 需自行处理边界（畸形请求/超时/超大 body） |
   | 依赖 | 无 | 无 |
   | 后续 HTTPS/SSE/WebSocket | 较易扩展 | 成本高，届时换 Kestrel（见 12） |
@@ -99,7 +108,7 @@
 
 ```
 Toolbox.Plugins/
-├── RemoteControlTool.cs              ITool 实现：工具面板 UI（状态/端口/URL/按钮）
+├── RemoteControlTool.cs              ITool 实现：工具面板 UI（状态/端口/URL/Token/按钮）
 ├── Services/
 │   ├── IRemoteHttpServer.cs          HTTP 服务抽象接口（主/备方案统一契约，切换零成本）
 │   ├── TcpHttpServer.cs              ★ 主方案：TcpListener 手写 HTTP（默认启用）
@@ -127,11 +136,13 @@ Toolbox.Plugins/
 
 ```
 RemoteControlTool (ITool)
-  ├── CreateContent() → 工具面板 UI（状态灯、端口输入、启动/停止、地址列表、操作日志）
-  └── 持有 RemoteControlServer 实例，页面关闭时 Stop()
+  ├── CreateContent() → 工具面板 UI（状态灯、端口输入、启动/停止、Token 展示与复制、地址列表、操作日志）
+  ├── 持有 RemoteControlServer 实例，状态灯绑定 IsRunning（唯一事实源）
+  └── Unloaded 事件 → Stop()（幂等）；服务回调更新 UI 一律经 Dispatcher（遵循项目线程安全惯例）
 
 RemoteControlServer（持有 IRemoteHttpServer，主/备方案可切换）
-  ├── Start(port, token) / Stop()
+  ├── Start(port, token) / Stop()（Stop 幂等，重复调用无害）
+  ├── IsRunning 只读属性（面板与服务器状态的唯一事实源）
   ├── IRemoteHttpServer 抽象：解析请求 → 返回统一 HTTP 响应（主/备实现互换）
   │   ├── TcpHttpServer（主）：TcpListener 异步循环：AcceptTcpClient → 每连接一 Task → 读取/解析 HTTP 请求
   │   │   请求解析（自研极简）：请求行（方法/路径/query）+ 请求头 + Content-Length 体 + URL 解码；
@@ -149,6 +160,8 @@ PowerCommandHandler / StatusCommandHandler
       - Status: 调用公共 Helper SystemInfoHelper（内存百分比/磁盘/运行时长/IPv4）
         + 本工具私有 NetworkDetailHelper（MAC/网关/DNS/公网 IP）
         + 本工具私有 SystemMetricsHelper（CPU 占用/内存总量）
+      - 可测性：PowerCommandHandler 构造注入命令执行器委托
+        （默认实现 = PowerActions；测试注入记录型假执行器，避免真实关机，见 9 章）
 ```
 
 ### 4.3 复用边界（遵守项目修改规范）
@@ -194,7 +207,7 @@ PowerCommandHandler / StatusCommandHandler
 ### 5.3 指令示例
 ```json
 POST /api/command
-{ "command": "shutdown", "args": { "delaySeconds": 60 } }
+{ "command": "shutdown", "args": { "delaySeconds": 60, "confirm": true } }
 
 POST /api/command
 { "command": "lock" }
@@ -202,8 +215,14 @@ POST /api/command
 GET /api/status
 → { "success": true, "data": { "cpu": 12.5, "memoryTotalGB": 32, "memoryUsedGB": 18.2,
     "disks": [ {"name": "C:", "freeGB": 210, "totalGB": 512} ],
-    "uptime": "3d 04:12:33", "ipv4": "192.168.1.100" } }
+    "uptime": "3 天 4 小时", "ipv4": "192.168.1.100" } }
 ```
+
+> 说明：uptime 使用 `SystemInfoHelper.FormatUptime` 中文格式（与项目内其他工具一致）；
+> 内存 used = total − available（计入 standby/文件缓存，数值略高于任务管理器"使用中"，语义等价）。
+
+> 注意：`shutdown` / `restart` 请求必须携带 `args.confirm: true`（服务端强制校验，见 7.4），
+> 上例为完整形态。
 
 ## 6. Web 控制页设计（control_panel.html）
 
@@ -233,7 +252,7 @@ GET /api/status
 ```
 
 ### 认证流程
-1. 首次打开 `/` → 前端检测会话无效 → 显示 Token 输入遮罩
+1. 首次打开 `/` → 前端检测会话无效（调 GET /api/status 收到 401）→ 显示 Token 输入遮罩
 2. 输入 Token → `POST /api/auth` → 服务端校验 → 返回会话 Cookie（内存中）
 3. 后续请求自动带 Cookie，免重复输入；页面刷新保持会话
 
@@ -241,11 +260,12 @@ GET /api/status
 
 ### 7.1 Token 认证
 - Token 默认 `Guid.NewGuid().ToString("N")[..16]` 随机生成，可在面板手动指定
-- 仅存内存，不落盘（避免明文 Token 泄露到 settings.json）
+- 仅存内存，不落盘（避免明文 Token 泄露到 settings.json）；手动指定的 Token 仅当前会话有效（见 FR-4）
+- 服务启动后面板展示当前 Token + 复制按钮（用户登录控制页的唯一凭证）
 - 认证失败计数：连续失败 5 次锁定 30s（防暴力枚举）
 
 ### 7.2 会话
-- 认证成功后下发随机会话 ID（内存字典维护，过期 8h）
+- 认证成功后下发随机会话 ID（内存字典维护，过期 8h，惰性清理过期条目）
 - 前端以 Cookie 存储，HttpOnly 防 XSS 读取
 
 ### 7.3 网络边界
@@ -254,8 +274,9 @@ GET /api/status
 - 建议文档注明：Windows 防火墙首次会弹窗，需允许专用网络（信任局域网）
 
 ### 7.4 危险指令保护
-- 关机/重启/睡眠在控制页二次确认（前端 confirm）
+- 关机/重启在控制页二次确认（前端 confirm）
 - 服务端对 `shutdown`/`restart` 强制要求 `args.confirm=true`，否则拒绝（防 CSRF/误触）
+- 其余指令（锁屏/睡眠/关显示器/重启资源管理器/取消关机）低风险，无需确认
 
 ### 7.5 CSRF 防护
 - 所有写操作（/api/command）要求自定义头 `X-Requested-With: RemoteControl`，
@@ -266,7 +287,7 @@ GET /api/status
 | 现有模块 | 集成方式 |
 |---------|---------|
 | `ToolRegistry` | 无需改动，反射自动发现新插件 |
-| `ITool` / `ToolCategory` | RemoteControlTool 实现 ITool，分类归入 `⚙️ 系统维护`（或 `🌐 网络与开发`） |
+| `ITool` / `ToolCategory` | RemoteControlTool 实现 ITool，分类定死为 `ToolCategory.System`（⚙️ 系统维护） |
 | `SystemPowerHelper` | ✅ 公共 Helper 直接调用（锁屏/睡眠/关显示器） |
 | `SystemInfoHelper` | ✅ 公共 Helper 直接调用（内存/磁盘/运行时长/IPv4） |
 | `ShutdownTool` | ❌ 不调用、不修改；关机/重启/取消关机由本工具私有 `PowerActions` 自实现 |
@@ -279,46 +300,78 @@ GET /api/status
 | 测试类 | 覆盖 |
 |--------|------|
 | RemoteControlServerTests | 路由分发、Token 认证成功/失败/锁定、CSRF 头校验 |
-| PowerCommandHandlerTests | 指令参数校验（延迟秒数范围、confirm 必填） |
+| PowerCommandHandlerTests | 指令参数校验（延迟秒数范围、confirm 必填）、指令映射正确性 |
 | StatusCommandHandlerTests | 状态快照字段完整性（可注入假数据源） |
 | LanAddressHelperTests | 局域网 IP 列表解析 |
 
-> 说明：TcpListener 绑定真实端口在 CI 上可行（用随机高位端口 + 本机回环测试），
-> 或抽 `IRemoteCommandHandler` 用 Moq 模拟，避免真实关机指令进入测试。
+> **避免真实关机/重启进测试**：`PowerCommandHandler` 构造注入命令执行器委托，
+> 测试注入记录型假执行器（记录调用参数、返回成功），断言只验证参数校验与指令映射，
+> 不触发任何真实 Process.Start。
+>
+> **HTTP 层测试**：TcpHttpServer 用随机高位端口 + 本机回环地址（127.0.0.1）起停真实监听；
+> 断言请求/响应解析与错误分支（畸形请求 400、超大 body 413、未认证 401）。
+> 不引入 Moq 等新依赖——项目零第三方依赖惯例，假实现即测试桩。
 
-## 10. 实施步骤（里程碑）
+## 10. 实施步骤（里程碑与执行顺序）
+
+> 执行顺序：各里程碑内步骤按编号顺序执行（前一步是后一步的前置）；
+> 里程碑之间 M1 → M2 → M3 → M4 → M5 串行，M4 与 M5 可在 M3 完成后并行。
 
 ### M1 服务骨架（半天）
-- IRemoteHttpServer 抽象 + TcpHttpServer（主方案）：启动/停止、请求解析、统一响应模型
-- HttpListenerServer（备方案）实现（约 80 行，先写好备用）
-- 认证中间件 + Token 生成 + 会话字典
-- 工具面板 UI：状态灯、端口、启动/停止、地址列表
+
+| 步骤 | 内容 | 前置 |
+|------|------|------|
+| 1.1 | 定义 `IRemoteHttpServer` 接口：Start/Stop/IsRunning + 请求-响应抽象（HttpRequest/HttpResponse 最小模型） | 无 |
+| 1.2 | 实现 `TcpHttpServer`（主）：TcpListener 异步循环、请求行/头/体解析、URL 解码、错误分支（400/413）、单请求限时 | 1.1 |
+| 1.3 | 定义统一响应模型 `RemoteControlResponse` + 请求模型 `RemoteControlRequest` + `SystemStatusSnapshot`（Models/） | 1.1 |
+| 1.4 | 实现 `HttpListenerServer`（备，先写好备用）：GetContextAsync 映射到同一抽象 | 1.1 |
+| 1.5 | 认证中间件 + Token 生成 + 会话字典（含失败锁定、惰性过期清理） | 1.3 |
+| 1.6 | 工具面板 UI：状态灯（绑定 IsRunning）、端口输入、启动/停止按钮、Token 展示与复制、地址列表（LanAddressHelper） | 1.5 |
 
 ### M2 指令与状态（半天）
-- PowerCommandHandler：锁屏/睡眠/关显示器（公共 SystemPowerHelper）
-  + 关机/重启/取消关机/重启资源管理器（本工具私有 PowerActions，标准命令）
-- StatusCommandHandler：内存/磁盘/运行时长/IPv4（公共 SystemInfoHelper）
-  + CPU 占用 + 网络详情（本工具私有实现）
+
+| 步骤 | 内容 | 前置 |
+|------|------|------|
+| 2.1 | `PowerActions`（私有）：shutdown.exe（/s /t、/r /t、/a）、taskkill+explorer；抽命令执行器委托（构造注入点） | 无 |
+| 2.2 | `PowerCommandHandler`：指令参数校验（延迟秒数范围、confirm 必填）+ 委托映射 | 2.1 |
+| 2.3 | `SystemMetricsHelper`（私有）：CPU（GetSystemTimes）+ 内存总量/可用（GlobalMemoryStatusEx） | 无 |
+| 2.4 | `NetworkDetailHelper`（私有）：MAC/网关/DNS + 公网 IP（HttpClient 超时+降级） | 无 |
+| 2.5 | `StatusCommandHandler`：聚合 SystemInfoHelper + 私有 Helper，字段完整性 | 2.3、2.4 |
+| 2.6 | `RemoteControlServer` 路由接线：/api/command → PowerCommandHandler、/api/status → StatusCommandHandler、/api/events → 日志缓冲 | 1.5、2.2、2.5 |
 
 ### M3 控制页（1 天）
-- control_panel.html：认证遮罩 + 快捷操作 + 电源控制（二次确认）+ 状态仪表 + 日志
-- 内嵌资源 + 加载渲染
-- 移动端适配
+
+| 步骤 | 内容 | 前置 |
+|------|------|------|
+| 3.1 | HTML 骨架 + 深色主题 + 认证遮罩（Token 输入 → /api/auth → Cookie） | 1.5 |
+| 3.2 | 快捷操作组（锁屏/睡眠/关显示器/重启资源管理器，一键直发） | 2.6 |
+| 3.3 | 电源控制组（定时关机下拉/立即关机/重启/取消关机，二次 confirm + `args.confirm=true`） | 2.6 |
+| 3.4 | 状态仪表（CPU/内存/磁盘/运行时长/IPv4，3s 轮询，401 时回认证遮罩） | 2.6 |
+| 3.5 | 操作日志区（最近 20 条） | 2.6 |
+| 3.6 | 内嵌资源接入（EmbeddedResource 注册 + GET / 返回 HTML） | 3.1-3.5 |
 
 ### M4 加固与测试（半天）
-- 暴力锁定、CSRF 头、操作日志、异常兜底
-- xUnit 测试 + 80/80 baseline 回归保持全绿
+
+| 步骤 | 内容 | 前置 |
+|------|------|------|
+| 4.1 | 安全加固核对：暴力锁定、CSRF 头校验、header ≤16KB/body ≤1MB 限长、Stop 幂等 | 2.6、3.6 |
+| 4.2 | 单元测试（见 9 章）：4 个测试类 + 假执行器 + 回环端口 HTTP 测试 | 2.6、3.6 |
+| 4.3 | 全量回归：既有测试保持全绿（数量以 changelog 为准，本页不复述） | 4.2 |
 
 ### M5 文档与验证（半天）
-- 使用说明（防火墙、局域网访问、Token 查看）
-- Windows 实机冒烟测试清单（多设备浏览器访问、并发轮询、畸形请求）
-- 冒烟通过 → 确认主方案；不通过 → 按第 13 章切换备方案 HttpListenerServer 并复测
+
+| 步骤 | 内容 | 前置 |
+|------|------|------|
+| 5.1 | 使用说明：防火墙放行、局域网访问、Token 查看/复制、AP 隔离排查 | 4.1 |
+| 5.2 | Windows 实机冒烟测试清单（多设备浏览器访问、并发轮询、畸形请求、断网降级） | 4.1 |
+| 5.3 | 实机冒烟：通过 → 确认主方案；不通过 → 按 13 章切换备方案 HttpListenerServer 并复测 | 5.2 |
+| 5.4 | 决策回填：冒烟结论 + 任何偏离设计处回填本页与 13.4 | 5.3 |
 
 ## 11. 风险与限制
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| 沙盒无法编译 WPF | 交付后需 Windows 实机验证 | 代码严格按项目现有风格；提供冒烟清单 |
+| 开发环境无法编译验证 WPF/实机行为 | 交付后需 Windows 实机验证 | 代码严格按项目现有风格；提供冒烟清单（5.2） |
 | 防火墙未放行 | 其他设备连不上 | 文档注明首次弹窗放行；工具页提供排查提示 |
 | 路由器 AP 隔离 | 同 Wi-Fi 但设备不通 | 提示检查 AP 隔离设置 |
 | Token 明文传输（HTTP） | 局域网可嗅探 | 局域网信任模型 + Token 随机强；后续可加 HTTPS（自签）预留 |
@@ -332,7 +385,7 @@ GET /api/status
   届时评估换用 Kestrel（ASP.NET Core）或第三方库承载 HTTP 层
 - **文件浏览/传输**：新增 /api/files 路由（手写协议需支持 multipart 或分块上传）
 - **屏幕截图**：CopyFromScreen + 图片流返回
-- **开机自启服务**：结合 AppSettings.AutoStart，可选随 Toolbox 启动自动监听
+- **开机自启服务**：结合 `AppSettings.AutoStart`（已确认存在于 Core，[AppSettings.cs:57](Toolbox.Core/Services/AppSettings.cs#L57)），可选随 Toolbox 启动自动监听
 
 ## 13. 备选方案与切换策略
 
@@ -360,9 +413,31 @@ GET /api/status
     `netsh http add urlacl url=http://+:8090/ user=Everyone`
     （或工具面板检测到 AccessDenied 时给出提示引导）
   - 请求/响应语义与手写版对齐（Content-Length、UTF-8、Set-Cookie 一致）
-- 备方案实现约 80 行，在 M1 阶段一并写好，避免切换时临时开发
+- 备方案实现体量小（单文件），在 M1 阶段一并写好，避免切换时临时开发
 
 ### 13.4 决策记录
 
 - 2026-08-07：选型定为 TcpListener 手写（主），HttpListener 为备；
   待 M4/M5 Windows 实机冒烟测试后确认或切换，结果回填本节
+- 2026-08-07（评审修订）：分类定死 System（⚙️ 系统维护）；Token 面板展示与复制；
+  手动指定 Token 仅当前会话；睡眠不要求二次确认（低风险）；
+  PowerCommandHandler 注入执行器委托（测试不真关机）；
+  测试不引入 Moq（零第三方依赖惯例）
+- 2026-08-07（实现偏离 2 处，已同步代码与测试）：
+  ① 公网 IP 不再自实现——复用公共 `SystemInfoHelper.GetPublicIPv4Async`
+  （双源 fallback + 5s 超时，与"网络信息"工具共用同一份实现；NetworkDetailHelper 仅做 MAC/网关/DNS）
+  ② 进程执行器委托注入点落在 `PowerActions` 构造（PowerCommandHandler 经 PowerActions 传递），
+  测试用 `new PowerActions(fakeExecutor)` 注入，语义不变（仍为"绝不触发真实关机"）
+- 2026-08-07（实现完成）：M1-M4 全部落地，测试 133/133 全绿（原 101 + 新增 32）；
+  实机冒烟待执行（清单见 docs/remote-control-tool-usage.md）
+- 2026-08-07（全链路 review 修复，测试 141/141）：对抗性审查发现并修复——
+  ① P1 会话字典并发 → ConcurrentDictionary（多设备轮询+登录并发安全）
+  ② P1 系统动作（锁屏/睡眠）注入点缺失，测试会真锁屏 → PowerCommandHandler 增加 systemAction 委托注入
+  ③ 认证锁定改按来源 IP 隔离（防单设备爆破拖累全员）+ Token 固定时长比较（防时序侧信道）
+  ④ Host 校验：仅接受 IP 字面量/localhost（防 DNS rebinding）
+  ⑤ 畸形请求回应 413（不再静默断连）+ 并发连接上限 64（防慢连接洪水）
+  ⑥ 备方案 HttpListenerServer 补 body 限长 + 循环读满
+  ⑦ 公网 IP 30s 缓存（避免 network 指令锁内同步等外部请求阻塞关机指令）
+  ⑧ 控制页改 textContent 渲染（杜绝 XSS 注入面）；500 不透出内部异常；Set-Cookie 显式 SameSite=Lax
+  ⑨ 补 FR-1 缺失的"复制访问地址"按钮；运行中锁定端口/Token 输入
+  ⑩ 补裸 socket 畸形请求/超大 body/DNS rebinding 测试（原设计 9 章测试盲区）

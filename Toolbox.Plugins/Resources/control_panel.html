@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Toolbox 远程控制</title>
+<style>
+  :root {
+    --bg: #1C1C1C;
+    --card: #2D2D2D;
+    --accent: #76B580;
+    --text: #F0F0F0;
+    --text-dim: #808080;
+    --danger: #F07070;
+    --warning: #E0A030;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 16px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding-bottom: 48px;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  #conn { font-size: 12px; color: var(--text-dim); }
+  #conn.on { color: var(--accent); }
+  #conn.off { color: var(--danger); }
+  .card {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 96px;
+  }
+  button:active { opacity: .8; }
+  button.danger { background: var(--danger); }
+  button.ghost { background: transparent; border: 1px solid var(--text-dim); color: var(--text); }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--text-dim);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 14px;
+    flex: 1;
+  }
+  .meter { margin-bottom: 8px; }
+  .meter .label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 3px; }
+  .bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s; }
+  #logs { font-size: 12px; color: var(--text-dim); max-height: 180px; overflow-y: auto; }
+  #logs div { padding: 3px 0; border-bottom: 1px solid #3a3a3a; }
+  #auth-cover {
+    position: fixed; inset: 0; background: var(--bg);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+  }
+  #auth-cover.show { display: flex; }
+  #auth-box { width: 320px; max-width: 90vw; text-align: center; }
+  #auth-box h2 { margin-bottom: 16px; }
+  #token-input {
+    width: 100%; padding: 12px; font-size: 14px; border-radius: 6px;
+    border: 1px solid var(--text-dim); background: var(--card); color: var(--text);
+    margin-bottom: 10px;
+  }
+  #auth-msg { color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #status-msg { color: var(--text-dim); font-size: 12px; margin-top: 8px; min-height: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰️ Toolbox 远程控制</h1>
+  <span id="conn">未连接</span>
+</header>
+
+<div class="card">
+  <h2>⚡ 快捷操作</h2>
+  <div class="btns">
+    <button onclick="quick('lock')">锁屏</button>
+    <button onclick="quick('sleep')">睡眠</button>
+    <button onclick="quick('monitor_off')">关显示器</button>
+    <button class="ghost" onclick="quick('explorer_restart')">重启资源管理器</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>⏻ 电源控制（需二次确认）</h2>
+  <div class="row">
+    <select id="delay-select">
+      <option value="60">60 秒后</option>
+      <option value="300" selected>5 分钟后</option>
+      <option value="600">10 分钟后</option>
+      <option value="1800">30 分钟后</option>
+      <option value="3600">1 小时后</option>
+    </select>
+    <button onclick="dangerous('shutdown', { delaySeconds: parseInt(document.getElementById('delay-select').value) })">定时关机</button>
+  </div>
+  <div class="btns">
+    <button class="danger" onclick="dangerous('shutdown', { delaySeconds: 0 })">立即关机</button>
+    <button class="danger" onclick="dangerous('restart', {})">重启电脑</button>
+    <button class="ghost" onclick="quick('cancel_shutdown')">取消关机</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>📊 系统状态（3 秒自动刷新）</h2>
+  <div class="meter" id="cpu-meter">
+    <div class="label"><span>CPU</span><span>--</span></div>
+    <div class="bar"><div id="cpu-bar" style="width:0%"></div></div>
+  </div>
+  <div class="meter" id="mem-meter">
+    <div class="label"><span>内存</span><span>--</span></div>
+    <div class="bar"><div id="mem-bar" style="width:0%"></div></div>
+  </div>
+  <div class="meter" id="disk-meter">
+    <div class="label"><span>磁盘</span><span>--</span></div>
+    <div class="bar"><div id="disk-bar" style="width:0%"></div></div>
+  </div>
+  <div id="status-msg">运行时长 / IPv4：--</div>
+</div>
+
+<div class="card">
+  <h2>📜 操作日志</h2>
+  <div id="logs">（暂无操作）</div>
+</div>
+
+<div id="auth-cover">
+  <div id="auth-box">
+    <h2>🔒 输入访问 Token</h2>
+    <input id="token-input" type="password" placeholder="Token（在 Toolbox 远程控制面板查看）" autocomplete="off">
+    <button onclick="login()" style="width:100%">登录</button>
+    <div id="auth-msg"></div>
+  </div>
+</div>
+
+<script>
+  // ==================== 认证 ====================
+  async function login() {
+    const token = document.getElementById('token-input').value.trim();
+    document.getElementById('auth-msg').textContent = '';
+    if (!token) { document.getElementById('auth-msg').textContent = '请输入 Token'; return; }
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const json = await res.json();
+      if (!json.success) { document.getElementById('auth-msg').textContent = json.error || '认证失败'; return; }
+      hideAuth();
+      refreshStatus();
+      refreshLogs();
+    } catch (e) {
+      document.getElementById('auth-msg').textContent = '无法连接服务器：' + e.message;
+    }
+  }
+
+  function showAuth() { document.getElementById('auth-cover').classList.add('show'); }
+  function hideAuth() { document.getElementById('auth-cover').classList.remove('show'); }
+
+  function handleUnauthorized(res) {
+    if (res.status === 401) { showAuth(); return true; }
+    return false;
+  }
+
+  // ==================== 指令 ====================
+  async function sendCommand(command, args) {
+    const res = await fetch('/api/command', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'RemoteControl'
+      },
+      body: JSON.stringify({ command, args: args || {} })
+    });
+    if (handleUnauthorized(res)) return null;
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || '执行失败');
+    return json;
+  }
+
+  // 低风险一键指令
+  async function quick(command) {
+    try {
+      await sendCommand(command, {});
+      flash('✅ ' + command + ' 已执行');
+      refreshLogs();
+    } catch (e) { flash('❌ ' + e.message); }
+  }
+
+  // 危险指令：前端二次确认 + 服务端 confirm 校验
+  async function dangerous(command, args) {
+    const names = { shutdown: '关机', restart: '重启电脑' };
+    if (!confirm('确认执行「' + (names[command] || command) + '」？')) return;
+    try {
+      await sendCommand(command, Object.assign({ confirm: true }, args));
+      flash('✅ ' + command + ' 已执行');
+      refreshLogs();
+    } catch (e) { flash('❌ ' + e.message); }
+  }
+
+  let flashTimer = null;
+  function flash(text) {
+    const el = document.getElementById('status-msg');
+    el.textContent = text;
+    el.style.color = text.startsWith('✅') ? 'var(--accent)' : 'var(--danger)';
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { el.style.color = 'var(--text-dim)'; }, 4000);
+  }
+
+  // ==================== 状态 ====================
+  async function refreshStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (handleUnauthorized(res)) return;
+      const json = await res.json();
+      if (!json.success) return;
+      renderStatus(json.data);
+      setConn(true);
+    } catch (e) { setConn(false); }
+  }
+
+  function renderStatus(data) {
+    // CPU
+    setMeter('cpu', data.cpuPercent == null ? '--' : data.cpuPercent + '%', data.cpuPercent || 0);
+    // 内存
+    if (data.memoryTotalGB != null && data.memoryUsedGB != null) {
+      const pct = data.memoryTotalGB > 0 ? Math.round(data.memoryUsedGB / data.memoryTotalGB * 100) : 0;
+      setMeter('mem', data.memoryUsedGB + ' / ' + data.memoryTotalGB + ' GB', pct);
+    } else { setMeter('mem', '--', 0); }
+    // 磁盘（取第一个分区）
+    if (data.disks && data.disks.length > 0) {
+      const d = data.disks[0];
+      const pct = d.totalGB > 0 ? Math.round((d.totalGB - d.freeGB) / d.totalGB * 100) : 0;
+      setMeter('disk', d.name + ' 剩余 ' + d.freeGB + ' / ' + d.totalGB + ' GB', pct);
+    } else { setMeter('disk', '--', 0); }
+    // 运行时长 / IPv4（textContent 拼接，防未来字段引入注入面）
+    document.getElementById('status-msg').textContent =
+      '运行时长：' + (data.uptime || '--') + '　IPv4：' + (data.ipv4 || '--');
+  }
+
+  function setMeter(id, label, pct) {
+    document.getElementById(id + '-meter').querySelector('.label span:last-child').textContent = label;
+    document.getElementById(id + '-bar').style.width = Math.min(100, Math.max(0, pct)) + '%';
+  }
+
+  function setConn(on) {
+    const el = document.getElementById('conn');
+    el.textContent = on ? '已连接：' + location.hostname : '无法连接';
+    el.className = on ? 'on' : 'off';
+  }
+
+  // ==================== 日志 ====================
+  async function refreshLogs() {
+    try {
+      const res = await fetch('/api/events');
+      if (handleUnauthorized(res)) return;
+      const json = await res.json();
+      if (!json.success) return;
+      const box = document.getElementById('logs');
+      const items = json.data || [];
+      box.textContent = ''; // textContent 渲染：日志字段一律当文本，杜绝 XSS 注入面
+      if (items.length) {
+        items.forEach(l => {
+          const div = document.createElement('div');
+          div.textContent = l.time + ' ' + l.command + ' from ' + (l.fromIp || '?');
+          box.appendChild(div);
+        });
+      } else {
+        box.textContent = '（暂无操作）';
+      }
+    } catch (e) { /* 连接失败不打断轮询 */ }
+  }
+
+  // ==================== 启动 ====================
+  setInterval(refreshStatus, 3000);
+  setInterval(refreshLogs, 5000);
+  // 首屏：尝试直接拉状态，401 则弹认证遮罩
+  refreshStatus();
+</script>
+</body>
+</html>
