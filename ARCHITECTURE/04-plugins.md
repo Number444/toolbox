@@ -1,0 +1,75 @@
+# 04 · 插件层总览（Toolbox.Plugins）
+
+> 工具实现层：独立程序集，运行时反射加载。每个工具一个 .cs 文件实现 ITool，
+> `CreateContent()` 返回 UIElement。**增删工具不修改主项目代码**。
+
+## 工具索引
+
+| 工具 | 叶子文档 | 分类 | 行数 |
+|------|---------|------|:----:|
+| 首页仪表盘 | [tools/home-dashboard-tool.md](tools/home-dashboard-tool.md) | 📊 首页 | 328 |
+| 定时关机 | [tools/shutdown-tool.md](tools/shutdown-tool.md) | ⚙️ 系统维护 | 251 |
+| 屏保启动 | [tools/screensaver-tool.md](tools/screensaver-tool.md) | ⚙️ 系统维护 | 186 |
+| 快捷系统操作 | [tools/quick-system-tool.md](tools/quick-system-tool.md) | ⚙️ 系统维护 | 157 |
+| C盘垃圾清理 | [tools/junk-cleaner-tool.md](tools/junk-cleaner-tool.md) | ⚙️ 系统维护 | 1028 |
+| 二维码生成 | [tools/qrcode-tool.md](tools/qrcode-tool.md) | 🌐 网络与开发 | 264 |
+| 网络信息 | [tools/network-info-tool.md](tools/network-info-tool.md) | 🌐 网络与开发 | 298 |
+| 软件卸载管理器 | [tools/software-uninstall-tool.md](tools/software-uninstall-tool.md) | 📁 文件管理 | 660 |
+| 密码生成器 | [tools/password-generator-tool.md](tools/password-generator-tool.md) | 🔤 文本与数据 | 563 |
+| 截图识字 | [tools/ocr-tool.md](tools/ocr-tool.md) | 🔤 文本与数据 | 687 |
+| 网易云音乐悬浮窗 | [tools/netease-music-tool.md](tools/netease-music-tool.md) | 🎵 媒体与娱乐 | 317 |
+
+> 统计口径：11 个工具 + 悬浮窗子模块 + OCR 引擎子系统。
+
+## 共享 Helpers/（非工具，归入层概览）
+
+| 文件 | 行数 | 职责 |
+|------|:----:|------|
+| SystemPowerHelper.cs | 50 | 系统电源操作：Lock / TurnOffMonitor / Sleep（插件层自含 P/Invoke） |
+| SystemInfoHelper.cs | 93 | 轻量系统信息：内存占用%/运行时长/磁盘空间/本机 IPv4 |
+| MonitorHelper.cs | 81 | 多屏工作区查询（MonitorFromWindow + GetMonitorInfo） |
+| ClickThroughHelper.cs | 132 | 悬浮窗游戏模式点击穿透（Transparent/Acrylic 两套实现） |
+| OcrHelper.cs | 89 | Windows 内置 OCR 引擎封装（离线识别） |
+| PaddleOcrWrapper.cs | 189 | PaddleOCR 高精度引擎包装（原生库加载/释放） |
+| EngineDownloader.cs | 288 | OCR 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
+| ImageFileHelper.cs | 83 | 图片文件校验与格式判断 |
+
+## 共享 Services/
+
+| 文件 | 行数 | 职责 |
+|------|:----:|------|
+| AudioflowSettings.cs | 205 | 悬浮窗独立设置（audioflow.json）：毛玻璃/锁定/贴边/游戏模式/播放按钮/窗口位置 |
+| SoftwareUninstallService.cs | 293 | 已安装软件扫描 + 卸载执行（注册表 + 图标提取 + UAC 提权） |
+
+## 共享 Controls/
+
+| 文件 | 行数 | 职责 |
+|------|:----:|------|
+| MusicContentControl.xaml(.cs) | 804 | 悬浮窗共享内容控件（封面/歌名/大小模式/跑马灯/切歌动画/悬停播放按钮） |
+| DockTriggerBar.xaml(.cs) | 123 | 贴边触发条控件（梯形圆角 + 方向箭头） |
+
+## 对话框
+
+| 文件 | 行数 | 职责 |
+|------|:----:|------|
+| ConfirmDialog.cs | 112 | 统一深色主题确认弹窗（通用删除/清空确认） |
+| DownloadDialog.cs | 210 | OCR 引擎下载进度对话框（进度条 + 取消） |
+
+## Models/
+
+| 文件 | 职责 |
+|------|------|
+| InstalledSoftware.cs | 已安装软件数据模型 |
+| SortMode.cs | 排序模式枚举 + 扩展方法 |
+| Tools/Models/NowPlayingInfo.cs | 当前播放信息模型 |
+
+## 命名空间约定
+
+- 插件层统一 `Toolbox.Plugins.*`（Helpers/Services/Models/Controls）
+- 工具类保留 `Toolbox.Tools.*`
+- `Directory.Build.props` 处理 wpftmp 临时编译项目的重复生成问题
+
+## 相关文档
+
+- 每个工具的实现细节 → [tools/](tools/)
+- 开发新工具规范 → [09-tool-dev.md](09-tool-dev.md) + docs/TOOL_DEVELOPMENT_GUIDELINE.md
