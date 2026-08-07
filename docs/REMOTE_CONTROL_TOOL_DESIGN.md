@@ -441,3 +441,24 @@ GET /api/status
   ⑧ 控制页改 textContent 渲染（杜绝 XSS 注入面）；500 不透出内部异常；Set-Cookie 显式 SameSite=Lax
   ⑨ 补 FR-1 缺失的"复制访问地址"按钮；运行中锁定端口/Token 输入
   ⑩ 补裸 socket 畸形请求/超大 body/DNS rebinding 测试（原设计 9 章测试盲区）
+- 2026-08-08（主人 15 项产品决策，测试 149/149）：
+  ① 控制页 ⏻ 图标换 🔌（字体渲染兼容）
+  ② 控制页二次确认改自绘深色模态框（替代浏览器原生 confirm，Toolbox 风格）
+  ③ ghost 次级按钮样式明确化（暗底 + 描边，修复"颜色缺失"观感）
+  ④ 全链路文案 Token → 密钥
+  ⑤ 密钥输入框常驻深色提示（留空自动生成）
+  ⑥ 修复"当前密钥"标签与值重复
+  ⑦ 访问地址改逐行可复制列表（多网卡每行独立复制）
+  ⑧ **服务常驻**：服务提升为工具级静态单例，取消 Unloaded 自动停止；
+     切换工具/前台后台均不中断，仅手动停止或关闭 Toolbox 终止（取代原 FR-1 防残留监听约定）
+  ⑨ 无密钥时自动生成随机密钥的开关（remote-control.json 持久化）
+  ⑩ **密钥明文落盘**（用户确认接受权衡）：remote-control.json 记录上次密钥/端口，输入框回填；
+     打破原 7.1"密钥不落盘"红线（参照 passwords.json 先例）
+  ⑪ **已连接设备管理**：会话升级 SessionInfo（IP/设备名/最后活跃）；
+     GET /api/devices + POST /api/devices/kick（CSRF 校验）；面板与控制页双端展示/踢出
+  ⑫ **记住设备 + 自动填密钥**：认证成功即记录设备（remote-control-devices.json）；
+     已记录 IP 访问控制页时服务端注入密钥自动填入（踢出即撤销）；信任局域网 IP 难伪造
+  ⑬ 状态灯移入"服务配置"卡片、启动按钮下方
+  ⑭ 设置页新增"远程控制"卡片：自动启动服务开关 + 默认端口 + 默认密钥
+     （授权扩展 Core AppSettings：AutoStartRemoteControl / RemoteControlDefaultPort / RemoteControlDefaultKey）
+  ⑮ 设备表/设置测试注入临时路径，不污染真实 LocalAppData

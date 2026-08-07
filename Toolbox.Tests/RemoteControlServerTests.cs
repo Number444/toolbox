@@ -20,6 +20,7 @@ public class RemoteControlServerTests : IDisposable
 {
     private const string TestToken = "test-token-123";
 
+    private readonly string _devicesPath;
     private readonly RemoteControlServer _server;
     private readonly HttpClient _client;
     private readonly List<ProcessStartInfo> _started = new();
@@ -31,7 +32,9 @@ public class RemoteControlServerTests : IDisposable
         var power = new PowerCommandHandler(
             new PowerActions(psi => { _started.Add(psi); return 0; }),
             action => { _systemActions.Add(action); return true; });
-        _server = new RemoteControlServer(new TcpHttpServer(), power, new StatusCommandHandler());
+        // 设备表注入临时目录：避免污染真实 LocalAppData
+        _devicesPath = Path.Combine(Path.GetTempPath(), $"toolbox-rc-test-{Guid.NewGuid():N}", "devices.json");
+        _server = new RemoteControlServer(new TcpHttpServer(), _devicesPath, power, new StatusCommandHandler());
         _server.Start(0, TestToken); // 端口 0 = 系统分配随机高位端口
 
         _client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_server.ActualPort}") };
@@ -42,6 +45,8 @@ public class RemoteControlServerTests : IDisposable
     {
         _server.Stop();
         _client.Dispose();
+        try { Directory.Delete(Path.GetDirectoryName(_devicesPath)!, recursive: true); }
+        catch (Exception) { }
     }
 
     private static async Task<string> PostJsonAsync(HttpClient client, string path, string json)
@@ -271,6 +276,74 @@ public class RemoteControlServerTests : IDisposable
             sb.Append(Encoding.ASCII.GetString(buffer, 0, read));
         }
         return sb.ToString();
+    }
+
+    // ==================== 设备管理与自动填密钥 ====================
+
+    [Fact]
+    public async Task Devices_AfterAuth_ListsConnectedDevice()
+    {
+        await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var response = await _client.GetAsync("/api/devices");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        var connected = json.GetProperty("data").GetProperty("connected").EnumerateArray().ToList();
+        Assert.Single(connected);
+        Assert.Equal("127.0.0.1", connected[0].GetProperty("ip").GetString());
+    }
+
+    [Fact]
+    public async Task Devices_WithoutAuth_Returns401()
+    {
+        var response = await _client.GetAsync("/api/devices");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task KnownDevice_GetsAutoKeyInjected()
+    {
+        // 认证成功 = 设备被记录 → GET / 注入真实密钥（自动填密钥）
+        await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var html = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        Assert.Contains($"__AUTO_KEY__ = '{TestToken}'", html);
+    }
+
+    [Fact]
+    public async Task UnknownDevice_NoAutoKeyInjected()
+    {
+        // 未认证过的设备（无会话也无设备记录）→ 页面保持占位符
+        var html = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        Assert.Contains("window.__AUTO_KEY__ = '';", html);
+        Assert.DoesNotContain("__AUTO_KEY__ = 'test", html);
+    }
+
+    [Fact]
+    public async Task Kick_RemovesSession_AndRevokesAutoKey()
+    {
+        await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var kick = await PostJsonAsync(_client, "/api/devices/kick", """{"ip":"127.0.0.1"}""");
+        Assert.StartsWith("OK", kick);
+
+        // 会话被删 → 状态接口回到 401
+        var status = await _client.GetAsync("/api/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, status.StatusCode);
+
+        // 设备表移除 → 自动填密钥撤销
+        var html = await (await _client.GetAsync("/")).Content.ReadAsStringAsync();
+        Assert.DoesNotContain($"__AUTO_KEY__ = '{TestToken}'", html);
+    }
+
+    [Fact]
+    public async Task Kick_WithoutCsrfHeader_Returns403()
+    {
+        using var noCsrfClient = new HttpClient { BaseAddress = _client.BaseAddress };
+        await PostJsonAsync(noCsrfClient, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var kick = await PostJsonAsync(noCsrfClient, "/api/devices/kick", """{"ip":"127.0.0.1"}""");
+        Assert.StartsWith("Forbidden", kick);
     }
 
     // ==================== 生命周期幂等 ====================

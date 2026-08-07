@@ -93,6 +93,50 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    // ===== 远程控制（2026-08-08 用户授权扩展；设置页提供编辑入口） =====
+
+    private bool _autoStartRemoteControl;
+    /// <summary>启动 Toolbox 时自动启动远程控制服务（默认端口/密钥见下）</summary>
+    public bool AutoStartRemoteControl
+    {
+        get => _autoStartRemoteControl;
+        set
+        {
+            if (_autoStartRemoteControl == value) return;
+            _autoStartRemoteControl = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private string _remoteControlDefaultPort = "8090";
+    /// <summary>远程控制默认端口（工具面板端口输入框的初始值）</summary>
+    public string RemoteControlDefaultPort
+    {
+        get => _remoteControlDefaultPort;
+        set
+        {
+            if (_remoteControlDefaultPort == value) return;
+            _remoteControlDefaultPort = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private string _remoteControlDefaultKey = "";
+    /// <summary>远程控制默认密钥（工具面板密钥输入框的初始值；为空则按开关自动生成）</summary>
+    public string RemoteControlDefaultKey
+    {
+        get => _remoteControlDefaultKey;
+        set
+        {
+            if (_remoteControlDefaultKey == value) return;
+            _remoteControlDefaultKey = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     private static void SetStartupRegistry(bool enable)
     {
         // 杀软拦截/权限不足可能抛异常，失败不影响设置项本身
@@ -158,6 +202,21 @@ public sealed class AppSettings : INotifyPropertyChanged
 
         _controlGlowEnabled = data.ControlGlowEnabled ?? true;
         OnPropertyChanged(nameof(ControlGlowEnabled));
+
+        _autoStartRemoteControl = data.AutoStartRemoteControl;
+        OnPropertyChanged(nameof(AutoStartRemoteControl));
+
+        if (!string.IsNullOrEmpty(data.RemoteControlDefaultPort))
+        {
+            _remoteControlDefaultPort = data.RemoteControlDefaultPort;
+            OnPropertyChanged(nameof(RemoteControlDefaultPort));
+        }
+
+        if (data.RemoteControlDefaultKey != null)
+        {
+            _remoteControlDefaultKey = data.RemoteControlDefaultKey;
+            OnPropertyChanged(nameof(RemoteControlDefaultKey));
+        }
     }
 
     public void Save()
@@ -169,7 +228,10 @@ public sealed class AppSettings : INotifyPropertyChanged
             MusicFloatSizeMode = _musicFloatSizeMode,
             AutoStart = _autoStart,
             MouseHaloEnabled = _mouseHaloEnabled,
-            ControlGlowEnabled = _controlGlowEnabled
+            ControlGlowEnabled = _controlGlowEnabled,
+            AutoStartRemoteControl = _autoStartRemoteControl,
+            RemoteControlDefaultPort = _remoteControlDefaultPort,
+            RemoteControlDefaultKey = _remoteControlDefaultKey
         };
         JsonSettingsFile.Save(SettingsPath, data);
     }
@@ -187,5 +249,8 @@ public sealed class AppSettings : INotifyPropertyChanged
         public bool AutoStart { get; set; }
         public bool? MouseHaloEnabled { get; set; }
         public bool? ControlGlowEnabled { get; set; }
+        public bool AutoStartRemoteControl { get; set; }
+        public string? RemoteControlDefaultPort { get; set; }
+        public string? RemoteControlDefaultKey { get; set; }
     }
 }

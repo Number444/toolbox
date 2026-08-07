@@ -50,7 +50,7 @@
   }
   button:active { opacity: .8; }
   button.danger { background: var(--danger); }
-  button.ghost { background: transparent; border: 1px solid var(--text-dim); color: var(--text); }
+  button.ghost { background: #3A3A3A; border: 1px solid var(--text-dim); color: var(--text); }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   select {
     background: var(--bg);
@@ -81,6 +81,21 @@
   }
   #auth-msg { color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 16px; }
   #status-msg { color: var(--text-dim); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  /* 自绘二次确认弹窗（Toolbox 风格深色模态） */
+  #confirm-cover {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: none; align-items: center; justify-content: center; z-index: 20;
+  }
+  #confirm-cover.show { display: flex; }
+  #confirm-box { width: 320px; max-width: 90vw; background: var(--card); border-radius: 10px; padding: 18px; }
+  #confirm-box h3 { font-size: 15px; margin-bottom: 10px; }
+  #confirm-box p { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+  #confirm-box .row { display: flex; gap: 10px; }
+  #confirm-box .row button { flex: 1; }
+  /* 设备卡片 */
+  #device-list div { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #3a3a3a; font-size: 12px; color: var(--text-dim); }
+  #device-list button { flex: 0 0 auto; min-width: 0; padding: 4px 10px; font-size: 12px; }
+  #device-list button.kick { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 </style>
 </head>
 <body>
@@ -100,7 +115,7 @@
 </div>
 
 <div class="card">
-  <h2>⏻ 电源控制（需二次确认）</h2>
+  <h2>🔌 电源控制（需二次确认）</h2>
   <div class="row">
     <select id="delay-select">
       <option value="60">60 秒后</option>
@@ -140,16 +155,37 @@
   <div id="logs">（暂无操作）</div>
 </div>
 
+<div class="card">
+  <h2>📱 已连接设备</h2>
+  <div id="device-list">（暂无）</div>
+  <div style="text-align:right;margin-top:6px"><button class="ghost" onclick="refreshDevices()" style="flex:0 0 auto;padding:4px 10px;font-size:12px">刷新</button></div>
+</div>
+
 <div id="auth-cover">
   <div id="auth-box">
-    <h2>🔒 输入访问 Token</h2>
-    <input id="token-input" type="password" placeholder="Token（在 Toolbox 远程控制面板查看）" autocomplete="off">
+    <h2>🔒 输入访问密钥</h2>
+    <input id="token-input" type="password" placeholder="密钥（在 Toolbox 远程控制面板查看）" autocomplete="off">
     <button onclick="login()" style="width:100%">登录</button>
     <div id="auth-msg"></div>
   </div>
 </div>
 
+<!-- 自绘二次确认弹窗 -->
+<div id="confirm-cover">
+  <div id="confirm-box">
+    <h3 id="confirm-title">确认操作</h3>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button class="danger" onclick="confirmAction()">确认</button>
+      <button class="ghost" onclick="hideConfirm()">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
+  // 自动填密钥占位：服务端对已记录设备替换为真实密钥（RemoteControlServer.HtmlResponse 注入）
+  window.__AUTO_KEY__ = '';
+
   // ==================== 认证 ====================
   async function login() {
     const token = document.getElementById('token-input').value.trim();
@@ -166,6 +202,7 @@
       hideAuth();
       refreshStatus();
       refreshLogs();
+      refreshDevices();
     } catch (e) {
       document.getElementById('auth-msg').textContent = '无法连接服务器：' + e.message;
     }
@@ -204,16 +241,35 @@
     } catch (e) { flash('❌ ' + e.message); }
   }
 
-  // 危险指令：前端二次确认 + 服务端 confirm 校验
-  async function dangerous(command, args) {
+  // ==================== 自绘二次确认弹窗（Toolbox 风格） ====================
+  let pendingConfirm = null; // { command, args }
+
+  function showConfirm(command, args) {
     const names = { shutdown: '关机', restart: '重启电脑' };
-    if (!confirm('确认执行「' + (names[command] || command) + '」？')) return;
+    document.getElementById('confirm-title').textContent = '确认执行「' + (names[command] || command) + '」？';
+    document.getElementById('confirm-text').textContent =
+      command === 'shutdown' && args && args.delaySeconds > 0
+        ? '将在 ' + args.delaySeconds + ' 秒后执行定时关机。'
+        : '此操作将直接影响电脑，请确认。';
+    pendingConfirm = { command, args };
+    document.getElementById('confirm-cover').classList.add('show');
+  }
+
+  function hideConfirm() { pendingConfirm = null; document.getElementById('confirm-cover').classList.remove('show'); }
+
+  async function confirmAction() {
+    if (!pendingConfirm) return;
+    const { command, args } = pendingConfirm;
+    hideConfirm();
     try {
-      await sendCommand(command, Object.assign({ confirm: true }, args));
+      await sendCommand(command, Object.assign({ confirm: true }, args || {}));
       flash('✅ ' + command + ' 已执行');
       refreshLogs();
     } catch (e) { flash('❌ ' + e.message); }
   }
+
+  // 危险指令：自绘二次确认 + 服务端 confirm 校验
+  async function dangerous(command, args) { showConfirm(command, args); }
 
   let flashTimer = null;
   function flash(text) {
@@ -288,9 +344,68 @@
     } catch (e) { /* 连接失败不打断轮询 */ }
   }
 
+  // ==================== 设备列表 ====================
+  async function refreshDevices() {
+    try {
+      const res = await fetch('/api/devices');
+      if (handleUnauthorized(res)) return;
+      const json = await res.json();
+      if (!json.success) return;
+      const box = document.getElementById('device-list');
+      box.textContent = '';
+      const connected = json.data.connected || [];
+      const known = json.data.known || [];
+      if (!connected.length && !known.length) { box.textContent = '（暂无设备）'; return; }
+      connected.forEach(d => {
+        const row = document.createElement('div');
+        const info = document.createElement('span');
+        info.textContent = '🟢 ' + d.deviceName + ' · ' + d.ip + ' · ' + d.lastActive + ' 活跃';
+        const kick = document.createElement('button');
+        kick.className = 'kick';
+        kick.textContent = '踢出';
+        kick.onclick = () => kickDevice(d.ip);
+        row.appendChild(info); row.appendChild(kick);
+        box.appendChild(row);
+      });
+      known.forEach(d => {
+        const row = document.createElement('div');
+        const info = document.createElement('span');
+        info.textContent = '⚪ ' + d.deviceName + ' · ' + d.ip + ' · ' + d.firstSeen + ' 首连';
+        const kick = document.createElement('button');
+        kick.className = 'kick';
+        kick.textContent = '移除';
+        kick.onclick = () => kickDevice(d.ip);
+        row.appendChild(info); row.appendChild(kick);
+        box.appendChild(row);
+      });
+    } catch (e) { /* 连接失败不打断 */ }
+  }
+
+  async function kickDevice(ip) {
+    try {
+      const res = await fetch('/api/devices/kick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'RemoteControl' },
+        body: JSON.stringify({ ip })
+      });
+      if (handleUnauthorized(res)) return;
+      const json = await res.json();
+      flash(json.success ? '✅ 已踢出 ' + ip : '❌ ' + (json.error || '踢出失败'));
+      refreshDevices();
+    } catch (e) { flash('❌ ' + e.message); }
+  }
+
   // ==================== 启动 ====================
   setInterval(refreshStatus, 3000);
   setInterval(refreshLogs, 5000);
+
+  // 已记录设备：服务端已注入真实密钥 → 自动填入输入框（踢出后不再注入）
+  if (window.__AUTO_KEY__) {
+    document.getElementById('token-input').value = window.__AUTO_KEY__;
+    document.getElementById('auth-msg').textContent = '已为此设备自动填入密钥，直接登录';
+    document.getElementById('auth-msg').style.color = 'var(--accent)';
+  }
+
   // 首屏：尝试直接拉状态，401 则弹认证遮罩
   refreshStatus();
 </script>

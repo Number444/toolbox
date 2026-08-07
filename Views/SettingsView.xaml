@@ -124,6 +124,56 @@
             </StackPanel>
         </Border>
 
+        <!-- 远程控制 -->
+        <Border Background="{StaticResource BgSurfaceBrush}"
+                CornerRadius="8"
+                Padding="16,14"
+                BorderBrush="{StaticResource BorderSubtleBrush}"
+                BorderThickness="1"
+                models:GlowCardMarker.IsGlowCard="True"
+                Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock Text="远程控制"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="局域网远程控制工具的默认配置。密钥建议留空使用随机生成；手动设置的密钥以明文保存在本机（与工具内一致）。"
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,12"/>
+
+                <CheckBox Content="启动 Toolbox 时自动启动远程控制服务"
+                          Style="{StaticResource ToggleSwitchStyle}"
+                          IsChecked="{Binding Source={x:Static services:AppSettings.Instance}, Path=AutoStartRemoteControl, Mode=TwoWay}"
+                          Margin="0,0,0,14"/>
+
+                <WrapPanel Margin="0,0,0,10">
+                    <TextBlock Text="默认端口："
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Margin="0,0,8,0"/>
+                    <TextBox Text="{Binding Source={x:Static services:AppSettings.Instance}, Path=RemoteControlDefaultPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Width="90"
+                             FontSize="13"
+                             VerticalContentAlignment="Center"/>
+                </WrapPanel>
+
+                <WrapPanel>
+                    <TextBlock Text="默认密钥："
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Margin="0,0,8,0"/>
+                    <TextBox Text="{Binding Source={x:Static services:AppSettings.Instance}, Path=RemoteControlDefaultKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Width="240"
+                             FontSize="13"
+                             VerticalContentAlignment="Center"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 退出按钮 -->
         <Button x:Name="ExitButton" Content="退出 Toolbox"
                 Background="{StaticResource DangerBrush}"
