@@ -213,6 +213,12 @@
   <div style="text-align:right;margin-top:6px"><button class="ghost" onclick="refreshDevices()" style="flex:0 0 auto;padding:4px 10px;font-size:12px">刷新</button></div>
 </div>
 
+<!-- 关闭 Toolbox（红色纯文字，与设置页退出按钮一致；确认后关闭进程；提示显示在按钮下方居中） -->
+<div style="text-align:center;margin-top:8px">
+  <button class="danger" onclick="shutdownToolbox()" style="flex:0 0 auto;min-width:200px;padding:12px">关闭 Toolbox</button>
+  <div id="app-close-msg" style="margin-top:8px;font-size:12px;min-height:16px"></div>
+</div>
+
 <div id="auth-cover">
   <div id="auth-box">
     <h2>🔒 输入访问密钥</h2>
@@ -334,11 +340,37 @@
     if (!pendingConfirm) return;
     const { command, args } = pendingConfirm;
     hideConfirm();
+    // 关闭 Toolbox（应用级，走 /api/app/shutdown，不走指令体系；提示显示在按钮下方居中）
+    if (command === '__shutdown_app__') {
+      const msg = document.getElementById('app-close-msg');
+      try {
+        const res = await fetchWithTimeout('/api/app/shutdown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'RemoteControl' },
+          body: '{}'
+        }, 5000);
+        const json = await res.json();
+        msg.textContent = json.success ? '✅ 已请求关闭 Toolbox，稍后连接将断开' : '❌ ' + (json.error || '关闭失败');
+        msg.style.color = json.success ? 'var(--accent)' : 'var(--danger)';
+      } catch (e) {
+        msg.textContent = '❌ ' + e.message;
+        msg.style.color = 'var(--danger)';
+      }
+      return;
+    }
     try {
       await sendCommand(command, Object.assign({ confirm: true }, args || {}));
       flash('✅ ' + command + ' 已执行');
       refreshLogs();
     } catch (e) { flash('❌ ' + e.message); }
+  }
+
+  // 关闭 Toolbox：自绘确认后调用应用关闭端点
+  function shutdownToolbox() {
+    document.getElementById('confirm-title').textContent = '确认关闭 Toolbox？';
+    document.getElementById('confirm-text').textContent = '关闭后本控制页将无法访问，需在电脑上重新启动 Toolbox。';
+    pendingConfirm = { command: '__shutdown_app__', args: null };
+    document.getElementById('confirm-cover').classList.add('show');
   }
 
   // 危险指令（定时关机/立即关机/重启）：自绘确认后执行，恒带 confirm:true

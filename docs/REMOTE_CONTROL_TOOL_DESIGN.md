@@ -198,6 +198,7 @@ PowerCommandHandler / StatusCommandHandler
 | POST | `/api/command` | 有 | Body `{command, args}`；执行系统指令 |
 | GET | `/api/status` | 有 | 返回系统状态快照（CPU/内存/磁盘/网络） |
 | GET | `/api/events` | 有 | 返回最近操作日志 |
+| POST | `/api/app/shutdown` | 有 | 关闭 Toolbox 进程（先响应后关闭，走主程序 Shutdown 清理；CSRF 校验） |
 
 ### 5.2 统一响应格式
 ```json
@@ -460,6 +461,8 @@ GET /api/status
 
 - 2026-08-07：选型定为 TcpListener 手写（主），HttpListener 为备；
   待 M4/M5 Windows 实机冒烟测试后确认或切换，结果回填本节
+- 2026-08-08（三次产品决策）：控制页底部新增"关闭 Toolbox"红色按钮（与设置页退出按钮一致，
+  自绘确认后调 /api/app/shutdown → 延迟 300ms 走主程序 Shutdown 清理路径；测试环境不执行真实关闭）
 - 2026-08-08（二次产品决策）：分类改 Network（🌐 网络与开发）；电源控制布局对齐原工具
   （快捷按钮组 + 自定义分钟 + 自绘控件，去浏览器原生 select）；
   **自绘确认弹窗保留**（危险指令前端确认 + 服务端 confirm 强校验双层防线）；

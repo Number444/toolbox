@@ -420,6 +420,52 @@ public class RemoteControlServerTests : IDisposable
         server.Stop();
     }
 
+    // ==================== 关闭 Toolbox（/api/app/shutdown） ====================
+
+    [Fact]
+    public async Task AppShutdown_RequiresCsrfHeader()
+    {
+        await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+        using var noCsrfClient = new HttpClient { BaseAddress = _client.BaseAddress };
+        await PostJsonAsync(noCsrfClient, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var result = await PostJsonAsync(noCsrfClient, "/api/app/shutdown", "{}");
+        Assert.StartsWith("Forbidden", result);
+    }
+
+    [Fact]
+    public async Task AppShutdown_RequiresAuth()
+    {
+        var result = await PostJsonAsync(_client, "/api/app/shutdown", "{}");
+        Assert.StartsWith("Unauthorized", result);
+    }
+
+    [Fact]
+    public async Task AppShutdown_Authenticated_ReturnsOk_WithoutExitingProcess()
+    {
+        // 测试环境 Application.Current == null → 服务器不执行真实关闭，仅验证响应
+        await PostJsonAsync(_client, "/api/auth", $$"""{"token":"{{TestToken}}"}""");
+
+        var result = await PostJsonAsync(_client, "/api/app/shutdown", "{}");
+        Assert.StartsWith("OK", result);
+        Assert.True(_server.IsRunning); // 进程未被关闭（非应用上下文）
+    }
+
+    [Fact]
+    public async Task AppShutdown_NoKeyMode_Allowed()
+    {
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "app-shutdown-nokey.json"));
+        var server = new RemoteControlServer(new TcpHttpServer(), settings, new PowerCommandHandler(new PowerActions(_ => 0), _ => true), new StatusCommandHandler());
+        server.Start(0, null);
+
+        using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.ActualPort}") };
+        client.DefaultRequestHeaders.Add("X-Requested-With", "RemoteControl");
+        var result = await PostJsonAsync(client, "/api/app/shutdown", "{}");
+        Assert.StartsWith("OK", result);
+
+        server.Stop();
+    }
+
     // ==================== 生命周期幂等 ====================
 
     [Fact]

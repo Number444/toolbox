@@ -162,6 +162,8 @@ public sealed class RemoteControlServer
                 return RequireSession(request, HandleDevices);
             if (request.Method == "POST" && request.Path == "/api/devices/kick")
                 return RequireSession(request, () => HandleKick(request));
+            if (request.Method == "POST" && request.Path == "/api/app/shutdown")
+                return RequireSession(request, () => HandleAppShutdown(request));
             return JsonError(404, $"not found: {request.Method} {request.Path}");
         }
         catch (Exception ex)
@@ -445,6 +447,36 @@ public sealed class RemoteControlServer
             ContentType = "text/html; charset=utf-8",
             Body = html
         };
+    }
+
+    /// <summary>
+    /// 关闭 Toolbox 进程（控制页底部红色按钮）：先返回响应（浏览器需收到），
+    /// 延迟 300ms 后经主程序 Shutdown（走 OnExit 清理：托盘/互斥锁）；失败兜底 Environment.Exit。
+    /// 测试/非应用上下文（Application.Current == null）不执行关闭。
+    /// </summary>
+    private RemoteHttpResponse HandleAppShutdown(RemoteHttpRequest request)
+    {
+        // 写操作：CSRF 校验（与 /api/command 一致）
+        if (!request.Headers.TryGetValue("X-Requested-With", out var csrf) ||
+            !string.Equals(csrf, "RemoteControl", StringComparison.Ordinal))
+            return JsonError(403, "missing X-Requested-With header");
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(300); // 留出响应发送时间
+            try
+            {
+                var app = System.Windows.Application.Current;
+                if (app == null) return; // 非应用上下文（测试）不关闭
+                app.Dispatcher.Invoke(() => app.Shutdown());
+            }
+            catch (Exception)
+            {
+                try { Environment.Exit(0); } catch (Exception) { }
+            }
+        });
+
+        return Json(RemoteControlResponse.Ok());
     }
 
     // ==================== 响应工具 ====================
