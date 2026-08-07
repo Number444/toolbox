@@ -134,4 +134,58 @@ public static class SystemInfoHelper
 
     /// <summary>格式化字节数为 GB(保留 0 位小数,如 "128 GB")</summary>
     public static string FormatGb(long bytes) => $"{bytes / 1024d / 1024d / 1024d:F0} GB";
+
+    // ==================== 电池（GetSystemPowerStatus，笔记本；桌面机返回 IsBatteryPresent=false） ====================
+
+    /// <summary>电池信息快照</summary>
+    public sealed record BatteryInfo
+    {
+        /// <summary>剩余电量百分比（0-100；系统未知时为 null）</summary>
+        public int? Percent { get; init; }
+
+        /// <summary>状态文案：充电中 / 已接电源 / 使用电池</summary>
+        public string Status { get; init; } = "";
+
+        /// <summary>是否存在电池（桌面机为 false）</summary>
+        public bool IsBatteryPresent { get; init; }
+    }
+
+    /// <summary>
+    /// 读取电池剩余容量与状态；失败或无电池返回 null / IsBatteryPresent=false。
+    /// 首页时钟卡片与远程控制页共用（公共类统一实现，改一处全生效）。
+    /// </summary>
+    public static BatteryInfo? GetBatteryInfo()
+    {
+        if (!GetSystemPowerStatus(out var status)) return null;
+
+        // 0x80 = 无电池（桌面机/未装电池）
+        if ((status.BatteryFlag & 0x80) != 0)
+            return new BatteryInfo { Percent = null, Status = "无电池", IsBatteryPresent = false };
+
+        var percent = status.BatteryLifePercent == 255 ? (int?)null : (int?)status.BatteryLifePercent;
+
+        string state;
+        if ((status.BatteryFlag & 0x08) != 0) // 充电中
+            state = "充电中";
+        else if (status.ACLineStatus == 1)    // 接电源且未充电（含已充满）
+            state = "已接电源";
+        else                                   // 使用电池
+            state = "使用电池";
+
+        return new BatteryInfo { Percent = percent, Status = state, IsBatteryPresent = true };
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool GetSystemPowerStatus(out SystemPowerStatus status);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct SystemPowerStatus
+    {
+        public byte ACLineStatus;       // 0=电池供电 1=交流电
+        public byte BatteryFlag;        // 1=高 2=低 4=临界 8=充电中 128=无电池 255=未知
+        public byte BatteryLifePercent; // 0-100, 255=未知
+        public byte Reserved1;
+        public uint BatteryLifeTime;    // 剩余秒数, 0xFFFFFFFF=未知
+        public uint BatteryFullLifeTime;
+    }
 }

@@ -13,6 +13,7 @@
     --text-dim: #808080;
     --danger: #F07070;
     --warning: #E0A030;
+    --gray-dim: #4A4A4A; /* 浅灰（2026-08-08 加入色板）：无电池进度条 / 分区分割线 */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -51,6 +52,10 @@
   button:active { opacity: .8; }
   button.danger { background: var(--danger); }
   button.ghost { background: #3A3A3A; border: 1px solid var(--text-dim); color: var(--text); }
+  /* 快捷关机 2x3 网格（对齐原 ShutdownTool 的 UniformGrid 布局） */
+  .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  /* 快捷区与自定义区之间的分割细线（浅灰，与色板 --gray-dim 一致） */
+  .divider { height: 1px; background: var(--gray-dim); margin: 0 0 12px; }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   select {
     background: var(--bg);
@@ -74,14 +79,14 @@
   #auth-cover.show { display: flex; }
   #auth-box { width: 320px; max-width: 90vw; text-align: center; }
   #auth-box h2 { margin-bottom: 16px; }
-  #token-input {
+  #key-input {
     width: 100%; padding: 12px; font-size: 14px; border-radius: 6px;
     border: 1px solid var(--text-dim); background: var(--card); color: var(--text);
     margin-bottom: 10px;
   }
   #auth-msg { color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 16px; }
   #status-msg { color: var(--text-dim); font-size: 12px; margin-top: 8px; min-height: 16px; }
-  /* 自绘二次确认弹窗（Toolbox 风格深色模态） */
+  /* 自绘二次确认弹窗（Toolbox 风格深色模态，非浏览器原生 confirm） */
   #confirm-cover {
     position: fixed; inset: 0; background: rgba(0,0,0,.55);
     display: none; align-items: center; justify-content: center; z-index: 20;
@@ -110,31 +115,51 @@
     <button onclick="quick('lock')">锁屏</button>
     <button onclick="quick('sleep')">睡眠</button>
     <button onclick="quick('monitor_off')">关显示器</button>
-    <button class="ghost" onclick="quick('explorer_restart')">重启资源管理器</button>
+    <button onclick="quick('explorer_restart')">重启资源管理器</button>
   </div>
 </div>
 
 <div class="card">
-  <h2>🔌 电源控制（需二次确认）</h2>
-  <div class="row">
-    <select id="delay-select">
-      <option value="60">60 秒后</option>
-      <option value="300" selected>5 分钟后</option>
-      <option value="600">10 分钟后</option>
-      <option value="1800">30 分钟后</option>
-      <option value="3600">1 小时后</option>
-    </select>
-    <button onclick="dangerous('shutdown', { delaySeconds: parseInt(document.getElementById('delay-select').value) })">定时关机</button>
+  <h2>🔌 电源控制</h2>
+  <!-- 快捷关机 2x3 网格（对齐原 ShutdownTool） -->
+  <div class="quick-grid">
+    <button onclick="dangerous('shutdown', { delaySeconds: 60 })">1 分钟</button>
+    <button onclick="dangerous('shutdown', { delaySeconds: 300 })">5 分钟</button>
+    <button onclick="dangerous('shutdown', { delaySeconds: 600 })">10 分钟</button>
+    <button onclick="dangerous('shutdown', { delaySeconds: 1800 })">30 分钟</button>
+    <button onclick="dangerous('shutdown', { delaySeconds: 3600 })">1 小时</button>
+    <button onclick="dangerous('shutdown', { delaySeconds: 7200 })">2 小时</button>
   </div>
-  <div class="btns">
+  <!-- 分割细线：快捷区与自定义区分隔 -->
+  <div class="divider"></div>
+  <!-- 自定义分钟数 + 定时关机 + 取消关机 同一行（对齐原 ShutdownTool 输入行，输入框左右 margin 对称） -->
+  <!-- 自定义分钟行：label 与输入框间距收紧（gap 4px），输入框相应增大 -->
+  <div style="display:flex;align-items:center;gap:4px">
+    <span style="font-size:13px;color:var(--text-dim);flex:0 0 auto">分钟数：</span>
+    <input id="delay-input" type="number" min="1" max="1440" placeholder="1~1440" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--text-dim);border-radius:6px;padding:9px 10px;font-size:14px">
+    <button onclick="customShutdown()" style="flex:0 0 auto">🔌 定时关机</button>
+    <button class="danger" onclick="quick('cancel_shutdown')" style="flex:0 0 auto">🛑 取消关机</button>
+  </div>
+  <div class="btns" style="margin-top:10px">
     <button class="danger" onclick="dangerous('shutdown', { delaySeconds: 0 })">立即关机</button>
     <button class="danger" onclick="dangerous('restart', {})">重启电脑</button>
-    <button class="ghost" onclick="quick('cancel_shutdown')">取消关机</button>
+  </div>
+</div>
+
+<!-- 自绘二次确认弹窗（Toolbox 风格） -->
+<div id="confirm-cover">
+  <div id="confirm-box">
+    <h3 id="confirm-title">确认操作</h3>
+    <p id="confirm-text"></p>
+    <div class="row">
+      <button class="danger" onclick="confirmAction()">确认</button>
+      <button class="ghost" onclick="hideConfirm()">取消</button>
+    </div>
   </div>
 </div>
 
 <div class="card">
-  <h2>📊 系统状态（3 秒自动刷新）</h2>
+  <h2>📊 系统状态</h2>
   <div class="meter" id="cpu-meter">
     <div class="label"><span>CPU</span><span>--</span></div>
     <div class="bar"><div id="cpu-bar" style="width:0%"></div></div>
@@ -146,6 +171,10 @@
   <div class="meter" id="disk-meter">
     <div class="label"><span>磁盘</span><span>--</span></div>
     <div class="bar"><div id="disk-bar" style="width:0%"></div></div>
+  </div>
+  <div class="meter" id="battery-meter">
+    <div class="label"><span>电池</span><span>--</span></div>
+    <div class="bar"><div id="battery-bar" style="width:0%"></div></div>
   </div>
   <div id="status-msg">运行时长 / IPv4：--</div>
 </div>
@@ -164,23 +193,12 @@
 <div id="auth-cover">
   <div id="auth-box">
     <h2>🔒 输入访问密钥</h2>
-    <input id="token-input" type="password" placeholder="密钥（在 Toolbox 远程控制面板查看）" autocomplete="off">
+    <input id="key-input" type="password" placeholder="密钥（在 Toolbox 远程控制面板查看）" autocomplete="off">
     <button onclick="login()" style="width:100%">登录</button>
     <div id="auth-msg"></div>
   </div>
 </div>
 
-<!-- 自绘二次确认弹窗 -->
-<div id="confirm-cover">
-  <div id="confirm-box">
-    <h3 id="confirm-title">确认操作</h3>
-    <p id="confirm-text"></p>
-    <div class="row">
-      <button class="danger" onclick="confirmAction()">确认</button>
-      <button class="ghost" onclick="hideConfirm()">取消</button>
-    </div>
-  </div>
-</div>
 
 <script>
   // 自动填密钥占位：服务端对已记录设备替换为真实密钥（RemoteControlServer.HtmlResponse 注入）
@@ -188,14 +206,14 @@
 
   // ==================== 认证 ====================
   async function login() {
-    const token = document.getElementById('token-input').value.trim();
+    const key = document.getElementById('key-input').value.trim();
     document.getElementById('auth-msg').textContent = '';
-    if (!token) { document.getElementById('auth-msg').textContent = '请输入 Token'; return; }
+    if (!key) { document.getElementById('auth-msg').textContent = '请输入密钥'; return; }
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token: key }) // 协议字段名 token（服务端解析），界面文案均为"密钥"
       });
       const json = await res.json();
       if (!json.success) { document.getElementById('auth-msg').textContent = json.error || '认证失败'; return; }
@@ -241,7 +259,21 @@
     } catch (e) { flash('❌ ' + e.message); }
   }
 
-  // ==================== 自绘二次确认弹窗（Toolbox 风格） ====================
+  // ==================== 指令 ====================
+  // 布局与按钮对齐原工具（ShutdownTool/QuickSystemTool），但危险指令保留自绘确认弹窗
+  // （用户决策 2026-08-08：确认弹窗必须有，用自绘控件实现、不调用浏览器原生 confirm）。
+  // 服务端 confirm:true 强校验同时保留（CSRF 纵深防线）。
+
+  // 低风险一键指令（快捷操作组/取消关机）：直发
+  async function quick(command, args) {
+    try {
+      await sendCommand(command, args || {});
+      flash('✅ ' + command + ' 已执行');
+      refreshLogs();
+    } catch (e) { flash('❌ ' + e.message); }
+  }
+
+  // ==================== 自绘二次确认弹窗（危险指令） ====================
   let pendingConfirm = null; // { command, args }
 
   function showConfirm(command, args) {
@@ -255,7 +287,10 @@
     document.getElementById('confirm-cover').classList.add('show');
   }
 
-  function hideConfirm() { pendingConfirm = null; document.getElementById('confirm-cover').classList.remove('show'); }
+  function hideConfirm() {
+    pendingConfirm = null;
+    document.getElementById('confirm-cover').classList.remove('show');
+  }
 
   async function confirmAction() {
     if (!pendingConfirm) return;
@@ -268,8 +303,18 @@
     } catch (e) { flash('❌ ' + e.message); }
   }
 
-  // 危险指令：自绘二次确认 + 服务端 confirm 校验
+  // 危险指令（定时关机/立即关机/重启）：自绘确认后执行，恒带 confirm:true
   async function dangerous(command, args) { showConfirm(command, args); }
+
+  // 自定义分钟数定时关机（与原 ShutdownTool 自定义输入一致；分钟 → 秒）
+  async function customShutdown() {
+    const minutes = parseInt(document.getElementById('delay-input').value, 10);
+    if (!minutes || minutes < 1 || minutes > 1440) {
+      flash('❌ 请输入 1~1440 分钟');
+      return;
+    }
+    showConfirm('shutdown', { delaySeconds: minutes * 60 });
+  }
 
   let flashTimer = null;
   function flash(text) {
@@ -306,6 +351,17 @@
       const pct = d.totalGB > 0 ? Math.round((d.totalGB - d.freeGB) / d.totalGB * 100) : 0;
       setMeter('disk', d.name + ' 剩余 ' + d.freeGB + ' / ' + d.totalGB + ' GB', pct);
     } else { setMeter('disk', '--', 0); }
+    // 电池（最下一行；笔记本显示容量与状态，台式机/无电池进度条 100% 浅灰）
+    const battery = data.battery;
+    const batteryBar = document.getElementById('battery-bar');
+    if (battery && battery.isBatteryPresent) {
+      batteryBar.style.background = ''; // 恢复色板绿
+      const pct = battery.percent == null ? 0 : battery.percent;
+      setMeter('battery', (battery.percent == null ? '--' : battery.percent + '%') + ' · ' + (battery.status || ''), pct);
+    } else {
+      setMeter('battery', '无电池', 100);
+      batteryBar.style.background = 'var(--gray-dim)'; // 浅灰：无电池占位
+    }
     // 运行时长 / IPv4（textContent 拼接，防未来字段引入注入面）
     document.getElementById('status-msg').textContent =
       '运行时长：' + (data.uptime || '--') + '　IPv4：' + (data.ipv4 || '--');
@@ -396,12 +452,12 @@
   }
 
   // ==================== 启动 ====================
-  setInterval(refreshStatus, 3000);
+  setInterval(refreshStatus, 1200); // 状态检测 1200ms 刷新
   setInterval(refreshLogs, 5000);
 
   // 已记录设备：服务端已注入真实密钥 → 自动填入输入框（踢出后不再注入）
   if (window.__AUTO_KEY__) {
-    document.getElementById('token-input').value = window.__AUTO_KEY__;
+    document.getElementById('key-input').value = window.__AUTO_KEY__;
     document.getElementById('auth-msg').textContent = '已为此设备自动填入密钥，直接登录';
     document.getElementById('auth-msg').style.color = 'var(--accent)';
   }

@@ -38,7 +38,7 @@ public class RemoteControlTool : ITool
 
     public string Name => "远程控制";
     public string Description => "局域网内用浏览器远程控制本机（关机/锁屏/状态查看），需先启动服务并输入密钥。";
-    public string Category => ToolCategory.System;
+    public string Category => ToolCategory.Network;
     public string IconGlyph => "🛰️";
 
     public RemoteControlTool()

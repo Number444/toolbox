@@ -1,3 +1,5 @@
+using Toolbox.Tools.Helpers;
+
 namespace Toolbox.Plugins.Models;
 
 /// <summary>
@@ -19,6 +21,9 @@ public sealed class SystemStatusSnapshot
 
     /// <summary>本机局域网 IPv4</summary>
     public string? Ipv4 { get; set; }
+
+    /// <summary>电池信息（笔记本；桌面机 IsBatteryPresent=false，前端隐藏该行）</summary>
+    public SystemInfoHelper.BatteryInfo? Battery { get; set; }
 }
 
 /// <summary>单个磁盘分区信息</summary>

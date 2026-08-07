@@ -29,6 +29,7 @@ public class HomeDashboardTool : ITool
     private TextBlock? _timeText;
     private TextBlock? _dateText;
     private TextBlock? _uptimeText;
+    private TextBlock? _batteryText;
     private TextBlock? _diskValueText;
     private TextBlock? _diskSubText;
     private TextBlock? _memValueText;
@@ -83,6 +84,12 @@ public class HomeDashboardTool : ITool
             Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
             Margin = new Thickness(0, 4, 0, 0)
         };
+        _batteryText = new TextBlock
+        {
+            FontSize = 13,
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
+            Margin = new Thickness(0, 4, 0, 0)
+        };
 
         var sideInfo = new StackPanel
         {
@@ -91,6 +98,7 @@ public class HomeDashboardTool : ITool
         };
         sideInfo.Children.Add(_dateText);
         sideInfo.Children.Add(_uptimeText);
+        sideInfo.Children.Add(_batteryText);
 
         var inner = new Grid();
         inner.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -336,11 +344,24 @@ public class HomeDashboardTool : ITool
         RefreshMusicCard();
     }
 
-    /// <summary>30s 刷新:磁盘 / 内存 / 运行时长</summary>
+    /// <summary>30s 刷新:磁盘 / 内存 / 运行时长 / 电池</summary>
     private void RefreshSlow()
     {
         if (_uptimeText != null)
             _uptimeText.Text = $"已运行 {SystemInfoHelper.FormatUptime(SystemInfoHelper.GetUptime())}";
+
+        // 电池（笔记本显示剩余容量与状态；台式机/无电池显示"无电池"，不隐藏该行。
+        // 无 emoji：与日期/运行时长两行纯文字左对齐保持一致）
+        var battery = SystemInfoHelper.GetBatteryInfo();
+        if (_batteryText != null)
+        {
+            _batteryText.Text = battery is { IsBatteryPresent: true }
+                ? battery.Percent.HasValue
+                    ? $"电池 {battery.Percent.Value}% · {battery.Status}"
+                    : $"电池 {battery.Status}"
+                : "电池 无电池";
+            _batteryText.Visibility = Visibility.Visible;
+        }
 
         // 磁盘:可用 GB + 已用百分比,按占用度着色(>90% 红,>75% 橙)
         var disk = SystemInfoHelper.GetDriveSpace();

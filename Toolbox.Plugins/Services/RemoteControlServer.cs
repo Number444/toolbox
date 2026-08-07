@@ -53,36 +53,22 @@ public sealed class RemoteControlServer
     private readonly object _authLock = new();
     private readonly Dictionary<string, AuthState> _authByIp = new();
 
-    /// <summary>曾连接设备表（持久化到 remote-control-devices.json）：认证成功即记录，用于设备列表展示与自动填密钥</summary>
-    private readonly string _devicesPath;
-    private readonly object _devicesLock = new();
-    private readonly List<DeviceRecord> _knownDevices = new();
+    /// <summary>工具设置（单一 remote-control.json：密钥/端口/开关 + 曾连接设备表）</summary>
+    private readonly RemoteControlSettings _settings;
 
     private string? _token;
     private byte[]? _htmlBytes;
 
     public RemoteControlServer(IRemoteHttpServer http, params IRemoteCommandHandler[] handlers)
-        : this(http, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Toolbox", "remote-control-devices.json"), handlers)
+        : this(http, RemoteControlSettings.Instance, handlers)
     { }
 
-    /// <param name="devicesPath">设备表 json 路径（测试注入临时目录，避免污染真实 LocalAppData）</param>
-    internal RemoteControlServer(IRemoteHttpServer http, string devicesPath, params IRemoteCommandHandler[] handlers)
+    /// <param name="settings">设置对象（测试注入临时路径的实例，避免污染真实 LocalAppData）</param>
+    internal RemoteControlServer(IRemoteHttpServer http, RemoteControlSettings settings, params IRemoteCommandHandler[] handlers)
     {
         _http = http;
         _handlers = handlers;
-        _devicesPath = devicesPath;
-        try
-        {
-            var dir = Path.GetDirectoryName(devicesPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-            _knownDevices = JsonSettingsFile.Load<List<DeviceRecord>>(devicesPath) ?? new List<DeviceRecord>();
-        }
-        catch (Exception)
-        {
-            _knownDevices = new List<DeviceRecord>();
-        }
+        _settings = settings;
         _http.RequestHandler = HandleRequest;
     }
 
@@ -99,10 +85,7 @@ public sealed class RemoteControlServer
     public IReadOnlyList<LogEntry> Logs => _logs.Reverse().ToArray();
 
     /// <summary>曾连接设备表快照（IP、设备名、首次/最后时间）</summary>
-    public IReadOnlyList<DeviceRecord> KnownDevices
-    {
-        get { lock (_devicesLock) return _knownDevices.ToArray(); }
-    }
+    public IReadOnlyList<DeviceRecord> KnownDevices => _settings.KnownDevices;
 
     /// <summary>当前已连接设备快照（有效会话按 IP 聚合，最新活跃在前；面板"已连接设备"列表用）</summary>
     public IReadOnlyList<(string Ip, string DeviceName, DateTime LastActive)> ConnectedDevices
@@ -119,11 +102,7 @@ public sealed class RemoteControlServer
         if (string.IsNullOrEmpty(ip)) return;
         foreach (var stale in _sessions.Where(kv => kv.Value.Ip == ip).Select(kv => kv.Key).ToList())
             _sessions.TryRemove(stale, out _);
-        lock (_devicesLock)
-        {
-            _knownDevices.RemoveAll(d => d.Ip == ip);
-            SaveDevicesLocked();
-        }
+        _settings.RemoveDevice(ip);
     }
 
     /// <summary>启动服务（幂等）。token 为空时自动生成随机密钥</summary>
@@ -245,15 +224,16 @@ public sealed class RemoteControlServer
         }
 
         // 认证成功：建立会话 + 记录设备（用于设备列表与下次自动填密钥）
+        var deviceName = ParseDeviceName(request.Headers.GetValueOrDefault("User-Agent", ""));
         var sessionId = Guid.NewGuid().ToString("N");
         _sessions[sessionId] = new SessionInfo
         {
             Expires = DateTime.Now.Add(SessionLifetime),
             Ip = ip,
-            DeviceName = ParseDeviceName(request.Headers.GetValueOrDefault("User-Agent", "")),
+            DeviceName = deviceName,
             LastActive = DateTime.Now
         };
-        RecordDevice(ip, ParseDeviceName(request.Headers.GetValueOrDefault("User-Agent", "")));
+        _settings.RecordDevice(ip, deviceName);
 
         var response = new RemoteHttpResponse { Body = """{"success":true,"data":null,"error":null}""" };
         response.Headers["Set-Cookie"] = $"rc_session={sessionId}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800";
@@ -302,40 +282,7 @@ public sealed class RemoteControlServer
         return false;
     }
 
-    // ==================== 设备表（持久化 + 自动填密钥） ====================
-
-    private void RecordDevice(string ip, string deviceName)
-    {
-        if (ip == "unknown" || string.IsNullOrEmpty(ip)) return;
-        lock (_devicesLock)
-        {
-            var existing = _knownDevices.FirstOrDefault(d => d.Ip == ip);
-            var now = DateTime.Now;
-            if (existing == null)
-            {
-                _knownDevices.Add(new DeviceRecord { Ip = ip, DeviceName = deviceName, FirstSeen = now, LastSeen = now });
-            }
-            else
-            {
-                existing.DeviceName = deviceName;
-                existing.LastSeen = now;
-            }
-            SaveDevicesLocked();
-        }
-    }
-
-    private void SaveDevicesLocked()
-    {
-        try { JsonSettingsFile.Save(_devicesPath, _knownDevices); }
-        catch (Exception ex) { Debug.WriteLine($"[RemoteControlServer] 设备表保存失败: {ex.Message}"); }
-    }
-
-    /// <summary>已记录设备（IP 匹配）访问控制页时自动填入密钥（踢出即从表中移除，撤销自动填充）</summary>
-    private bool IsKnownDevice(string ip)
-    {
-        if (string.IsNullOrEmpty(ip)) return false;
-        lock (_devicesLock) return _knownDevices.Any(d => d.Ip == ip);
-    }
+    // ==================== 设备表（单一 json 持久化 + 自动填密钥，读写委托 RemoteControlSettings） ====================
 
     private RemoteHttpResponse HandleDevices()
     {
@@ -351,8 +298,7 @@ public sealed class RemoteControlServer
             .OrderByDescending(d => d.LastActive)
             .ToList();
 
-        DeviceRecord[] known;
-        lock (_devicesLock) known = _knownDevices.ToArray();
+        var known = _settings.KnownDevices;
 
         return Json(RemoteControlResponse.Ok(new
         {
@@ -476,7 +422,7 @@ public sealed class RemoteControlServer
         var html = Encoding.UTF8.GetString(_htmlBytes);
 
         // 已记录设备：注入真实密钥，页面自动填入（用户决策 2026-08-08；踢出即撤销）
-        if (_token != null && IsKnownDevice(request.RemoteIp))
+        if (_token != null && _settings.IsKnownDevice(request.RemoteIp))
             html = html.Replace(AutoKeyPlaceholder, $"window.__AUTO_KEY__ = '{_token}';");
 
         return new RemoteHttpResponse

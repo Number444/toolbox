@@ -1,5 +1,6 @@
 using Toolbox.Plugins.Handlers;
 using Toolbox.Plugins.Models;
+using Toolbox.Tools.Helpers;
 using Xunit;
 
 namespace Toolbox.Tests;
@@ -11,7 +12,15 @@ public class StatusCommandHandlerTests
 {
     private static StatusCommandHandler CreateHandler(SystemStatusSnapshot? status = null, NetworkDetailSnapshot? network = null) =>
         new(
-            statusSource: () => status ?? new SystemStatusSnapshot { CpuPercent = 12.5, MemoryTotalGB = 32, MemoryUsedGB = 18.2, Ipv4 = "192.168.1.100", Uptime = "3 天 4 小时" },
+            statusSource: () => status ?? new SystemStatusSnapshot
+            {
+                CpuPercent = 12.5,
+                MemoryTotalGB = 32,
+                MemoryUsedGB = 18.2,
+                Ipv4 = "192.168.1.100",
+                Uptime = "3 天 4 小时",
+                Battery = new SystemInfoHelper.BatteryInfo { Percent = 78, Status = "使用电池", IsBatteryPresent = true }
+            },
             networkSource: () => network ?? new NetworkDetailSnapshot { Mac = "AA-BB-CC-DD-EE-FF", Gateway = "192.168.1.1", Dns = ["192.168.1.1"], PublicIp = "8.8.8.8" });
 
     [Fact]
@@ -26,6 +35,11 @@ public class StatusCommandHandlerTests
         Assert.Equal(12.5, data.CpuPercent);
         Assert.Equal(32, data.MemoryTotalGB);
         Assert.Equal("192.168.1.100", data.Ipv4);
+        // 电池字段结构（笔记本场景）
+        Assert.NotNull(data.Battery);
+        Assert.True(data.Battery!.IsBatteryPresent);
+        Assert.Equal(78, data.Battery.Percent);
+        Assert.Equal("使用电池", data.Battery.Status);
     }
 
     [Fact]

@@ -55,6 +55,7 @@
 | status | 内存总量/可用 | 插件内自实现（公共类未提供）：本工具私有 `SystemMetricsHelper`（GlobalMemoryStatusEx P/Invoke） |
 | status | 磁盘各分区剩余、系统运行时长、IPv4 | ✅ 公共 Helper：`SystemInfoHelper.GetUptime() / GetDriveSpace() / GetLocalIPv4()` |
 | status | CPU 占用 | 插件内自实现（公共类未提供）：本工具私有 `SystemMetricsHelper`（GetSystemTimes P/Invoke，零第三方依赖） |
+| status | 电池容量/状态 | ✅ 公共 Helper：`SystemInfoHelper.GetBatteryInfo()`（2026-08-08 新增；首页时钟卡片与远程控制页共用） |
 | network | MAC / 网关 / DNS | 插件内自实现：`NetworkInterface.GetAllNetworkInterfaces()` 等 .NET 公共 API |
 | network | 公网 IP | 插件内自实现：HttpClient 请求公共 IP 服务（try-catch + 超时，离线时降级返回 null 不阻塞） |
 
@@ -71,7 +72,7 @@
 
 ### FR-5 审计与容错
 - 控制页显示最近操作记录（指令、时间、来源 IP）
-- 危险指令（关机/重启）需在页面二次确认
+- 危险指令（关机/重启）服务端强制 confirm 强校验（前端直发恒带，见 7.4）
 - 所有异常返回友好 JSON 错误，不崩溃
 
 ## 3. 技术选型
@@ -219,7 +220,8 @@ GET /api/status
 ```
 
 > 说明：uptime 使用 `SystemInfoHelper.FormatUptime` 中文格式（与项目内其他工具一致）；
-> 内存 used = total − available（计入 standby/文件缓存，数值略高于任务管理器"使用中"，语义等价）。
+> 内存 used = total − available（计入 standby/文件缓存，数值略高于任务管理器"使用中"，语义等价）；
+> ipv4 为**公网 IP**（优先公共 `SystemInfoHelper.GetPublicIPv4Async`，失败私有兜底局域网地址，30s 缓存防 1.2s 轮询阻塞，2026-08-08）。
 
 > 注意：`shutdown` / `restart` 请求必须携带 `args.confirm: true`（服务端强制校验，见 7.4），
 > 上例为完整形态。
@@ -236,9 +238,11 @@ GET /api/status
 │  [锁屏] [睡眠] [关显示器]     │  一键指令（低风险，无需确认）
 │  [重启资源管理器]             │
 ├──────────────────────────────┤
-│  ⏻ 电源控制（二次确认）       │
-│  [定时关机 ▾ 60s]  [立即关机]  │  危险操作弹确认框
-│  [重启电脑]  [取消关机]        │
+│  🔌 电源控制                  │
+│  [1分][5分][10分][30分][1时]   │  快捷定时关机（按钮直发）
+│  [立即关机] [重启电脑]         │  危险按钮（红）
+│  [自定义分钟 + 定时关机]       │  与原 ShutdownTool 一致的输入
+│  [取消关机]                    │
 ├──────────────────────────────┤
 │  📊 系统状态（3s 自动刷新）    │
 │  CPU ████░░ 12.5%            │  进度条 + 数值
@@ -274,20 +278,52 @@ GET /api/status
 - 建议文档注明：Windows 防火墙首次会弹窗，需允许专用网络（信任局域网）
 
 ### 7.4 危险指令保护
-- 关机/重启在控制页二次确认（前端 confirm）
-- 服务端对 `shutdown`/`restart` 强制要求 `args.confirm=true`，否则拒绝（防 CSRF/误触）
-- 其余指令（锁屏/睡眠/关显示器/重启资源管理器/取消关机）低风险，无需确认
+- 控制页对定时关机/立即关机/重启弹**自绘确认框**（Toolbox 风格深色模态，不调用浏览器原生 confirm；
+  2026-08-08 决策：确认弹窗必须有）
+- 服务端对 `shutdown`/`restart` 同时强制要求 `args.confirm=true`，否则拒绝——
+  **双层防线**：前端确认（人类确认）+ 服务端 confirm 校验（CSRF 纵深，配合 X-Requested-With 头，
+  跨站请求即便带 Cookie 也无法同时伪造自定义头与 confirm 语义）
+- 其余指令（锁屏/睡眠/关显示器/重启资源管理器/取消关机）直发，无需确认
 
 ### 7.5 CSRF 防护
-- 所有写操作（/api/command）要求自定义头 `X-Requested-With: RemoteControl`，
+- 所有写操作（/api/command、/api/devices/kick）要求自定义头 `X-Requested-With: RemoteControl`，
   浏览器跨站表单无法伪造该头
+
+### 7.6 认证与会话原理（2026-08-08 记录）
+
+**"已认证"的判定**：服务端会话字典 + Cookie，**不依赖 IP**。
+
+1. **认证**：设备 `POST /api/auth {token}` → 服务端定长比较校验（`FixedTimeEquals`，防时序侧信道；
+   失败计数按来源 IP 隔离，5 次锁 30s）→ 通过后生成随机会话 ID（Guid.N）→ 写入内存字典
+   `_sessions`（sessionId → { 过期时间 8h、来源 IP、设备名(UA 解析)、最后活跃 }）→
+   响应 `Set-Cookie: rc_session=xxx; HttpOnly; SameSite=Lax; Max-Age=28800`
+2. **保持**：浏览器自动保存 Cookie，后续请求自动携带
+3. **校验**：受保护路由（status/command/events/devices/kick）先解析 Cookie → 查 `_sessions` →
+   存在且未过期 → 放行并刷新 LastActive；否则 401 → 前端弹登录遮罩
+4. **8h 过期**：服务端条目过期 + 浏览器端 Cookie Max-Age 同时到期；条目由惰性清理回收
+   （仅当字典 >200 条时批量清过期，防无限增长）
+5. **"已连接设备"列表** = `_sessions` 中有效会话按 IP 聚合（🟢）；**"曾连接设备"表**
+   = 认证成功那一刻写入 `remote-control.json` 的 `KnownDevices`（IP/UA 设备名/首连/最后，
+   永不自动过期，直到手动移除）
+6. **自动填密钥**：`GET /` 时查 `KnownDevices`，IP 命中 → HTML 注入真实密钥 → 页面自动填入；
+   "踢出/移除"= 删除该 IP 全部会话 + 从 `KnownDevices` 移除（撤销自动填充）
+
+**IP 地址变化的影响（常见场景：DHCP 重新分配）**：
+- 已记录条目**不会失效**（json 中的旧 IP 记录不自动清理、不因超时删除）
+- 但设备拿到**新 IP** 后，新 IP 不在 `KnownDevices` → 自动填密钥**不生效**，
+  需手动输入密钥重新认证；认证成功后新 IP 被记录
+- 旧 IP 条目成为"僵尸记录"（显示在曾连接列表），直到：该 IP 被别的设备登录（同 IP 刷新为该设备记录）、
+  或手动移除
+- **结论**：设备记录以 IP 为键，换 IP 即"失联"——这是当前实现的已知局限；
+  后续可选优化：设备表改用浏览器持久化设备 ID（localStorage 生成 + 认证时上报）作为主键，
+  IP 变化仍可识别（本期不做）
 
 ## 8. 与现有代码集成点
 
 | 现有模块 | 集成方式 |
 |---------|---------|
 | `ToolRegistry` | 无需改动，反射自动发现新插件 |
-| `ITool` / `ToolCategory` | RemoteControlTool 实现 ITool，分类定死为 `ToolCategory.System`（⚙️ 系统维护） |
+| `ITool` / `ToolCategory` | RemoteControlTool 实现 ITool，分类归入 `ToolCategory.Network`（🌐 网络与开发，2026-08-08 调整） |
 | `SystemPowerHelper` | ✅ 公共 Helper 直接调用（锁屏/睡眠/关显示器） |
 | `SystemInfoHelper` | ✅ 公共 Helper 直接调用（内存/磁盘/运行时长/IPv4） |
 | `ShutdownTool` | ❌ 不调用、不修改；关机/重启/取消关机由本工具私有 `PowerActions` 自实现 |
@@ -375,7 +411,7 @@ GET /api/status
 | 防火墙未放行 | 其他设备连不上 | 文档注明首次弹窗放行；工具页提供排查提示 |
 | 路由器 AP 隔离 | 同 Wi-Fi 但设备不通 | 提示检查 AP 隔离设置 |
 | Token 明文传输（HTTP） | 局域网可嗅探 | 局域网信任模型 + Token 随机强；后续可加 HTTPS（自签）预留 |
-| 危险指令误触 | 电脑被关机 | 二次确认 + confirm 字段校验 |
+| 危险指令误触 | 电脑被关机 | 服务端 confirm 字段强校验（防 CSRF/伪造）；按钮直发与本地工具一致 |
 | 端口冲突 | 启动失败 | 启动时检测占用并提示换端口 |
 | 手写 HTTP 协议健壮性 | 畸形请求/超大 body 拖垮服务 | 解析严格限长（header ≤16KB、body ≤1MB）、单请求超时、异常就地捕获返回 4xx/5xx；若仍不可靠，切换备方案 HttpListenerServer（见 13） |
 
@@ -419,6 +455,11 @@ GET /api/status
 
 - 2026-08-07：选型定为 TcpListener 手写（主），HttpListener 为备；
   待 M4/M5 Windows 实机冒烟测试后确认或切换，结果回填本节
+- 2026-08-08（二次产品决策）：分类改 Network（🌐 网络与开发）；电源控制布局对齐原工具
+  （快捷按钮组 + 自定义分钟 + 自绘控件，去浏览器原生 select）；
+  **自绘确认弹窗保留**（危险指令前端确认 + 服务端 confirm 强校验双层防线）；
+  设置合并为**单一 json**（remote-control.json：密钥/端口/开关 + 曾连接设备表，弃 remote-control-devices.json）；
+  JSON 路径约定：%LOCALAPPDATA%/Toolbox/remote-control.json
 - 2026-08-07（评审修订）：分类定死 System（⚙️ 系统维护）；Token 面板展示与复制；
   手动指定 Token 仅当前会话；睡眠不要求二次确认（低风险）；
   PowerCommandHandler 注入执行器委托（测试不真关机）；

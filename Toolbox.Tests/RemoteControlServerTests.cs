@@ -20,7 +20,7 @@ public class RemoteControlServerTests : IDisposable
 {
     private const string TestToken = "test-token-123";
 
-    private readonly string _devicesPath;
+    private readonly string _tempDir;
     private readonly RemoteControlServer _server;
     private readonly HttpClient _client;
     private readonly List<ProcessStartInfo> _started = new();
@@ -32,9 +32,10 @@ public class RemoteControlServerTests : IDisposable
         var power = new PowerCommandHandler(
             new PowerActions(psi => { _started.Add(psi); return 0; }),
             action => { _systemActions.Add(action); return true; });
-        // 设备表注入临时目录：避免污染真实 LocalAppData
-        _devicesPath = Path.Combine(Path.GetTempPath(), $"toolbox-rc-test-{Guid.NewGuid():N}", "devices.json");
-        _server = new RemoteControlServer(new TcpHttpServer(), _devicesPath, power, new StatusCommandHandler());
+        // 设置注入临时目录（单一 json）：避免污染真实 LocalAppData
+        _tempDir = Path.Combine(Path.GetTempPath(), $"toolbox-rc-test-{Guid.NewGuid():N}");
+        var settings = new RemoteControlSettings(Path.Combine(_tempDir, "remote-control.json"));
+        _server = new RemoteControlServer(new TcpHttpServer(), settings, power, new StatusCommandHandler());
         _server.Start(0, TestToken); // 端口 0 = 系统分配随机高位端口
 
         _client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{_server.ActualPort}") };
@@ -45,7 +46,7 @@ public class RemoteControlServerTests : IDisposable
     {
         _server.Stop();
         _client.Dispose();
-        try { Directory.Delete(Path.GetDirectoryName(_devicesPath)!, recursive: true); }
+        try { Directory.Delete(_tempDir, recursive: true); }
         catch (Exception) { }
     }
 
