@@ -18,7 +18,7 @@
 
 ### 层 2 — EdgeGlowLayer（控件边缘发光叠加层）
 
-**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`（472 行），`FrameworkElement` 子类。
+**位置**：`Toolbox.Core/Helpers/EdgeGlowLayer.cs`，`FrameworkElement` 子类。
 
 **基本参数**：
 - `GlowRadius = 120px`（发光影响范围）
@@ -29,7 +29,7 @@
 
 **核心机制**：
 
-1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `GlowCardMarker.IsGlowCard="True"` 显式 opt-in。已标记 12 处（SetIsGlowCard 调用点）：ShutdownTool / Screensaver / QuickSystemTool / HomeDashboardTool / JunkCleaner 主列表 / QrCodeTool / NetworkInfoTool / PasswordGeneratorTool / OcrTool / NeteaseMusicTool 设置卡片 / SettingsView 设置卡片 ×2。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，若四角半径不同用 `StreamGeometry` 逐角构造异径圆角矩形描边。
+1. **控件识别 → 模板边界提取**：`ButtonBase` / `ComboBox` / `TextBox`（无需标记）可发光；卡片容器（`Border`）通过 `GlowCardMarker.IsGlowCard="True"` 显式 opt-in——全部工具卡片已按此模式标记，新增工具按 09-tool-dev 指引标记即可（本页不记录具体标记处数与清单，避免随工具增删漂移）。递归视觉树查找模板内首个 `Border` 的 `CornerRadius`，若四角半径不同用 `StreamGeometry` 逐角构造异径圆角矩形描边。
 
 2. **径向渐变描边**：`RadialGradientBrush`（`MappingMode=Absolute`，中心=光标位置）。10 段色标，`alpha × (1-offset)^0.6 × 1.3`，近光心一端形成过曝平台，背光侧完全熄灭。
 

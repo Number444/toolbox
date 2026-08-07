@@ -70,6 +70,9 @@ public class MyNewTool : ITool
 1. 在 `ARCHITECTURE/tools/` 新增叶子文档（参考现有叶子模板）
 2. 在 `ARCHITECTURE/04-plugins.md` 工具索引表登记
 3. 按 `docs/TOOL_DEVELOPMENT_GUIDELINE.md` 验收
+4. README 文档树为引用式（工具清单见 04-plugins 索引），无需维护
+
+> 叶子文档按 README 约定：不写精确行数/计数；已知问题以 `docs/待解决-*.md` 为准，只引用不复述。
 
 ## 相关文档
 

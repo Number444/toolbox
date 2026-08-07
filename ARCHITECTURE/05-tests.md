@@ -11,10 +11,14 @@
 | SoftwareUninstallToolTests.cs | 软件卸载扫描逻辑 |
 | NeteaseMusicToolTests.cs | 悬浮窗相关 |
 | SystemInfoHelperTests.cs | 系统信息辅助 |
+| ImageFileHelperTests.cs | 图片校验辅助 |
+| JsonSettingsFileTests.cs | JSON 设置读写 |
+
+> 完整清单以 `Toolbox.Tests/` 目录为准。
 
 ## 基线状态
 
-- **80/80 全绿 baseline**（2026-07 修复既有失败后恢复）
+- 全绿 baseline（修复既有失败后恢复；具体数量以测试运行输出为准，本页不记录精确数字）
 
 ## 测试策略说明
 

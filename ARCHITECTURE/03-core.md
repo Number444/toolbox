@@ -4,17 +4,17 @@
 
 ## Models/
 
-| 文件 | 行数 | 职责 |
-|------|:----:|------|
-| ITool.cs | 21 | 工具接口：Name / Description / IconGlyph / Category / CreateContent() |
-| ToolGroup.cs | 66 | 工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon / CategoryColor） |
-| ToolCategory.cs | 17 | 工具分类常量（7 大类，首页固定最前） |
-| GlowCardMarker.cs | 24 | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
-| ThemeColors.cs | 35 | 统一主题色常量（供新工具使用，避免硬编码） |
-| FloatSizeMode.cs | 4 | 悬浮窗大小模式枚举（Large / Compact），自插件层移入 Core |
-| IMusicFloatController.cs | 35 | 悬浮窗控制器接口（主程序经此控制悬浮窗，不引用插件类型） |
-| MusicFloatControllerHost.cs | 20 | 悬浮窗控制器静态宿主（插件加载后由 ToolRegistry 注册实现） |
-| ToolNavigation.cs | 15 | 插件→主窗口导航请求中转（首页卡片点击跳工具） |
+| 文件 | 职责 |
+|------|------|
+| ITool.cs | 工具接口：Name / Description / IconGlyph / Category / CreateContent() |
+| ToolGroup.cs | 工具分组模型（IsExpanded / IsHovered / ArrowText / HoverIcon / CategoryColor） |
+| ToolCategory.cs | 工具分类常量（7 大类，首页固定最前） |
+| GlowCardMarker.cs | 卡片发光标记附加属性（IsGlowCard），卡片 Border 显式 opt-in |
+| ThemeColors.cs | 统一主题色常量（供新工具使用，避免硬编码） |
+| FloatSizeMode.cs | 悬浮窗大小模式枚举（Large / Compact），自插件层移入 Core |
+| IMusicFloatController.cs | 悬浮窗控制器接口（主程序经此控制悬浮窗，不引用插件类型） |
+| MusicFloatControllerHost.cs | 悬浮窗控制器静态宿主（插件加载后由 ToolRegistry 注册实现） |
+| ToolNavigation.cs | 插件→主窗口导航请求中转（首页卡片点击跳工具） |
 
 ### ITool 接口规范
 
@@ -48,24 +48,24 @@ public static class ToolCategory
 
 ## Services/
 
-| 文件 | 行数 | 职责 |
-|------|:----:|------|
-| AppSettings.cs | 190 | 单例全局设置（settings.json）：6 个开关 + 悬浮窗尺寸（详见 08-settings.md） |
-| JsonSettingsFile.cs | 68 | 泛型 JSON 设置文件读写（原子写入 .tmp→替换，.bak 备份回落） |
+| 文件 | 职责 |
+|------|------|
+| AppSettings.cs | 单例全局设置（settings.json）：6 个开关 + 悬浮窗尺寸（详见 08-settings.md） |
+| JsonSettingsFile.cs | 泛型 JSON 设置文件读写（原子写入 .tmp→替换，.bak 备份回落） |
 
 ## Controls/
 
-| 文件 | 行数 | 职责 |
-|------|:----:|------|
-| ThemedMenuWindow.cs | 190 | 深色圆角主题弹出菜单窗口（DropShadowEffect 投影 + 屏幕边界吸附） |
+| 文件 | 职责 |
+|------|------|
+| ThemedMenuWindow.cs | 深色圆角主题弹出菜单窗口（DropShadowEffect 投影 + 屏幕边界吸附） |
 
 ## Helpers/
 
-| 文件 | 行数 | 职责 |
-|------|:----:|------|
-| EdgeGlowLayer.cs | 472 | 控件边缘发光引擎（FrameworkElement 子类），主窗口与插件共用（详见 07-ui-system.md） |
-| DwmHelper.cs | 242 | DWM 背景效果帮助类（Mica/Acrylic/圆角/深色模式/纯模糊，含 BackdropType / CornerPreference 枚举） |
-| Win32Native.cs | 90 | 全项目唯一 Win32 P/Invoke 声明处（重复声明已清理） |
+| 文件 | 职责 |
+|------|------|
+| EdgeGlowLayer.cs | 控件边缘发光引擎（FrameworkElement 子类），主窗口与插件共用（详见 07-ui-system.md） |
+| DwmHelper.cs | DWM 背景效果帮助类（Mica/Acrylic/圆角/深色模式/纯模糊，含 BackdropType / CornerPreference 枚举） |
+| Win32Native.cs | 全项目唯一 Win32 P/Invoke 声明处（重复声明已清理） |
 
 ## 关键机制
 

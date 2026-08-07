@@ -1,7 +1,7 @@
 # 工具 · 网易云音乐悬浮窗（NeteaseMusicTool）— 悬浮窗子模块
 
 - **分类**：🎵 媒体与娱乐（Media）
-- **入口文件**：`Toolbox.Plugins/Tools/NeteaseMusicTool.cs`（317 行）
+- **入口文件**：`Toolbox.Plugins/Tools/NeteaseMusicTool.cs`
 - **定位**：独立子模块，进一步分层 Views / Controls / Services / Models / Helpers
 
 ## 功能
@@ -16,21 +16,21 @@
 
 ```
 Tools/
-├── NeteaseMusicTool.cs              工具面板（317 行）
+├── NeteaseMusicTool.cs              工具面板
 ├── Models/
 │   └── NowPlayingInfo.cs            当前播放信息模型
 ├── Services/
-│   ├── SMTCListener.cs              582 行 · SMTC 监听器（Windows 原生 API 监听媒体）
-│   ├── MusicFloatWindowManager.cs   539 行 · 悬浮窗管理器（单例，实现 Core 的 IMusicFloatController）
-│   └── EdgeDockService.cs           532 行 · 贴边自动缩入状态机
+│   ├── SMTCListener.cs              SMTC 监听器（Windows 原生 API 监听媒体）
+│   ├── MusicFloatWindowManager.cs   悬浮窗管理器（单例，实现 Core 的 IMusicFloatController）
+│   └── EdgeDockService.cs           贴边自动缩入状态机
 └── Views/
-    ├── AcrylicMusicWindow.xaml(.cs)      184 行 · 毛玻璃悬浮窗（WindowChrome + DWM Acrylic）
-    └── TransparentMusicWindow.xaml(.cs)  92 行 · 纯透明悬浮窗（AllowsTransparency=True）
+    ├── AcrylicMusicWindow.xaml(.cs)      毛玻璃悬浮窗（WindowChrome + DWM Acrylic）
+    └── TransparentMusicWindow.xaml(.cs)  纯透明悬浮窗（AllowsTransparency=True）
 ```
 
 共享控件（插件层 Controls/）：
-- `MusicContentControl.xaml(.cs)` 804 行 · 悬浮窗共享内容控件
-- `DockTriggerBar.xaml(.cs)` 123 行 · 贴边触发条控件
+- `MusicContentControl.xaml(.cs)` 悬浮窗共享内容控件
+- `DockTriggerBar.xaml(.cs)` 贴边触发条控件
 
 ## 关键机制
 
@@ -77,13 +77,9 @@ Tools/
 | ClickThroughHelper / MonitorHelper / ThemedMenuWindow | 穿透 / 多屏 / 右键菜单 |
 | ThemeColors / GlowCardMarker | UI 一致性 |
 
-## 已知问题（未解决）
+## 已知问题
 
-- **P2-12**：ToggleBlur/SetSizeMode 失败回滚路径泄漏半成品新窗口——`newWindow.Show()` 抛异常后回滚只重挂旧窗口，newWindow 未 Close（极端低概率）
-- **P2-14**：SMTCListener 并发小噪音——Stop 置空竞态下 `_session!` 可能 NRE（被 catch 吞）；StartAsync 重试可能短暂重复订阅（均被兜住，无实际危害）
-- **P2-16**：MusicFloatWindow.xaml/.cs 是仅供测试实例化的废弃死代码，未标记废弃（生产只创建 Acrylic/Transparent；移动/删除前须先改测试）
-- **P2-17**：悬浮窗首次 Save 静默失败——Save() 无条件写入位置 NaN，.NET 9 STJ Strict 模式序列化 NaN 抛异常被 JsonSettingsFile catch 吞掉，未拖过悬浮窗时切换设置不持久化
-- 见 `docs/待解决-2026-07-31.md`
+> 状态以 `docs/待解决-2026-07-31.md` 为准（唯一事实源），本页不复述具体条目以避免状态过时（当前含 P2-12/P2-14/P2-16/P2-17）。
 
 ## 相关文档
 

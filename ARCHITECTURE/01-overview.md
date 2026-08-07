@@ -46,7 +46,7 @@ Toolbox.Tests ──→ Toolbox.Core          （测试 Core 服务）
 - `JsonSettingsFile` 原子写入（.tmp→替换）+ `.bak` 备份回落，设置不因断电写半截丢光
 - crash.log 2MB 轮转
 - `SMTCListener` 启动退避重试（5/15/30s）、30s 看门狗自愈、休眠唤醒重建
-- 测试套件 80/80 全绿 baseline
+- 测试套件全绿 baseline
 
 ## 目录结构速览
 

@@ -1,7 +1,7 @@
 # 工具 · 定时关机（ShutdownTool）
 
 - **分类**：⚙️ 系统维护（System）
-- **文件**：`Toolbox.Plugins/ShutdownTool.cs`（251 行）
+- **文件**：`Toolbox.Plugins/ShutdownTool.cs`
 
 ## 功能
 
@@ -18,7 +18,7 @@
 
 | 类 | 用途 |
 |----|------|
-| ThemeColors / GlowCardMarker / ConfirmDialog | UI 一致性 |
+| ThemeColors / GlowCardMarker | UI 一致性 |
 
 ## 相关文档
 

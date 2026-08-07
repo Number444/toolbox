@@ -1,7 +1,7 @@
 # 工具 · 屏保启动（ScreensaverTool）
 
 - **分类**：⚙️ 系统维护（System）
-- **文件**：`Toolbox.Plugins/ScreensaverTool.cs`（179 行）
+- **文件**：`Toolbox.Plugins/ScreensaverTool.cs`
 
 ## 功能
 

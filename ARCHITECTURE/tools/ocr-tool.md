@@ -1,7 +1,7 @@
 # 工具 · 截图识字（OcrTool）— OCR 引擎子系统
 
 - **分类**：🔤 文本与数据（Text）
-- **文件**：`Toolbox.Plugins/OcrTool.cs`（687 行）
+- **文件**：`Toolbox.Plugins/OcrTool.cs`
 - **状态**：★ 新增（2026-07），OCR 引擎子系统全链路
 
 ## 功能
@@ -15,14 +15,14 @@
 
 ## 子系统文件
 
-| 文件 | 行数 | 职责 |
-|------|:----:|------|
-| OcrTool.cs | 687 | 工具主体（后台加载/下载防重入/UnloadEngine） |
-| DownloadDialog.cs | 210 | 引擎下载进度对话框（进度条 + 取消） |
-| Toolbox.Plugins/Helpers/OcrHelper.cs | 89 | Windows 内置 OCR 引擎封装 |
-| Toolbox.Plugins/Helpers/PaddleOcrWrapper.cs | 189 | PaddleOCR 高精度引擎包装（原生库加载/释放） |
-| Toolbox.Plugins/Helpers/EngineDownloader.cs | 288 | 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
-| Toolbox.Plugins/Helpers/ImageFileHelper.cs | 83 | 图片文件校验与格式判断 |
+| 文件 | 职责 |
+|------|------|
+| OcrTool.cs | 工具主体（后台加载/下载防重入/UnloadEngine） |
+| DownloadDialog.cs | 引擎下载进度对话框（进度条 + 取消） |
+| Toolbox.Plugins/Helpers/OcrHelper.cs | Windows 内置 OCR 引擎封装 |
+| Toolbox.Plugins/Helpers/PaddleOcrWrapper.cs | PaddleOCR 高精度引擎包装（原生库加载/释放） |
+| Toolbox.Plugins/Helpers/EngineDownloader.cs | 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
+| Toolbox.Plugins/Helpers/ImageFileHelper.cs | 图片文件校验与格式判断 |
 
 ## 关键链路优化（2026-07-31）
 
@@ -43,14 +43,9 @@
 | ConfirmDialog | 引擎删除确认 |
 | ThemeColors / GlowCardMarker | UI 一致性 |
 
-## 已知问题（未解决）
+## 已知问题
 
-- **P2-2**：EngineDownloader 进度映射公式错误——`baseMin + pct*(baseMax-baseMin)/200` 应除 100，45-80 区间实际只走到 62（纯视觉）
-- **P2-3**：解压无 zip-slip 防护——zip 条目 FullName 直接拼 Path.Combine，含 `../` 条目可写出目录（来源为固定版本 NuGet 包，风险面小）
-- **P2-8**：OCR 高精度失败回退改全局开关——回退路径置 `_useHighPrecision=false`，连拖两张图并发识别时第一个失败会降级第二个
-- **P2-9**：引擎目录被 Assembly.LoadFrom 锁定后重下载的 Directory.Delete 必失败且无法自愈（LoadFrom 抛异常后 DLL 已锁，需重启应用恢复）
-- **P2-10**：下载的 nupkg 临时 zip 落 %TEMP% 无权限收紧，解压文件无内容校验（低风险加固项）
-- 见 `docs/待解决-2026-07-31.md`
+> 状态以 `docs/待解决-2026-07-31.md` 为准（唯一事实源），本页不复述具体条目以避免状态过时。P2-2（进度映射）已修复，其余 P2-3/P2-8/P2-9/P2-10 见清单。
 
 ## 相关文档
 

@@ -1,7 +1,7 @@
 # 工具 · 快捷系统操作（QuickSystemTool）
 
 - **分类**：⚙️ 系统维护（System）
-- **文件**：`Toolbox.Plugins/QuickSystemTool.cs`（180 行）
+- **文件**：`Toolbox.Plugins/QuickSystemTool.cs`
 - **状态**：★ 新增（2026-07，替代原 RestartExplorerTool）
 
 ## 功能
