@@ -110,9 +110,13 @@ public partial class MainWindow : Window
         // 鼠标跟随呼吸光晕
         InitHalo();
 
-        // 搜索过滤会重建导航列表（VisibleGroups 变更），缓存的 工具→Border 映射随之失效
+        // 搜索过滤会重建导航列表（VisibleGroups 变更），缓存的 工具→Border 映射与分组高度缓存随之失效
         if (DataContext is ViewModels.MainViewModel navVm)
-            navVm.VisibleGroups.CollectionChanged += (_, _) => _toolBorders.Clear();
+            navVm.VisibleGroups.CollectionChanged += (_, _) =>
+            {
+                _toolBorders.Clear();
+                _groupHeights.Clear();
+            };
     }
 
     /// <summary>更新四角遮盖形状（全矩形 减 内圆角矩形 = 四个角落区域）</summary>
@@ -277,38 +281,167 @@ public partial class MainWindow : Window
         { EasingFunction = delta > 0 ? EaseOut() : EaseIn() }); // 展开 EaseOut / 折叠 EaseIn
     }
 
-    /// <summary>分类标题头点击——切换展开/折叠（动画期间高亮与列表同步位移；选中工具不被强制切走）</summary>
+    // --- 悬停高亮条（HoverBar：与 HighlightBar 同几何的第二条浮层） ---
+
+    /// <summary>悬停条位移动画时长 ms（测试开关）：0 = 瞬移到位；>0（如 120）= 带 CubicEase EaseOut 位移动画</summary>
+    private static int HoverMoveAnimMs = 0;
+    private const int HoverFadeInMs = 100;
+    private const int HoverFadeOutMs = 80;
+
+    /// <summary>鼠标进入导航项/分组头：悬停条定位到目标（几何与 HighlightBar 一致，高度随目标；
+    /// 已选中项不显示，避免与高亮条叠色加深）</summary>
+    private void ShowHover(FrameworkElement target)
+    {
+        _hoverHidePending = false; // 取消延迟中的淡出（跨项移动不闪）
+        if (ReferenceEquals(target, _selectedNavBorder)) { HideHover(); return; }
+
+        Point position;
+        try
+        {
+            position = target.TransformToAncestor(NavContainer).Transform(new Point(0, 0));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] 悬停定位失败: {ex.Message}");
+            return;
+        }
+        double top = position.Y;
+
+        HoverBar.Height = target.ActualHeight;
+
+        if (HoverBar.Visibility != Visibility.Visible)
+        {
+            // 瞬移到位后显示：仅会话内第一次淡入；之后再次出现直接全显
+            // （从间隙/淡出恢复时若重新从 0 淡入，会看到"闪一下消失再浮现"）
+            HoverTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            HoverTransform.Y = top;
+            HoverBar.Visibility = Visibility.Visible;
+            HoverBar.BeginAnimation(UIElement.OpacityProperty, null);
+            if (_hoverShownOnce)
+            {
+                HoverBar.Opacity = 1;
+            }
+            else
+            {
+                _hoverShownOnce = true;
+                HoverBar.Opacity = 0;
+                HoverBar.BeginAnimation(UIElement.OpacityProperty,
+                    new DoubleAnimation(1, TimeSpan.FromMilliseconds(HoverFadeInMs)));
+            }
+        }
+        else
+        {
+            // 取消进行中的淡出，保持显示
+            HoverBar.BeginAnimation(UIElement.OpacityProperty, null);
+            HoverBar.Opacity = 1;
+
+            if (HoverMoveAnimMs > 0)
+            {
+                // 测试模式：位移动画过渡（EaseOut）
+                HoverTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(
+                    top, TimeSpan.FromMilliseconds(HoverMoveAnimMs)) { EasingFunction = EaseOut() });
+            }
+            else
+            {
+                // 默认：瞬移到位，避免"追着鼠标跑"的拖尾感
+                HoverTransform.BeginAnimation(TranslateTransform.YProperty, null);
+                HoverTransform.Y = top;
+            }
+        }
+    }
+
+    /// <summary>鼠标离开：宽限期后淡出隐藏。
+    /// 相邻两项间有 2px 间隙（上下 Margin 各 1px），慢速移动时光标会在间隙停留：
+    /// 若离开即淡出，间隙期间淡出真实播放（甚至播完隐藏），进入下一项再从 0 淡入——
+    /// 即"移动到下一个会闪一下消失"。80ms 宽限定时器由 ShowHover 取消，
+    /// 只有真正离开列表（间隙停留超宽限）才淡出</summary>
+    private bool _hoverHidePending;
+    private bool _hoverShownOnce; // 会话内是否已显示过（再次出现不再淡入）
+    private System.Windows.Threading.DispatcherTimer? _hoverHideTimer;
+
+    private void HideHover()
+    {
+        if (HoverBar.Visibility != Visibility.Visible) return;
+        _hoverHidePending = true;
+        if (_hoverHideTimer == null)
+        {
+            _hoverHideTimer = new System.Windows.Threading.DispatcherTimer(
+                TimeSpan.FromMilliseconds(80),
+                System.Windows.Threading.DispatcherPriority.Normal,
+                (_, _) =>
+                {
+                    _hoverHideTimer?.Stop();
+                    if (!_hoverHidePending || HoverBar.Visibility != Visibility.Visible) return;
+                    var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(HoverFadeOutMs));
+                    fade.Completed += (_, _) => HoverBar.Visibility = Visibility.Collapsed;
+                    HoverBar.BeginAnimation(UIElement.OpacityProperty, fade);
+                },
+                Dispatcher);
+        }
+        _hoverHideTimer.Stop();
+        _hoverHideTimer.Start();
+    }
+
+    /// <summary>导航项鼠标进入——悬停条跟随</summary>
+    private void NavItem_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement el) ShowHover(el);
+    }
+
+    /// <summary>导航项鼠标离开——悬停条淡出</summary>
+    private void NavItem_MouseLeave(object sender, MouseEventArgs e) => HideHover();
+
+    /// <summary>分类标题头点击——切换展开/折叠（渲染式动画；动画期间高亮与列表同步位移；选中工具不被强制切走）</summary>
     private void GroupHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement element || element.DataContext is not Models.ToolGroup group) return;
 
-        bool nowExpanded = !group.IsExpanded;
-        group.IsExpanded = nowExpanded;
-
         // 找到动画容器 Border（StackPanel → Children[1]）
         Border? animContainer = null;
+        StackPanel? groupPanel = null;
         if (VisualTreeHelper.GetParent(element) is StackPanel sp
             && sp.Children.Count > 1
             && sp.Children[1] is Border b
             && b.Tag is string tag && tag == "GroupAnimContainer")
         {
+            groupPanel = sp;
             animContainer = b;
         }
+
+        // 渲染式动画进行中（≤200ms）忽略本次切换：中间态（兄弟元素平移补偿）无法平滑反转
+        if (animContainer != null && _animatingContainers.Contains(animContainer)) return;
+
+        bool nowExpanded = !group.IsExpanded;
+        group.IsExpanded = nowExpanded;
 
         var vm = DataContext as ViewModels.MainViewModel;
         bool selectedInGroup = vm?.SelectedTool != null && group.Tools.Contains(vm.SelectedTool);
 
-        // 动画高度差：展开为正、折叠为负（高亮同步位移量；选中项在本组内时无需位移）
+        // 高度差（绝对值）：展开优先取缓存（免点击时同步 UpdateLayout 测量），折叠取当前实测
         double delta = 0;
-        if (animContainer != null && vm?.SelectedTool != null && !selectedInGroup)
-            delta = nowExpanded ? MeasureAutoHeight(animContainer) : -animContainer.ActualHeight;
+        if (animContainer != null)
+        {
+            if (nowExpanded)
+            {
+                if (!_groupHeights.TryGetValue(group, out delta))
+                {
+                    delta = MeasureAutoHeight(animContainer);
+                    _groupHeights[group] = delta;
+                }
+            }
+            else
+            {
+                delta = animContainer.ActualHeight;
+                if (delta <= 0) _groupHeights.TryGetValue(group, out delta);
+            }
+        }
 
         // 动画完成回调：布局稳定后重定位高亮（兜底校正同步位移的累计误差）
         Action onAnimCompleted = () => Dispatcher.BeginInvoke(
             new Action(ScheduleHighlightReposition),
             System.Windows.Threading.DispatcherPriority.Background);
 
-        // 高亮同步：与分组 Height 动画同时启动
+        // 高亮同步：与分组动画同时启动
         if (vm?.SelectedTool != null)
         {
             if (selectedInGroup)
@@ -318,14 +451,14 @@ public partial class MainWindow : Window
             }
             else if (delta != 0 && GroupIndexOf(vm, group) < GroupIndexOf(vm, vm.SelectedTool))
             {
-                // 被切换组在选中项上方：高亮与列表同步流动
-                MoveHighlightBy(delta);
+                // 被切换组在选中项上方：高亮与列表同步流动（展开下移、折叠上移）
+                MoveHighlightBy(nowExpanded ? delta : -delta);
             }
         }
 
-        // 执行 Height 动画（完成后回调重定位高亮）
-        if (animContainer != null)
-            AnimateGroupHeight(animContainer, nowExpanded, onAnimCompleted);
+        // 渲染式展开/折叠（零布局动画；完成后一次性提交布局并回调重定位高亮）
+        if (animContainer != null && groupPanel != null && delta > 0)
+            AnimateGroupRender(animContainer, groupPanel, nowExpanded, delta, onAnimCompleted);
         else
             onAnimCompleted();
     }
@@ -351,43 +484,81 @@ public partial class MainWindow : Window
         return h;
     }
 
-    /// <summary>分组容器 Height 动画——展开/折叠（带缓动的推入/收回效果：展开 EaseOut、折叠 EaseIn）</summary>
-    private static void AnimateGroupHeight(Border container, bool expand, Action? onCompleted = null)
+    /// <summary>渲染式分组展开/折叠：兄弟元素 RenderTransform 平移 + 内容 Clip 几何揭示，
+    /// 全程零布局动画（旧实现动画 Height，每帧触发整个导航面板 Measure/Arrange）；
+    /// 动画结束一次性提交布局（Height=Auto/0）并复位变换，视觉无缝衔接</summary>
+    private void AnimateGroupRender(Border container, StackPanel groupPanel, bool expand, double delta, Action? onCompleted)
     {
-        container.BeginAnimation(FrameworkElement.HeightProperty, null);
+        _animatingContainers.Add(container);
+        IEasingFunction ease = expand ? EaseOut() : EaseIn();
+        var duration = TimeSpan.FromMilliseconds(GroupAnimMs);
 
+        // 收集下方兄弟元素（ItemsControl 生成的容器项），挂上平移变换
+        var siblings = new List<(UIElement el, TranslateTransform tt)>();
+        if (VisualTreeHelper.GetParent(groupPanel) is FrameworkElement groupHost
+            && VisualTreeHelper.GetParent(groupHost) is Panel panel)
+        {
+            int index = panel.Children.IndexOf(groupHost);
+            for (int i = index + 1; i < panel.Children.Count; i++)
+            {
+                if (panel.Children[i] is not UIElement sib) continue;
+                if (sib.RenderTransform is not TranslateTransform tt)
+                {
+                    tt = new TranslateTransform();
+                    sib.RenderTransform = tt;
+                }
+                siblings.Add((sib, tt));
+            }
+        }
+
+        // 内容按实测高度渲染（容器布局高度保持 0，不撑开兄弟），由 Clip 几何逐步揭示
+        if (container.Child is FrameworkElement child)
+            child.Height = delta;
+
+        double w = Math.Max(container.ActualWidth, 1);
+        var clip = new RectangleGeometry(new Rect(0, 0, w, expand ? 0 : delta));
+        container.Clip = clip;
+
+        if (!expand)
+        {
+            // 折叠：布局先塌缩（Height=0，兄弟被布局瞬移上移 delta），同一回合内给兄弟 +delta
+            // 补偿平移保持视觉原位，再平移回 0 —— 两者在下一次渲染前同时生效，无跳变
+            container.Height = 0;
+            foreach (var (_, tt) in siblings) tt.Y = delta;
+        }
+
+        // Clip 揭示动画（几何属性动画：只走渲染，不触发布局）；完成回调里提交布局
+        var clipAnim = new RectAnimation(
+            new Rect(0, 0, w, expand ? delta : 0), duration)
+        { EasingFunction = ease };
+        clipAnim.Completed += (_, _) => CommitGroupAnimation(container, expand, siblings, onCompleted);
+        clip.BeginAnimation(RectangleGeometry.RectProperty, clipAnim);
+
+        // 兄弟平移动画（渲染线程）：展开 0→+delta，折叠 -delta→0
+        foreach (var (_, tt) in siblings)
+        {
+            tt.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(
+                expand ? delta : 0, duration) { EasingFunction = ease });
+        }
+    }
+
+    /// <summary>渲染式分组动画的提交：一次性落地布局并复位全部变换/裁剪（与动画末帧视觉一致，无跳变）</summary>
+    private void CommitGroupAnimation(Border container, bool expand,
+        List<(UIElement el, TranslateTransform tt)> siblings, Action? onCompleted)
+    {
+        _animatingContainers.Remove(container);
+        container.Clip = null;
+        if (container.Child is FrameworkElement child)
+            child.Height = double.NaN;
         if (expand)
-        {
-            // 展开：先测量实际高度，再从 0 动画到目标
-            double targetH = MeasureAutoHeight(container);
-            if (targetH <= 0) { container.Height = double.NaN; onCompleted?.Invoke(); return; }
+            container.Height = double.NaN; // 布局接管：兄弟被推到最终位，与平移末帧一致
 
-            var a = new DoubleAnimation(0, targetH, TimeSpan.FromMilliseconds(GroupAnimMs))
-            { EasingFunction = EaseOut() };
-            a.Completed += (_, _) =>
-            {
-                container.BeginAnimation(FrameworkElement.HeightProperty, null);
-                container.Height = double.NaN;
-                onCompleted?.Invoke();
-            };
-            container.BeginAnimation(FrameworkElement.HeightProperty, a);
-        }
-        else
+        foreach (var (el, tt) in siblings)
         {
-            // 折叠：从当前高度动画到 0
-            double curH = container.ActualHeight;
-            if (curH <= 0) { container.Height = 0; onCompleted?.Invoke(); return; }
-
-            var a = new DoubleAnimation(curH, 0, TimeSpan.FromMilliseconds(GroupAnimMs))
-            { EasingFunction = EaseIn() };
-            a.Completed += (_, _) =>
-            {
-                container.BeginAnimation(FrameworkElement.HeightProperty, null);
-                container.Height = 0;
-                onCompleted?.Invoke();
-            };
-            container.BeginAnimation(FrameworkElement.HeightProperty, a);
+            tt.BeginAnimation(TranslateTransform.YProperty, null);
+            el.RenderTransform = null;
         }
+        onCompleted?.Invoke();
     }
 
     /// <summary>在下一个布局周期调度高亮重定位</summary>
@@ -433,18 +604,24 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>分类头鼠标进入——切换图标为箭头</summary>
+    /// <summary>分类头鼠标进入——切换图标为箭头 + 悬停条跟随</summary>
     private void GroupHeader_MouseEnter(object sender, MouseEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is Models.ToolGroup group)
+        {
             group.IsHovered = true;
+            ShowHover(element);
+        }
     }
 
-    /// <summary>分类头鼠标离开——切换图标为文件夹</summary>
+    /// <summary>分类头鼠标离开——切换图标为文件夹 + 悬停条淡出</summary>
     private void GroupHeader_MouseLeave(object sender, MouseEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is Models.ToolGroup group)
+        {
             group.IsHovered = false;
+            HideHover();
+        }
     }
 
     /// <summary>搜索框按下 Enter 键——跳转到第一个匹配工具</summary>
@@ -478,6 +655,12 @@ public partial class MainWindow : Window
 
     /// <summary>工具→导航 Border 缓存（O(1) 查找；VisibleGroups 变更时清空重建）</summary>
     private readonly Dictionary<Models.ITool, Border> _toolBorders = new();
+
+    /// <summary>分组内容实测高度缓存（避免展开时重复 UpdateLayout 同步测量；VisibleGroups 变更时清空）</summary>
+    private readonly Dictionary<Models.ToolGroup, double> _groupHeights = new();
+
+    /// <summary>渲染式展开/折叠动画进行中的容器（200ms 内忽略对同组的重复切换）</summary>
+    private readonly HashSet<Border> _animatingContainers = new();
 
     /// <summary>通过 ITool 引用查找对应的导航 Border 元素（缓存优先，未命中全量扫描重建）</summary>
     private Border? FindToolBorderByTool(Models.ITool tool)

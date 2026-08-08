@@ -234,30 +234,41 @@
                                         Background="{StaticResource AccentBrush}"/>
                             </Border>
 
+                            <!-- 悬停高亮条（与 HighlightBar 同 Margin/圆角几何，半透明；
+                                 悬停分组/工具时定位到目标，高度随目标 ActualHeight；位移是否动画由 HoverMoveAnimMs 控制） -->
+                            <Border x:Name="HoverBar"
+                                    Background="#593A3A3A"
+                                    CornerRadius="6"
+                                    Height="36"
+                                    Margin="10,0,12,0"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Top"
+                                    IsHitTestVisible="False"
+                                    Opacity="0"
+                                    Visibility="Collapsed">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="HoverTransform" Y="0"/>
+                                </Border.RenderTransform>
+                            </Border>
+
                             <!-- 分组列表 -->
                             <ItemsControl ItemsSource="{Binding VisibleGroups}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="m:ToolGroup">
                                         <StackPanel>
                                             <!-- 分类标题头（可点击折叠） -->
-                                            <Border Padding="12,8"
-                                                    Margin="6,2,8,1"
+                                            <!-- 几何与 HoverBar/HighlightBar 一致（Margin 10/12）：
+                                                 原 Margin 6 + Padding 12 的缩进换算进 Padding（10+8=18，文字位置不变）；
+                                                 Background=Transparent 使整个矩形参与命中测试（原仅文字可点） -->
+                                            <Border Padding="8,8,12,8"
+                                                    Margin="10,2,12,1"
+                                                    Background="Transparent"
                                                     Cursor="Hand"
                                                     Height="38"
                                                     CornerRadius="6"
                                                     MouseLeftButtonDown="GroupHeader_MouseLeftButtonDown"
                                                     MouseEnter="GroupHeader_MouseEnter"
                                                     MouseLeave="GroupHeader_MouseLeave">
-                                                <!-- 悬停底色（淡灰，与导航项 hover 呼应） -->
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Style.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="#403A3A3A"/>
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
@@ -308,30 +319,26 @@
                                                 </Grid>
                                             </Border>
 
-                                            <!-- 该分类下的工具列表（外层 Border 用于展开/折叠 Height 动画） -->
-                                            <Border ClipToBounds="True"
-                                                    Height="0"
+                                            <!-- 该分类下的工具列表（展开/折叠为渲染式动画：布局 Height 恒 0，
+                                                 内容按实测高度渲染，由 Clip 几何揭示 + 兄弟元素平移，见 AnimateGroupRender） -->
+                                            <Border Height="0"
                                                     Tag="GroupAnimContainer">
                                                 <ItemsControl ItemsSource="{Binding Tools}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <!-- 左缩进 30px；Tag="Selected"（由 MainWindow.MarkSelectedNavItem 标记）驱动选中着色 -->
-                                                            <Border Padding="12,8"
-                                                                    Margin="30,1,8,1"
+                                                            <!-- Tag="Selected"（由 MainWindow.MarkSelectedNavItem 标记）驱动选中着色。
+                                                                 几何与 HoverBar/HighlightBar 一致（Margin 10/12）：
+                                                                 原 Margin 30 + Padding 12 的缩进换算进 Padding（10+32=42，文字位置不变）；
+                                                                 Background=Transparent 使整个矩形参与命中测试（原仅文字可点） -->
+                                                            <Border Padding="32,8,12,8"
+                                                                    Margin="10,1,12,1"
+                                                                    Background="Transparent"
                                                                     Cursor="Hand"
                                                                     Height="36"
                                                                     CornerRadius="6"
-                                                                    MouseLeftButtonDown="NavItem_MouseLeftButtonDown">
-                                                                <!-- 悬停底色（淡灰圆角，hover 反馈） -->
-                                                                <Border.Style>
-                                                                    <Style TargetType="Border">
-                                                                        <Style.Triggers>
-                                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                                <Setter Property="Background" Value="#593A3A3A"/>
-                                                                            </Trigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Border.Style>
+                                                                    MouseLeftButtonDown="NavItem_MouseLeftButtonDown"
+                                                                    MouseEnter="NavItem_MouseEnter"
+                                                                    MouseLeave="NavItem_MouseLeave">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
