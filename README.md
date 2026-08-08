@@ -5,13 +5,14 @@
 ## 特性
 
 - **插件式架构**：核心抽象层（Toolbox.Core）+ 工具实现层（Toolbox.Plugins）+ WPF 界面层，新增工具无需改动主程序
-- **毛玻璃界面**：Acrylic / Mica / Aero 三种背景模式，深浅色主题，自定义标题栏与滚动条
-- **音乐悬浮窗**：贴边自动缩入的桌面悬浮窗，支持封面显示与多档背景效果（透明 / Acrylic / Aero）
+- **毛玻璃界面**：Acrylic 原生背景（Windows 11），深浅色主题，自定义标题栏与滚动条
+- **音乐悬浮窗**：贴边自动缩入的桌面悬浮窗，支持封面显示与多档背景效果（透明 / Acrylic）
+- **局域网远程控制**：浏览器控制关机/锁屏/查状态，设备管理 + 操作审计
 - **纯 Win32 系统托盘**：不依赖 WinForms
 
 ## 内置工具
 
-定时关机、屏保、重启资源管理器、强制删除文件、二维码生成、软件卸载管理、网络信息、密码生成器、OCR 文字识别（PaddleOCR 按需下载）、垃圾清理等。
+首页仪表盘、定时关机、屏保启动、快捷系统操作（锁屏/睡眠/重启资源管理器）、C 盘垃圾清理、二维码生成、网络信息、软件卸载管理、密码生成器、截图识字（OCR，PaddleOCR 按需下载）、网易云音乐悬浮窗、局域网远程控制。
 
 ## 项目结构
 
@@ -22,10 +23,11 @@ Toolbox/
 ├── Toolbox.Plugins/        工具实现层
 ├── Toolbox.Tests/          xUnit 测试
 ├── Toolbox/                主程序（WPF UI，MVVM）
+├── ARCHITECTURE/           架构文档树（索引见 ARCHITECTURE/README.md）
 └── setup/                  Inno Setup 安装脚本
 ```
 
-详细架构说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+详细架构说明见 [ARCHITECTURE/README.md](ARCHITECTURE/README.md)。
 
 ## 构建
 
