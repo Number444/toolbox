@@ -219,7 +219,12 @@
                                     Margin="10,0,12,0"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Top"
-                                    Visibility="Collapsed">
+                                    Visibility="Collapsed"
+                                    BorderThickness="2">
+                                <!-- 方案二（试效果）：边缘 toolbox 绿细线描边；独立 Brush（非共享资源）供呼吸闪烁动画 -->
+                                <Border.BorderBrush>
+                                    <SolidColorBrush Color="#76B580"/>
+                                </Border.BorderBrush>
                                 <!-- 位移走 RenderTransform（Y 动画纯渲染层，不触发每帧布局） -->
                                 <Border.RenderTransform>
                                     <TranslateTransform x:Name="HighlightTransform" Y="0"/>

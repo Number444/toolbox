@@ -110,6 +110,9 @@ public partial class MainWindow : Window
         // 鼠标跟随呼吸光晕
         InitHalo();
 
+        // 方案二（试效果）：选中高亮条边缘绿色细线呼吸闪烁
+        StartHighlightBorderBreath();
+
         // 搜索过滤会重建导航列表（VisibleGroups 变更），缓存的 工具→Border 映射与分组高度缓存随之失效
         if (DataContext is ViewModels.MainViewModel navVm)
             navVm.VisibleGroups.CollectionChanged += (_, _) =>
@@ -251,6 +254,30 @@ public partial class MainWindow : Window
             HighlightTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(
                 top, TimeSpan.FromMilliseconds(HighlightAnimMs)) { EasingFunction = EaseOut() });
         }
+    }
+
+    /// <summary>
+    /// 方案二（试效果）：选中高亮条边缘 toolbox 绿细线的呼吸闪烁——
+    /// 淡出 1200ms → 停顿 200ms → 淡入 1200ms → 停顿 200ms（周期 2800ms）。
+    /// 独立 SolidColorBrush（非共享资源），不影响其他使用 AccentBrush 的元素。
+    /// 效果不佳时移除本方法与其 XAML BorderBrush。
+    /// </summary>
+    private void StartHighlightBorderBreath()
+    {
+        if (HighlightBar.BorderBrush is not SolidColorBrush brush) return;
+        var full = Color.FromRgb(0x76, 0xB5, 0x80);
+        var dim = Color.FromArgb(0x55, 0x76, 0xB5, 0x80);
+        var breathe = new ColorAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(2800),
+            RepeatBehavior = RepeatBehavior.Forever
+        };
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(dim, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1200))));
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(dim, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));  // 淡出后停顿 200ms
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2600))));
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2800))));  // 淡入后停顿 200ms
+        brush.BeginAnimation(SolidColorBrush.ColorProperty, breathe);
     }
 
     /// <summary>选中态着色：Tag="Selected" 驱动 XAML 触发器，旧选中项清除标记</summary>
