@@ -65,6 +65,10 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(new Action(InitGroupHeights),
                 System.Windows.Threading.DispatcherPriority.Loaded);
 
+            // 初始化分组箭头角度（展开 = 90° ▾ / 折叠 = 0° ▸；点击旋转动画只在切换时触发，初始态需同步）
+            Dispatcher.BeginInvoke(new Action(InitGroupArrows),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+
             // 初始化导航高亮位置（等布局完成后）
             Dispatcher.BeginInvoke(new Action(InitHighlight),
                 System.Windows.Threading.DispatcherPriority.Loaded);
@@ -258,7 +262,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 方案二（试效果）：选中高亮条边缘 toolbox 绿细线的呼吸闪烁——
-    /// 淡出 1200ms → 停顿 200ms → 淡入 1200ms → 停顿 200ms（周期 2800ms）。
+    /// 淡出 1200ms → 停顿 300ms → 淡入 1200ms → 停顿 300ms（周期 3000ms）。
     /// 独立 SolidColorBrush（非共享资源），不影响其他使用 AccentBrush 的元素。
     /// 效果不佳时移除本方法与其 XAML BorderBrush。
     /// </summary>
@@ -269,14 +273,14 @@ public partial class MainWindow : Window
         var dim = Color.FromArgb(0x55, 0x76, 0xB5, 0x80);
         var breathe = new ColorAnimationUsingKeyFrames
         {
-            Duration = TimeSpan.FromMilliseconds(2800),
+            Duration = TimeSpan.FromMilliseconds(3000),
             RepeatBehavior = RepeatBehavior.Forever
         };
         breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.Zero)));
         breathe.KeyFrames.Add(new LinearColorKeyFrame(dim, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1200))));
-        breathe.KeyFrames.Add(new LinearColorKeyFrame(dim, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));  // 淡出后停顿 200ms
-        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2600))));
-        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2800))));  // 淡入后停顿 200ms
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(dim, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1500))));  // 淡出后停顿 300ms
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2700))));
+        breathe.KeyFrames.Add(new LinearColorKeyFrame(full, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(3000))));  // 淡入后停顿 300ms
         brush.BeginAnimation(SolidColorBrush.ColorProperty, breathe);
     }
 
@@ -440,6 +444,7 @@ public partial class MainWindow : Window
 
         bool nowExpanded = !group.IsExpanded;
         group.IsExpanded = nowExpanded;
+        AnimateGroupArrow(element, nowExpanded); // 方案 D：箭头旋转动画（0° 折叠 ▸ ↔ 90° 展开 ▾）
 
         var vm = DataContext as ViewModels.MainViewModel;
         bool selectedInGroup = vm?.SelectedTool != null && group.Tools.Contains(vm.SelectedTool);
@@ -488,6 +493,56 @@ public partial class MainWindow : Window
             AnimateGroupRender(animContainer, groupPanel, nowExpanded, delta, onAnimCompleted);
         else
             onAnimCompleted();
+    }
+
+    /// <summary>
+    /// 初始化分组箭头角度（展开 = 90° ▾ / 折叠 = 0° ▸）：
+    /// 旋转动画仅在点击切换时触发，首次加载的初始状态需按 IsExpanded 同步。
+    /// </summary>
+    private void InitGroupArrows()
+    {
+        foreach (var textBlock in FindVisualChildren<TextBlock>(NavContainer))
+        {
+            if (textBlock.Tag as string == "GroupArrow" && textBlock.DataContext is Models.ToolGroup group)
+            {
+                var rotate = EnsureMutableRotate(textBlock);
+                rotate.BeginAnimation(RotateTransform.AngleProperty, null); // 清残留动画再设值
+                rotate.Angle = group.IsExpanded ? 90 : 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 保证箭头 RotateTransform 可动画：静态 XAML 创建的 Freezable 可能被冻结（DataTemplate 中
+    /// po:Freeze="False" 不生效），冻结对象无法 BeginAnimation/设值——统一替换为可变实例。
+    /// </summary>
+    private static RotateTransform EnsureMutableRotate(TextBlock arrow)
+    {
+        if (arrow.RenderTransform is RotateTransform rt && !rt.IsFrozen) return rt;
+        var fresh = new RotateTransform { Angle = 0 };
+        arrow.RenderTransform = fresh;
+        return fresh;
+    }
+
+    /// <summary>
+    /// 方案 D：分组头箭头旋转动画——折叠 = 0°（▸），展开 = 90°（▾），200ms CubicEase EaseOut。
+    /// 目标 TextBlock 由 Tag="GroupArrow" 在分组头视觉树内定位。
+    /// </summary>
+    private static void AnimateGroupArrow(FrameworkElement header, bool expanded)
+    {
+        foreach (var textBlock in FindVisualChildren<TextBlock>(header))
+        {
+            if (textBlock.Tag as string == "GroupArrow")
+            {
+                var rotate = EnsureMutableRotate(textBlock); // 冻结防御：替换为可变实例
+                rotate.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(
+                    expanded ? 90 : 0, TimeSpan.FromMilliseconds(GroupAnimMs))
+                {
+                    EasingFunction = EaseOut()
+                });
+                break;
+            }
+        }
     }
 
     /// <summary>VisibleGroups 中某分组的索引（传入工具时返回其所在组索引）</summary>
@@ -631,24 +686,16 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>分类头鼠标进入——切换图标为箭头 + 悬停条跟随</summary>
+    /// <summary>分类头鼠标进入——悬停条跟随（图标切换已由常驻箭头取代）</summary>
     private void GroupHeader_MouseEnter(object sender, MouseEventArgs e)
     {
-        if (sender is FrameworkElement element && element.DataContext is Models.ToolGroup group)
-        {
-            group.IsHovered = true;
-            ShowHover(element);
-        }
+        if (sender is FrameworkElement element) ShowHover(element);
     }
 
-    /// <summary>分类头鼠标离开——切换图标为文件夹 + 悬停条淡出</summary>
+    /// <summary>分类头鼠标离开——悬停条淡出</summary>
     private void GroupHeader_MouseLeave(object sender, MouseEventArgs e)
     {
-        if (sender is FrameworkElement element && element.DataContext is Models.ToolGroup group)
-        {
-            group.IsHovered = false;
-            HideHover();
-        }
+        HideHover();
     }
 
     /// <summary>搜索框按下 Enter 键——跳转到第一个匹配工具</summary>
