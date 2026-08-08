@@ -220,6 +220,10 @@
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Top"
                                     Visibility="Collapsed">
+                                <!-- 位移走 RenderTransform（Y 动画纯渲染层，不触发每帧布局） -->
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="HighlightTransform" Y="0"/>
+                                </Border.RenderTransform>
                                 <!-- 左侧高亮圆角竖线 (CornerRadius=半宽=1.5 → 两端圆角不变形) -->
                                 <Border HorizontalAlignment="Left"
                                         Width="3"
@@ -240,9 +244,20 @@
                                                     Margin="6,2,8,1"
                                                     Cursor="Hand"
                                                     Height="38"
+                                                    CornerRadius="6"
                                                     MouseLeftButtonDown="GroupHeader_MouseLeftButtonDown"
                                                     MouseEnter="GroupHeader_MouseEnter"
                                                     MouseLeave="GroupHeader_MouseLeave">
+                                                <!-- 悬停底色（淡灰，与导航项 hover 呼应） -->
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="#403A3A3A"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
@@ -300,12 +315,23 @@
                                                 <ItemsControl ItemsSource="{Binding Tools}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <!-- 左缩进 30px -->
+                                                            <!-- 左缩进 30px；Tag="Selected"（由 MainWindow.MarkSelectedNavItem 标记）驱动选中着色 -->
                                                             <Border Padding="12,8"
                                                                     Margin="30,1,8,1"
                                                                     Cursor="Hand"
                                                                     Height="36"
+                                                                    CornerRadius="6"
                                                                     MouseLeftButtonDown="NavItem_MouseLeftButtonDown">
+                                                                <!-- 悬停底色（淡灰圆角，hover 反馈） -->
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Style.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter Property="Background" Value="#593A3A3A"/>
+                                                                            </Trigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
@@ -313,13 +339,35 @@
                                                                     </Grid.ColumnDefinitions>
                                                                     <TextBlock Text="{Binding IconGlyph}"
                                                                                FontSize="13"
-                                                                               VerticalAlignment="Center"/>
+                                                                               VerticalAlignment="Center">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Border}}" Value="Selected">
+                                                                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
                                                                     <TextBlock Grid.Column="1"
                                                                                Text="{Binding Name}"
                                                                                FontSize="12"
-                                                                               FontWeight="Normal"
                                                                                VerticalAlignment="Center"
-                                                                               Margin="8,0,0,0"/>
+                                                                               Margin="8,0,0,0">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Border}}" Value="Selected">
+                                                                                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
                                                                 </Grid>
                                                             </Border>
                                                         </DataTemplate>
@@ -458,32 +506,11 @@
                 </Ellipse.Fill>
                 <Ellipse.RenderTransform>
                     <TransformGroup>
+                        <!-- 呼吸缩放由代码驱动（HaloTick）：仅光晕可见时计算，替代 Forever Storyboard 常驻渲染 -->
                         <ScaleTransform x:Name="HaloScale" ScaleX="0.9" ScaleY="0.9"/>
                         <TranslateTransform x:Name="HaloTranslate"/>
                     </TransformGroup>
                 </Ellipse.RenderTransform>
-                <Ellipse.Triggers>
-                    <EventTrigger RoutedEvent="Loaded">
-                        <BeginStoryboard>
-                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                <DoubleAnimation Storyboard.TargetName="HaloScale"
-                                                 Storyboard.TargetProperty="ScaleX"
-                                                 To="1.1" Duration="0:0:1.5">
-                                    <DoubleAnimation.EasingFunction>
-                                        <SineEase EasingMode="EaseInOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                                <DoubleAnimation Storyboard.TargetName="HaloScale"
-                                                 Storyboard.TargetProperty="ScaleY"
-                                                 To="1.1" Duration="0:0:1.5">
-                                    <DoubleAnimation.EasingFunction>
-                                        <SineEase EasingMode="EaseInOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </Ellipse.Triggers>
             </Ellipse>
         </Canvas>
 

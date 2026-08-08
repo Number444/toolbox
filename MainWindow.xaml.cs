@@ -135,10 +135,29 @@ public partial class MainWindow : Window
 
     // --- 导航高亮移动动画 ---
 
-    /// <summary>初始化导航高亮到第一个选中项（跨分组遍历）</summary>
+    // 统一动效参数（时长/缓动集中管理，避免各处漂移）
+    private const int HighlightAnimMs = 200;
+    private const int GroupAnimMs = 200;
+    private const int HighlightFadeMs = 120;
+    private static CubicEase EaseOut() => new() { EasingMode = EasingMode.EaseOut };
+    private static CubicEase EaseIn() => new() { EasingMode = EasingMode.EaseIn };
+
+    /// <summary>当前选中态着色的导航项 Border（Tag="Selected" 驱动 XAML 触发器）</summary>
+    private Border? _selectedNavBorder;
+
+    /// <summary>初始化导航高亮到 SelectedTool 对应项（无则回退第一个可见项）</summary>
     private void InitHighlight()
     {
-        // 遍历 VisibleGroups 中展开组的子 ItemsControl，找首个可见的 Tool Border
+        if (DataContext is ViewModels.MainViewModel vm && vm.SelectedTool != null)
+        {
+            var target = FindToolBorderByTool(vm.SelectedTool);
+            if (target != null && target.IsVisible)
+            {
+                PositionHighlight(target);
+                return;
+            }
+        }
+        // 回退：遍历 VisibleGroups 中展开组的子 ItemsControl，找首个可见的 Tool Border
         foreach (var groupBorder in FindVisualChildren<Border>(NavContainer))
         {
             if (groupBorder.DataContext is Models.ITool && groupBorder.Visibility == Visibility.Visible)
@@ -156,6 +175,13 @@ public partial class MainWindow : Window
         {
             if (DataContext is ViewModels.MainViewModel vm)
             {
+                // 重复点击已选中项：仅退出设置页，不重放位移动画
+                if (vm.SelectedTool == tool)
+                {
+                    if (SettingsLayer.Visibility == Visibility.Visible)
+                        ExitSettingsView();
+                    return;
+                }
                 vm.SelectedTool = tool;
             }
             PositionHighlight(element);
@@ -183,7 +209,7 @@ public partial class MainWindow : Window
             ExitSettingsView();
     }
 
-    /// <summary>将高亮指示器动画移动到指定元素的位置（跨分组定位）</summary>
+    /// <summary>将高亮指示器动画移动到指定元素的位置（跨分组定位；位移走 RenderTransform，纯渲染层不触发每帧布局）</summary>
     private void PositionHighlight(FrameworkElement itemElement)
     {
         // 计算 item 相对于 NavContainer 的位置
@@ -201,78 +227,131 @@ public partial class MainWindow : Window
         }
         double top = position.Y; // 精确对齐，无需补偿
 
-        var targetMargin = new Thickness(10, top, 12, 0);
+        // 选中项本体着色（与高亮条解耦：组折叠高亮隐藏时选中线索仍在）
+        MarkSelectedNavItem(itemElement);
 
-        if (HighlightBar.Visibility == Visibility.Collapsed)
+        if (HighlightBar.Visibility != Visibility.Visible)
         {
-            // 清除残留的旧动画，防止 Visibility 恢复后旧动画覆盖新 Margin
-            HighlightBar.BeginAnimation(Border.MarginProperty, null);
-            // 首次显示，直接定位（无动画）
-            HighlightBar.Margin = targetMargin;
+            // 首次/重新出现：清除残留动画，直接定位（无位移动画）+ 淡入
+            HighlightTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            HighlightBar.BeginAnimation(UIElement.OpacityProperty, null);
+            HighlightTransform.Y = top;
+            HighlightBar.Opacity = 0;
             HighlightBar.Visibility = Visibility.Visible;
+            HighlightBar.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(1, TimeSpan.FromMilliseconds(HighlightFadeMs)));
         }
         else
         {
-            // 已有位置：带动画平滑过渡
-            var anim = new ThicknessAnimation
-            {
-                To = targetMargin,
-                Duration = TimeSpan.FromMilliseconds(200),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            HighlightBar.BeginAnimation(Border.MarginProperty, anim);
+            // 已有位置：Y 位移动画平滑过渡（CubicEase EaseOut）
+            HighlightTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(
+                top, TimeSpan.FromMilliseconds(HighlightAnimMs)) { EasingFunction = EaseOut() });
         }
     }
 
-    /// <summary>分类标题头点击——切换展开/折叠（带动画）</summary>
+    /// <summary>选中态着色：Tag="Selected" 驱动 XAML 触发器，旧选中项清除标记</summary>
+    private void MarkSelectedNavItem(FrameworkElement itemElement)
+    {
+        if (itemElement is not Border b || _selectedNavBorder == b) return;
+        if (_selectedNavBorder != null) _selectedNavBorder.Tag = null;
+        b.Tag = "Selected";
+        _selectedNavBorder = b;
+    }
+
+    /// <summary>高亮条淡出并隐藏（折叠选中项所在组时调用；选中工具与右侧内容保留，不切走）</summary>
+    private void FadeOutHighlight()
+    {
+        if (HighlightBar.Visibility != Visibility.Visible) return;
+        HighlightBar.BeginAnimation(UIElement.OpacityProperty, null);
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(HighlightFadeMs));
+        fade.Completed += (_, _) => HighlightBar.Visibility = Visibility.Collapsed;
+        HighlightBar.BeginAnimation(UIElement.OpacityProperty, fade);
+    }
+
+    /// <summary>高亮条在当前位置基础上同步位移 delta（分组展开/折叠动画期间与列表同步流动，同时长同缓动）</summary>
+    private void MoveHighlightBy(double delta)
+    {
+        if (Math.Abs(delta) < 0.5 || HighlightBar.Visibility != Visibility.Visible) return;
+        HighlightTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(
+            HighlightTransform.Y + delta, TimeSpan.FromMilliseconds(GroupAnimMs))
+        { EasingFunction = delta > 0 ? EaseOut() : EaseIn() }); // 展开 EaseOut / 折叠 EaseIn
+    }
+
+    /// <summary>分类标题头点击——切换展开/折叠（动画期间高亮与列表同步位移；选中工具不被强制切走）</summary>
     private void GroupHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement element && element.DataContext is Models.ToolGroup group)
+        if (sender is not FrameworkElement element || element.DataContext is not Models.ToolGroup group) return;
+
+        bool nowExpanded = !group.IsExpanded;
+        group.IsExpanded = nowExpanded;
+
+        // 找到动画容器 Border（StackPanel → Children[1]）
+        Border? animContainer = null;
+        if (VisualTreeHelper.GetParent(element) is StackPanel sp
+            && sp.Children.Count > 1
+            && sp.Children[1] is Border b
+            && b.Tag is string tag && tag == "GroupAnimContainer")
         {
-            bool nowExpanded = !group.IsExpanded;
-            group.IsExpanded = nowExpanded;
+            animContainer = b;
+        }
 
-            // 找到动画容器 Border（StackPanel → Children[1]）
-            Border? animContainer = null;
-            if (VisualTreeHelper.GetParent(element) is StackPanel sp
-                && sp.Children.Count > 1
-                && sp.Children[1] is Border b
-                && b.Tag is string tag && tag == "GroupAnimContainer")
+        var vm = DataContext as ViewModels.MainViewModel;
+        bool selectedInGroup = vm?.SelectedTool != null && group.Tools.Contains(vm.SelectedTool);
+
+        // 动画高度差：展开为正、折叠为负（高亮同步位移量；选中项在本组内时无需位移）
+        double delta = 0;
+        if (animContainer != null && vm?.SelectedTool != null && !selectedInGroup)
+            delta = nowExpanded ? MeasureAutoHeight(animContainer) : -animContainer.ActualHeight;
+
+        // 动画完成回调：布局稳定后重定位高亮（兜底校正同步位移的累计误差）
+        Action onAnimCompleted = () => Dispatcher.BeginInvoke(
+            new Action(ScheduleHighlightReposition),
+            System.Windows.Threading.DispatcherPriority.Background);
+
+        // 高亮同步：与分组 Height 动画同时启动
+        if (vm?.SelectedTool != null)
+        {
+            if (selectedInGroup)
             {
-                animContainer = b;
+                // 选中项在本组：折叠 → 高亮淡出（SelectedTool 与右侧内容保留）；展开 → 完成回调里淡入归位
+                if (!nowExpanded) FadeOutHighlight();
             }
-
-            // 动画完成回调：布局稳定后重定位高亮（解决展开上方组导致高亮错位）
-            Action onAnimCompleted = () => Dispatcher.BeginInvoke(
-                new Action(ScheduleHighlightReposition),
-                System.Windows.Threading.DispatcherPriority.Background);
-
-            // 执行 Height 动画（完成后回调重定位高亮）
-            if (animContainer != null)
-                AnimateGroupHeight(animContainer, nowExpanded, onAnimCompleted);
-            else
-                onAnimCompleted();
-
-            // 折叠时：若选中工具在当前组，立即切换到下一个可见组
-            if (!nowExpanded && DataContext is ViewModels.MainViewModel vm
-                && vm.SelectedTool != null && group.Tools.Contains(vm.SelectedTool))
+            else if (delta != 0 && GroupIndexOf(vm, group) < GroupIndexOf(vm, vm.SelectedTool))
             {
-                var firstVisible = FindFirstVisibleTool();
-                if (firstVisible != null)
-                {
-                    vm.SelectedTool = firstVisible;
-                    var t = FindToolBorderByTool(firstVisible);
-                    if (t != null) PositionHighlight(t);
-                }
-                else
-                {
-                    HighlightBar.Visibility = Visibility.Collapsed;
-                }
+                // 被切换组在选中项上方：高亮与列表同步流动
+                MoveHighlightBy(delta);
             }
         }
+
+        // 执行 Height 动画（完成后回调重定位高亮）
+        if (animContainer != null)
+            AnimateGroupHeight(animContainer, nowExpanded, onAnimCompleted);
+        else
+            onAnimCompleted();
     }
 
-    /// <summary>分组容器 Height 动画——展开/折叠（带有推入/收回效果）</summary>
+    /// <summary>VisibleGroups 中某分组的索引（传入工具时返回其所在组索引）</summary>
+    private static int GroupIndexOf(ViewModels.MainViewModel vm, object groupOrTool)
+    {
+        for (int i = 0; i < vm.VisibleGroups.Count; i++)
+        {
+            if (ReferenceEquals(vm.VisibleGroups[i], groupOrTool)) return i;
+            if (groupOrTool is Models.ITool tool && vm.VisibleGroups[i].Tools.Contains(tool)) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>测量容器内容完整高度（测量后恢复 0，供展开动画终点预判与高亮同步位移）</summary>
+    private static double MeasureAutoHeight(Border container)
+    {
+        container.Height = double.NaN; // Auto
+        container.UpdateLayout();
+        double h = container.ActualHeight;
+        container.Height = 0;
+        return h;
+    }
+
+    /// <summary>分组容器 Height 动画——展开/折叠（带缓动的推入/收回效果：展开 EaseOut、折叠 EaseIn）</summary>
     private static void AnimateGroupHeight(Border container, bool expand, Action? onCompleted = null)
     {
         container.BeginAnimation(FrameworkElement.HeightProperty, null);
@@ -280,13 +359,11 @@ public partial class MainWindow : Window
         if (expand)
         {
             // 展开：先测量实际高度，再从 0 动画到目标
-            container.Height = double.NaN; // Auto
-            container.UpdateLayout();
-            double targetH = container.ActualHeight;
+            double targetH = MeasureAutoHeight(container);
             if (targetH <= 0) { container.Height = double.NaN; onCompleted?.Invoke(); return; }
 
-            container.Height = 0;
-            var a = new DoubleAnimation(0, targetH, TimeSpan.FromMilliseconds(200));
+            var a = new DoubleAnimation(0, targetH, TimeSpan.FromMilliseconds(GroupAnimMs))
+            { EasingFunction = EaseOut() };
             a.Completed += (_, _) =>
             {
                 container.BeginAnimation(FrameworkElement.HeightProperty, null);
@@ -301,7 +378,8 @@ public partial class MainWindow : Window
             double curH = container.ActualHeight;
             if (curH <= 0) { container.Height = 0; onCompleted?.Invoke(); return; }
 
-            var a = new DoubleAnimation(curH, 0, TimeSpan.FromMilliseconds(200));
+            var a = new DoubleAnimation(curH, 0, TimeSpan.FromMilliseconds(GroupAnimMs))
+            { EasingFunction = EaseIn() };
             a.Completed += (_, _) =>
             {
                 container.BeginAnimation(FrameworkElement.HeightProperty, null);
@@ -415,21 +493,6 @@ public partial class MainWindow : Window
                 _toolBorders[t] = border;
         }
         return _toolBorders.TryGetValue(tool, out var found) ? found : null;
-    }
-
-    /// <summary>在所有 VisibleGroups 中找第一个可见的工具</summary>
-    private static Models.ITool? FindFirstVisibleTool()
-    {
-        // 通过 Application.Current.MainWindow.DataContext 访问 ViewModel
-        if (Application.Current.MainWindow?.DataContext is ViewModels.MainViewModel vm)
-        {
-            foreach (var group in vm.VisibleGroups)
-            {
-                if (group.IsExpanded && group.Tools.Count > 0)
-                    return group.Tools[0];
-            }
-        }
-        return null;
     }
 
     /// <summary>递归查找视觉树中指定类型的所有子元素</summary>
@@ -622,11 +685,17 @@ public partial class MainWindow : Window
     private Point _haloTarget;          // 鼠标目标位置
     private Point _haloPos;             // 光晕当前位置（插值滞后跟随）
     private double _haloOpacity;        // 当前淡入淡出系数
+    private double _breathPhase;        // 呼吸缩放相位（代码驱动，仅可见时推进）
     private bool _haloInitialized;      // 首次移动时直接吸附，避免从角落滑入
     private bool _glowTargetsDirty = true;   // 边缘发光目标清单待刷新
     private DateTime _glowTargetsLastRebuild = DateTime.MinValue;
 
-    /// <summary>初始化鼠标光晕：位置插值跟随 + 淡入淡出（呼吸缩放动画在 XAML 中）</summary>
+    /// <summary>初始化鼠标光晕：帧驱动轮询光标，插值跟随 + 淡入淡出 + 代码驱动呼吸。
+    /// 帧率策略：活跃期（光标移动/淡入淡出/呼吸）由 CompositionTarget.Rendering 帧驱动保证顺滑；
+    /// 静止收敛后零写入 → 无脏区 → 渲染帧自然停止，合成器完全空闲；
+    /// 下一次光标移动经 MouseMove 强制一帧唤醒循环。
+    /// （曾用 DispatcherTimer 轮询：Normal 优先级下 tick 被调度延迟/合并，实际远低于 60Hz，
+    /// 按 60fps 设计的插值系数导致光晕又慢又掉帧，已回退）</summary>
     private void InitHalo()
     {
         // 布局变化（窗口缩放/工具切换/设置层显隐/分组展开折叠）时标记发光目标待刷新
@@ -645,56 +714,111 @@ public partial class MainWindow : Window
         // 设置层显隐切换：同上，立即销毁 + 下一帧重建
         SettingsLayer.IsVisibleChanged += (_, _) => RequestGlowRebuild();
 
+        // 导航滚动时强制发光重绘：滚动只平移内容不触发布局，光标静止时去重逻辑会跳过重绘
+        NavScrollViewer.ScrollChanged += (_, _) => GlowLayer.Refresh();
+
+        // 唤醒：循环休眠后（无脏区不产帧），光标移动/进出/窗口激活切换强制一帧，
+        //  Rendering 恢复触发；活跃期写入产生的脏区使循环自维持
+        MouseMove += (_, _) => HaloLayer.InvalidateVisual();
+        MouseLeave += (_, _) => HaloLayer.InvalidateVisual();
+        Activated += (_, _) => HaloLayer.InvalidateVisual();
+        Deactivated += (_, _) => HaloLayer.InvalidateVisual();
+
+        CompositionTarget.Rendering += HaloFrame;
+    }
+
+    private DateTime _lastHaloFrame = DateTime.MinValue;
+
+    /// <summary>光晕/发光帧处理：插值按真实帧间隔（dt）换算，60/120/144Hz 及掉帧下速度一致；
+    /// 静止收敛后零写入零重绘（循环随之休眠，由输入事件唤醒）</summary>
+    private void HaloFrame(object? sender, EventArgs e)
+    {
+        // 窗口尚未完成初始化（视觉未连接到 PresentationSource）时跳过本帧
+        if (PresentationSource.FromVisual(HaloLayer) == null) return;
+
         // 每帧用 Win32 GetCursorPos 轮询光标（原始屏幕坐标，与消息投递和命中测试
         // 完全无关——WPF 的 Mouse.GetPosition 由输入系统维护，鼠标悬停在
         // WindowChrome CaptionHeight 划出的 HTCAPTION 非客户区（顶栏空白处）时
         // 不再更新，会导致光晕误判为"鼠标已离开"而淡出）。
-        // 插值滞后跟随（0.12 ≈ 轻微延迟拖尾），透明度平滑淡入淡出
-        CompositionTarget.Rendering += (_, _) =>
+        if (!GetCursorPos(out var cursor)) return;
+
+        // 帧间隔（上限 100ms 防窗口失焦后首帧跳变）
+        var now = DateTime.UtcNow;
+        double dt = _lastHaloFrame == DateTime.MinValue ? 16.0
+            : Math.Min((now - _lastHaloFrame).TotalMilliseconds, 100);
+        _lastHaloFrame = now;
+        double step = dt / 16.0; // 以 60fps 为基准的步长倍率
+
+        var pt = HaloLayer.PointFromScreen(new Point(cursor.X, cursor.Y));
+        bool inside = IsActive
+            && pt.X >= 0 && pt.Y >= 0
+            && pt.X <= HaloLayer.ActualWidth && pt.Y <= HaloLayer.ActualHeight;
+
+        if (inside)
         {
-            // 窗口尚未完成初始化（视觉未连接到 PresentationSource）时跳过本帧
-            if (PresentationSource.FromVisual(HaloLayer) == null) return;
-            if (!GetCursorPos(out var cursor)) return;
-
-            var pt = HaloLayer.PointFromScreen(new Point(cursor.X, cursor.Y));
-            bool inside = IsActive
-                && pt.X >= 0 && pt.Y >= 0
-                && pt.X <= HaloLayer.ActualWidth && pt.Y <= HaloLayer.ActualHeight;
-
-            if (inside)
+            _haloTarget = pt;
+            if (!_haloInitialized)
             {
-                _haloTarget = pt;
-                if (!_haloInitialized)
-                {
-                    _haloPos = pt;
-                    _haloInitialized = true;
-                }
+                _haloPos = pt;
+                _haloInitialized = true;
             }
+        }
 
-            _haloPos.X += (_haloTarget.X - _haloPos.X) * 0.12;
-            _haloPos.Y += (_haloTarget.Y - _haloPos.Y) * 0.12;
-            // 鼠标光晕开关：关闭时按"鼠标不在窗口"处理，平滑淡出后保持熄灭
-            bool haloOn = AppSettings.Instance.MouseHaloEnabled;
-            _haloOpacity += (((inside && haloOn) ? 1.0 : 0.0) - _haloOpacity) * 0.08;
-
+        // 插值滞后跟随（0.12 @60fps ≈ 轻微延迟拖尾，按 dt 换算保证任意帧率同速）；
+        // 收敛到 0.3px 内吸附终点，此后不再写变换
+        double dx = _haloTarget.X - _haloPos.X, dy = _haloTarget.Y - _haloPos.Y;
+        if (Math.Abs(dx) > 0.3 || Math.Abs(dy) > 0.3)
+        {
+            double f = 1 - Math.Pow(1 - 0.12, step);
+            _haloPos.X += dx * f;
+            _haloPos.Y += dy * f;
             HaloTranslate.X = _haloPos.X - HaloEllipse.Width / 2;
             HaloTranslate.Y = _haloPos.Y - HaloEllipse.Height / 2;
+        }
+        else if (_haloPos != _haloTarget)
+        {
+            _haloPos = _haloTarget;
+            HaloTranslate.X = _haloPos.X - HaloEllipse.Width / 2;
+            HaloTranslate.Y = _haloPos.Y - HaloEllipse.Height / 2;
+        }
+
+        // 鼠标光晕开关：关闭时按"鼠标不在窗口"处理，平滑淡出后保持熄灭
+        bool haloOn = AppSettings.Instance.MouseHaloEnabled;
+        double opacityTarget = (inside && haloOn) ? 1.0 : 0.0;
+        if (Math.Abs(opacityTarget - _haloOpacity) > 0.005)
+        {
+            _haloOpacity += (opacityTarget - _haloOpacity) * (1 - Math.Pow(1 - 0.08, step));
             HaloEllipse.Opacity = _haloOpacity;
+        }
+        else if (_haloOpacity != opacityTarget)
+        {
+            _haloOpacity = opacityTarget;
+            HaloEllipse.Opacity = _haloOpacity;
+        }
 
-            // 控件边缘发光开关：关闭时跳过目标重建，并按"鼠标不在窗口"瞬时熄灭
-            bool glowOn = AppSettings.Instance.ControlGlowEnabled;
+        // 呼吸缩放（替代 XAML Forever Storyboard）：仅光晕可见时推进相位，隐形零开销
+        if (_haloOpacity > 0.001)
+        {
+            _breathPhase += Math.PI * 2 * dt / 3000.0;   // 3s 周期（与原 1.5s AutoReverse 一致）
+            var s = 1.0 + 0.1 * Math.Sin(_breathPhase);  // 0.9~1.1，等效原 ScaleX/Y 动画
+            HaloScale.ScaleX = s;
+            HaloScale.ScaleY = s;
+        }
 
-            // 边缘发光目标清单：节流重建（250ms），避免布局动画期间反复遍历视觉树
-            if (glowOn && _glowTargetsDirty &&
-                (DateTime.UtcNow - _glowTargetsLastRebuild).TotalMilliseconds >= 250)
-            {
-                GlowLayer.RebuildTargets(this);
-                _glowTargetsLastRebuild = DateTime.UtcNow;
-                _glowTargetsDirty = false;
-            }
-            // 传原始光标位置（非插值滞后的 _haloPos），保证移出控件瞬时熄灭（0ms）
-            GlowLayer.UpdateCursor(pt, inside && glowOn);
-        };
+        // 控件边缘发光开关：关闭时跳过目标重建，并按"鼠标不在窗口"瞬时熄灭
+        bool glowOn = AppSettings.Instance.ControlGlowEnabled;
+
+        // 边缘发光目标清单：节流重建（250ms），避免布局动画期间反复遍历视觉树
+        if (glowOn && _glowTargetsDirty &&
+            (DateTime.UtcNow - _glowTargetsLastRebuild).TotalMilliseconds >= 250)
+        {
+            GlowLayer.RebuildTargets(this);
+            _glowTargetsLastRebuild = DateTime.UtcNow;
+            _glowTargetsDirty = false;
+        }
+        // 传原始光标位置（非插值滞后的 _haloPos），保证移出控件瞬时熄灭（0ms）；
+        // EdgeGlowLayer 内部去重：光标静止时零重绘
+        GlowLayer.UpdateCursor(pt, inside && glowOn);
     }
 
     /// <summary>界面/工具切换时立即销毁全部发光（0ms 残留），下一帧重建目标清单</summary>

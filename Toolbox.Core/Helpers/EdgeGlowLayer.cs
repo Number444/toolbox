@@ -72,13 +72,19 @@ public class EdgeGlowLayer : FrameworkElement
     private bool _cursorInside;
     private Visual? _root;   // 命中测试根（遮挡检测用）
 
-    /// <summary>每帧更新鼠标原始位置（无插值滞后，保证移出窗口瞬时熄灭），触发重绘</summary>
+    /// <summary>每帧更新鼠标原始位置（无插值滞后，保证移出窗口瞬时熄灭）。
+    /// 位置/状态未变化时跳过重绘——静止光标下零渲染开销（旧实现每帧无条件 InvalidateVisual，
+    /// 与光晕插值写入叠加会把窗口永久钉在 60fps 渲染循环上）</summary>
     public void UpdateCursor(Point pos, bool inside)
     {
+        if (pos == _cursorPos && inside == _cursorInside) return;
         _cursorPos = pos;
         _cursorInside = inside;
         InvalidateVisual();
     }
+
+    /// <summary>强制重绘（滚动/布局动画等"控件移动但光标静止"的场景，由调用方触发）</summary>
+    public void Refresh() => InvalidateVisual();
 
     /// <summary>立即销毁全部发光目标（界面/工具切换时调用，0ms 残留）</summary>
     public void ClearTargets()
@@ -93,6 +99,7 @@ public class EdgeGlowLayer : FrameworkElement
         _root = root;
         _targets.Clear();
         CollectTargets(root);
+        InvalidateVisual(); // 重建后立即按当前光标重绘，不等待光标移动
     }
 
     private void CollectTargets(Visual node)
