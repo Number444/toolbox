@@ -283,8 +283,8 @@ public partial class MainWindow : Window
 
     // --- 悬停高亮条（HoverBar：与 HighlightBar 同几何的第二条浮层） ---
 
-    /// <summary>悬停条位移动画时长 ms（测试开关）：0 = 瞬移到位；>0（如 120）= 带 CubicEase EaseOut 位移动画</summary>
-    private static int HoverMoveAnimMs = 0;
+    /// <summary>悬停条位移动画时长 ms（测试开关）：0 = 瞬移到位；>0 = 带 CubicEase EaseOut 位移动画</summary>
+    private static int HoverMoveAnimMs = 120;
     private const int HoverFadeInMs = 100;
     private const int HoverFadeOutMs = 80;
 
