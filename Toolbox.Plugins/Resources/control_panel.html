@@ -9,8 +9,10 @@
     --bg: #1C1C1C;
     --card: #2D2D2D;
     --accent: #76B580;
+    --accent-hover: #92CD9B; /* 对齐 WPF AccentHoverBrush：仅 hover 设备生效 */
     --text: #F0F0F0;
-    --text-dim: #808080;
+    --text-dim: #999999; /* 对齐 WPF TextSecondaryBrush */
+    --border: #3F3F3F; /* 对齐 WPF BorderSubtleBrush：输入框/下拉默认边框，聚焦时变 Accent 绿 */
     --danger: #F07070;
     --warning: #E0A030;
     --gray-dim: #4A4A4A; /* 浅灰（2026-08-08 加入色板）：无电池进度条 / 分区分割线 */
@@ -27,7 +29,16 @@
   }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   header h1 { font-size: 18px; font-weight: 600; }
-  #conn { font-size: 12px; color: var(--text-dim); }
+  #conn { font-size: 12px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; }
+  /* 连接状态呼吸灯圆点：已连接绿色微光呼吸，断开红色常亮 */
+  #conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex: 0 0 auto; }
+  #conn.on::before { background: var(--accent); animation: conn-pulse 2s ease-out infinite; }
+  #conn.off::before { background: var(--danger); }
+  @keyframes conn-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(118,181,128,.45); }
+    70% { box-shadow: 0 0 0 6px rgba(118,181,128,0); }
+    100% { box-shadow: 0 0 0 0 rgba(118,181,128,0); }
+  }
   #conn.on { color: var(--accent); }
   #conn.off { color: var(--danger); }
   .card {
@@ -35,12 +46,15 @@
     border-radius: 8px;
     padding: 14px;
     margin-bottom: 12px;
+    /* 顶部微高光 + 轻投影：深色卡片的浮起层级感（Fluent 风格） */
+    border-top: 1px solid rgba(255,255,255,.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
   }
   .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
   .btns { display: flex; flex-wrap: wrap; gap: 8px; }
   button {
     background: var(--accent);
-    color: #fff;
+    color: #1A1A1A; /* 对齐 WPF Accent 按钮前景（深色文字，非白字） */
     border: none;
     border-radius: 6px;
     padding: 10px 14px;
@@ -48,10 +62,20 @@
     cursor: pointer;
     flex: 1 1 auto;
     min-width: 96px;
+    transition: background .15s, border-color .15s, transform .1s, opacity .1s;
   }
-  button:active { opacity: .8; }
+  button:active { opacity: .8; transform: scale(.97); } /* 按压缩放：接近原生 App 的物理反馈 */
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* hover 态仅在可悬停设备（鼠标/触控板）生效，触屏不残留悬停色 */
+  @media (hover: hover) {
+    button:hover { background: var(--accent-hover); }
+    button.danger:hover { background: #F59090; }
+    button.ghost:hover { background: #454545; border-color: var(--text-dim); }
+    #device-list button.kick:hover { background: rgba(240,112,112,.12); }
+    #device-list div:hover { background: rgba(255,255,255,.03); }
+  }
   button.danger { background: var(--danger); }
-  button.ghost { background: #3A3A3A; border: 1px solid var(--text-dim); color: var(--text); }
+  button.ghost { background: #3A3A3A; border: 1px solid var(--border); color: var(--text); }
   /* 快捷关机 2x3 网格（对齐原 ShutdownTool 的 UniformGrid 布局） */
   .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
   /* 快捷区与自定义区之间的分割细线（浅灰，与色板 --gray-dim 一致） */
@@ -60,7 +84,7 @@
   select {
     background: var(--bg);
     color: var(--text);
-    border: 1px solid var(--text-dim);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 8px;
     font-size: 14px;
@@ -81,11 +105,18 @@
   #auth-box h2 { margin-bottom: 16px; }
   #key-input {
     width: 100%; padding: 12px; font-size: 14px; border-radius: 6px;
-    border: 1px solid var(--text-dim); background: var(--card); color: var(--text);
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
     margin-bottom: 10px;
   }
+  /* 输入框聚焦：边框变 Accent 绿（对齐 WPF TextBox IsFocused 触发器） */
+  select:focus, #key-input:focus, #delay-input:focus { border-color: var(--accent); outline: none; }
   #auth-msg { color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 16px; }
   #status-msg { color: var(--text-dim); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  /* 弹窗入场动画：遮罩淡入 + 对话框缩放浮现（display 切换时由 .show 触发，无需 JS） */
+  @keyframes overlay-in { from { opacity: 0; } }
+  @keyframes box-in { from { opacity: 0; transform: scale(.96) translateY(8px); } }
+  #auth-cover.show, #confirm-cover.show, #conn-cover.show { animation: overlay-in .15s ease-out; }
+  #confirm-cover.show #confirm-box, #conn-cover.show #conn-box { animation: box-in .18s ease-out; }
   /* 自绘二次确认弹窗（Toolbox 风格深色模态，非浏览器原生 confirm） */
   #confirm-cover {
     position: fixed; inset: 0; background: rgba(0,0,0,.55);
@@ -147,7 +178,7 @@
   <!-- 自定义分钟行：组件间距与其他行一致（gap 8px），按钮等宽统一高度 -->
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:13px;color:var(--text-dim);flex:0 0 auto">分钟：</span>
-    <input id="delay-input" type="number" min="1" max="1440" placeholder="1~1440" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--text-dim);border-radius:6px;padding:9px 10px;font-size:14px">
+    <input id="delay-input" type="number" min="1" max="1440" placeholder="1~1440" style="flex:1;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:9px 10px;font-size:14px">
     <button onclick="customShutdown()" style="flex:0 0 auto;min-width:104px">🔌 定时关机</button>
     <button class="danger" onclick="quick('cancel_shutdown')" style="flex:0 0 auto;min-width:104px">🛑 取消关机</button>
   </div>
@@ -464,7 +495,13 @@
 
   function setMeter(id, label, pct) {
     document.getElementById(id + '-meter').querySelector('.label span:last-child').textContent = label;
-    document.getElementById(id + '-bar').style.width = Math.min(100, Math.max(0, pct)) + '%';
+    const bar = document.getElementById(id + '-bar');
+    const p = Math.min(100, Math.max(0, pct));
+    bar.style.width = p + '%';
+    // 占用率色彩语义：≥85% 警告黄、≥95% 危险红（电池条单独着色，不适用）
+    if (id !== 'battery') {
+      bar.style.background = p >= 95 ? 'var(--danger)' : p >= 85 ? 'var(--warning)' : '';
+    }
   }
 
   function setConn(on) {
