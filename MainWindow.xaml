@@ -462,7 +462,7 @@
                             Grid.ColumnSpan="2"
                             Background="#99323232"
                             Visibility="Collapsed">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer x:Name="SettingsScrollViewer" VerticalScrollBarVisibility="Auto">
                             <local:SettingsView x:Name="SettingsViewControl"/>
                         </ScrollViewer>
                     </Border>

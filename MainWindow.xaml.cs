@@ -995,10 +995,12 @@ public partial class MainWindow : Window
         // 设置层显隐切换：同上，立即销毁 + 下一帧重建
         SettingsLayer.IsVisibleChanged += (_, _) => RequestGlowRebuild();
 
-        // 导航/内容区滚动时强制发光重绘：滚动只平移内容不触发布局，光标静止时去重逻辑会跳过重绘
-        // （ContentScrollViewer 的 ScrollChanged 为冒泡路由事件：内部工具页面的滚动也会触发）
+        // 导航/内容区/设置层滚动时强制发光重绘：滚动只平移内容不触发布局，光标静止时去重逻辑会跳过重绘
+        // （ContentScrollViewer 的 ScrollChanged 为冒泡路由事件：内部工具页面的滚动也会触发；
+        //   设置层是独立覆盖层不在 ContentScrollViewer 子树内，需单独绑定）
         NavScrollViewer.ScrollChanged += (_, _) => GlowLayer.Refresh();
         ContentScrollViewer.ScrollChanged += (_, _) => GlowLayer.Refresh();
+        SettingsScrollViewer.ScrollChanged += (_, _) => GlowLayer.Refresh();
 
         // 唤醒：循环休眠后（无脏区不产帧），光标移动/进出/窗口激活切换强制一帧，
         //  Rendering 恢复触发；活跃期写入产生的脏区使循环自维持
