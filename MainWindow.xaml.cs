@@ -117,13 +117,37 @@ public partial class MainWindow : Window
         // 方案二（试效果）：选中高亮条边缘绿色细线呼吸闪烁
         StartHighlightBorderBreath();
 
-        // 搜索过滤会重建导航列表（VisibleGroups 变更），缓存的 工具→Border 映射与分组高度缓存随之失效
+        // 搜索过滤会重建导航列表（VisibleGroups 变更）：清缓存 + 调度导航状态刷新
+        // （重建后新模板实例：展开组 Height 归 0、箭头角度归零、选中 Tag 丢失、高亮位置漂移，
+        //   由 RunNavigationRefresh 一并恢复，见下方方法定义）
         if (DataContext is ViewModels.MainViewModel navVm)
             navVm.VisibleGroups.CollectionChanged += (_, _) =>
             {
                 _toolBorders.Clear();
                 _groupHeights.Clear();
+                _navRefreshPending = true;
+                Dispatcher.BeginInvoke(new Action(RunNavigationRefresh),
+                    System.Windows.Threading.DispatcherPriority.Background);
             };
+    }
+
+    /// <summary>列表重建（搜索过滤等）后恢复导航状态。去抖：Clear+Add 触发多次事件，
+    /// 首次执行置 false 后其余排队调用直接返回——每个输入动作只刷新一次。
+    /// 执行时机为 Background 优先级：新容器已完成布局并连接视觉树。</summary>
+    private bool _navRefreshPending;
+    private void RunNavigationRefresh()
+    {
+        if (!_navRefreshPending) return;
+        _navRefreshPending = false;
+
+        InitGroupHeights();   // 恢复展开组 Height=Auto（搜索克隆组 IsExpanded=true → 列表可见）
+        InitGroupArrows();    // 恢复箭头角度（重建后新箭头 Angle=0 ▸ → 按 IsExpanded 校正）
+        if (DataContext is ViewModels.MainViewModel vm && vm.SelectedTool != null)
+        {
+            var target = FindToolBorderByTool(vm.SelectedTool);
+            if (target != null) PositionHighlight(target);  // 内部含 MarkSelectedNavItem（选中着色）
+            else HighlightBar.Visibility = Visibility.Collapsed;  // 选中工具不在可见列表 → 隐藏高亮
+        }
     }
 
     /// <summary>更新四角遮盖形状（全矩形 减 内圆角矩形 = 四个角落区域）</summary>
