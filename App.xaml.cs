@@ -17,6 +17,11 @@ public partial class App : System.Windows.Application
     private static Mutex? _singleInstanceMutex;
     private const string MutexName = "ToolboxSingleInstanceMutex";
 
+    /// <summary>静默驻留唤起事件名（第二实例找不到窗口时 Set，第一个实例据此恢复显示）</summary>
+    private const string ShowRequestEventName = "ToolboxShowRequestEvent";
+    private static EventWaitHandle? _showRequestEvent;
+    private static RegisteredWaitHandle? _showRequestWait;
+
     /// <summary>
     /// 窗口标题（弹窗标题、托盘提示、单实例窗口查找共用）。
     /// 必须与 MainWindow.xaml 的 Title 完全一致——FindWindow 精确匹配，不一致会导致
@@ -53,8 +58,42 @@ public partial class App : System.Windows.Application
         AppSettings.Instance.Load();
         AudioflowSettings.Instance.Load();
 
+        // 2026-08-10：自启注册表值自动迁移（旧版裸路径 → 当前 exe + --autostart），
+        // 升级用户无需手动重新开关自启即可享受静默启动。
+        // 后台执行不占启动路径（注册表读 <1ms 且仅升级后首次写；进程极快退出漏写则下次自愈）
+        Task.Run(() => AppSettings.Instance.EnsureStartupRegistryValue());
+
         // 全局替换 TextBox 默认系统右键菜单为主题菜单
         Helpers.TextBoxContextMenuHelper.Register();
+
+        // ── 手动创建主窗口（StartupUri 已移除，2026-08-09 开机自启静默启动）──
+        // 注册表自启项带 --autostart 参数；配合 AutoStartSilent（默认开）→ 静默启动：
+        // 不显示主界面，后台驻留托盘 + 悬浮窗照常。
+        var mainWindow = new MainWindow
+        {
+            StartSilent = e.Args.Contains("--autostart", StringComparer.OrdinalIgnoreCase)
+                          && AppSettings.Instance.AutoStartSilent
+        };
+        MainWindow = mainWindow;
+
+        // 命名事件：窗口不可见（静默驻留 / 最小化到托盘）期间第二实例双击 exe，
+        // ActivateExistingInstance 找不到可见窗口 → 发信号 → 这里恢复显示。
+        // 任何启动路径都注册（含正常显示——窗口可见时第二实例走 FindWindow 置前，事件只是兜底）。
+        _showRequestEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowRequestEventName);
+        _showRequestWait = ThreadPool.RegisterWaitForSingleObject(
+            _showRequestEvent,
+            (_, _) => mainWindow.Dispatcher.Invoke(mainWindow.RestoreFromTray),
+            null, Timeout.Infinite, executeOnlyOnce: false);
+
+        if (mainWindow.StartSilent)
+        {
+            // 后台服务（托盘/悬浮窗）不依赖窗口显示，直接初始化；失败会回退显示主窗口
+            mainWindow.InitializeBackgroundServices();
+        }
+        else
+        {
+            mainWindow.Show();
+        }
     }
 
     // ── 异常处理 ──────────────────────────────────────────
@@ -149,6 +188,11 @@ public partial class App : System.Windows.Application
         // 退出清理失败（托盘已销毁/互斥锁已释放）不应阻止应用退出
         try
         {
+            _showRequestWait?.Unregister(null);
+            _showRequestWait = null;
+            _showRequestEvent?.Dispose();
+            _showRequestEvent = null;
+
             Helpers.SystemTrayHelper.Instance.Dispose();
             _singleInstanceMutex?.ReleaseMutex();
             _singleInstanceMutex?.Dispose();
@@ -166,13 +210,20 @@ public partial class App : System.Windows.Application
         {
             // 通过窗口标题查找已有实例
             var hwnd = Helpers.Win32Helper.FindWindowByTitle(WindowTitle);
-            if (hwnd != IntPtr.Zero)
+            if (hwnd != IntPtr.Zero && Helpers.Win32Helper.IsWindowVisible(hwnd))
             {
-                // 如果最小化则还原
+                // 可见：最小化则还原，再置前
                 if (Helpers.Win32Helper.IsIconic(hwnd))
                     Helpers.Win32Helper.ShowWindow(hwnd, Helpers.Win32Helper.SW_RESTORE);
                 Helpers.Win32Helper.SetForegroundWindow(hwnd);
+                return;
             }
+
+            // 无可见窗口 = 已有实例驻留中（静默启动 / 最小化到托盘，窗口隐藏但 hwnd 存在）
+            // → 发唤起信号让它恢复显示。SetForegroundWindow 对隐藏窗口无效，必须走事件。
+            // 注：若首实例尚在启动（事件未创建）则 OpenExisting 抛异常 → 静默，用户再双击一次即可。
+            using var evt = EventWaitHandle.OpenExisting(ShowRequestEventName);
+            evt.Set();
         }
         catch
         {

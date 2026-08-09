@@ -136,6 +136,10 @@ public static class Win32Helper
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
     /// <summary>通过窗口标题查找已运行的实例</summary>
     public static IntPtr FindWindowByTitle(string title)
     {

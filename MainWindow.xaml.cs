@@ -20,93 +20,23 @@ namespace Toolbox;
 public partial class MainWindow : Window
 {
     private bool _isShuttingDown;
+    private bool _selfCheckShown;
+    private bool _backgroundServicesInitialized;
     private Models.ITool? _savedSelectedTool;
+
+    /// <summary>
+    /// 静默启动（命令行含 --autostart 且 AutoStartSilent 开启）：不显示主界面，
+    /// 后台驻留托盘 + 悬浮窗照常。由 App.OnStartup 在构造后设置。
+    /// </summary>
+    public bool StartSilent { get; set; }
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // 窗口加载后，通过 P/Invoke 启用 Win11 圆角和 Mica 材质
-        Loaded += (_, _) =>
-        {
-            // 2026-08-03（审查 P1-7）：DWM/Win32 链独立 try-catch——任一步失败
-            // （DWM 未运行/远程桌面/低版本）不崩应用，且**不再连带吞掉**后续的事件
-            // 订阅与悬浮窗自启（原实现：前半段失败 = 后半段功能静默丢失）。
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
-                EnableAcrylicBackdrop();                        // 2. Acrylic 毛玻璃（替代 Mica）
-                Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
-                Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
-
-                // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
-                var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
-                source?.AddHook(Win32Helper.WndProc);
-
-                // 7. 强制 WPF DirectX 交换链背景透明，彻底消除白色底漆
-                if (source?.CompositionTarget is System.Windows.Interop.HwndTarget hwndTarget)
-                {
-                    hwndTarget.BackgroundColor = Colors.Transparent;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[MainWindow] DWM/Win32 初始化失败: {ex.Message}");
-            }
-
-            // ── 非 DWM 初始化（原在同一个 try 内，现独立执行，任一步失败不互拖）──
-
-            // 更新四角落遮盖（等窗口实际尺寸确定后）
-            Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 初始化分组高度（展开的为 Auto，折叠的为 0）
-            Dispatcher.BeginInvoke(new Action(InitGroupHeights),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 初始化分组箭头角度（展开 = 90° ▾ / 折叠 = 0° ▸；点击旋转动画只在切换时触发，初始态需同步）
-            Dispatcher.BeginInvoke(new Action(InitGroupArrows),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 初始化导航高亮位置（等布局完成后）
-            Dispatcher.BeginInvoke(new Action(InitHighlight),
-                System.Windows.Threading.DispatcherPriority.Loaded);
-
-            // 设置页返回事件
-            SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
-
-            // 插件经 Core 中转的导航请求（如首页仪表盘卡片点击跳转工具）
-            Models.ToolNavigation.NavigateRequested += OnToolNavigateRequested;
-
-            // 启动自检（审查 P1-4）：工具发现失败时不再静默空白
-            if (DataContext is ViewModels.MainViewModel vm && vm.Tools.Count == 0)
-            {
-                System.Windows.MessageBox.Show(
-                    "工具加载失败：未发现任何可用工具，请检查安装完整性后重启。",
-                    $"{App.WindowTitle} 警告",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
-            }
-
-            // 启动时自动打开悬浮窗
-            if (AppSettings.Instance.AutoOpenFloatWindow)
-            {
-                var savedMode = AppSettings.Instance.MusicFloatSizeMode;
-                var mode = savedMode == "Compact"
-                    ? FloatSizeMode.Compact
-                    : FloatSizeMode.Large;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    // 加载悬浮窗独立配置
-                    AudioflowSettings.Instance.Load();
-                    var mgr = MusicFloatControllerHost.Current;
-                    if (mgr == null) return; // 控制器未注册（插件加载失败）时静默跳过
-                    mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
-                    mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
-                }), System.Windows.Threading.DispatcherPriority.Background);
-            }
-        };
+        // 事件订阅（不依赖窗口显示——静默启动不触发 Loaded，也必须生效）
+        SettingsViewControl.BackRequested += (_, _) => ExitSettingsView();
+        Models.ToolNavigation.NavigateRequested += OnToolNavigateRequested;
 
         // 窗口状态变更时更新最大化/还原图标
         StateChanged += (_, _) => UpdateMaximizeIcon();
@@ -129,6 +59,140 @@ public partial class MainWindow : Window
                 Dispatcher.BeginInvoke(new Action(RunNavigationRefresh),
                     System.Windows.Threading.DispatcherPriority.Background);
             };
+
+        // 窗口加载后：Win11 外观 + 首次显示才需要的 UI 初始化
+        // （静默启动不 Show 不触发 Loaded，首次从托盘恢复显示时自然执行）
+        Loaded += (_, _) => OnWindowLoaded();
+    }
+
+    /// <summary>
+    /// 窗口首次加载（= 首次显示）：Win11 外观与 UI 布局初始化。
+    /// 2026-08-03（审查 P1-7）：DWM/Win32 链独立 try-catch——任一步失败
+    /// （DWM 未运行/远程桌面/低版本）不崩应用，且**不再连带吞掉**后续初始化
+    /// （原实现：前半段失败 = 后半段功能静默丢失）。
+    /// </summary>
+    private void OnWindowLoaded()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
+            EnableAcrylicBackdrop();                        // 2. Acrylic 毛玻璃（替代 Mica）
+            Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
+            Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
+
+            // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
+            var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
+            source?.AddHook(Win32Helper.WndProc);
+
+            // 7. 强制 WPF DirectX 交换链背景透明，彻底消除白色底漆
+            if (source?.CompositionTarget is System.Windows.Interop.HwndTarget hwndTarget)
+            {
+                hwndTarget.BackgroundColor = Colors.Transparent;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] DWM/Win32 初始化失败: {ex.Message}");
+        }
+
+        // ── 非 DWM 初始化（原在同一个 try 内，现独立执行，任一步失败不互拖）──
+
+        // 更新四角落遮盖（等窗口实际尺寸确定后）
+        Dispatcher.BeginInvoke(new Action(() => UpdateCornerMask()),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // 初始化分组高度（展开的为 Auto，折叠的为 0）
+        Dispatcher.BeginInvoke(new Action(InitGroupHeights),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // 初始化分组箭头角度（展开 = 90° ▾ / 折叠 = 0° ▸；点击旋转动画只在切换时触发，初始态需同步）
+        Dispatcher.BeginInvoke(new Action(InitGroupArrows),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // 初始化导航高亮位置（等布局完成后）
+        Dispatcher.BeginInvoke(new Action(InitHighlight),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+        // 启动自检（审查 P1-4）：工具发现失败时不再静默空白。
+        // 静默启动从托盘恢复显示也会触发 Loaded——防重复弹窗
+        if (!_selfCheckShown)
+        {
+            _selfCheckShown = true;
+            if (DataContext is ViewModels.MainViewModel vm && vm.Tools.Count == 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "工具加载失败：未发现任何可用工具，请检查安装完整性后重启。",
+                    $"{App.WindowTitle} 警告",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
+            }
+        }
+
+        // 后台服务（悬浮窗自启；静默启动由 App.OnStartup 直接调用，此处幂等防重入）
+        InitializeBackgroundServices();
+    }
+
+    /// <summary>
+    /// 后台服务初始化（不依赖窗口显示）：悬浮窗自启 + 静默模式的托盘驻留。
+    /// 正常启动由 OnWindowLoaded 调用；静默启动由 App.OnStartup 直接调用。
+    /// </summary>
+    public void InitializeBackgroundServices()
+    {
+        if (_backgroundServicesInitialized) return;
+        _backgroundServicesInitialized = true;
+
+        // 启动时自动打开悬浮窗
+        if (AppSettings.Instance.AutoOpenFloatWindow)
+        {
+            var savedMode = AppSettings.Instance.MusicFloatSizeMode;
+            var mode = savedMode == "Compact"
+                ? FloatSizeMode.Compact
+                : FloatSizeMode.Large;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 加载悬浮窗独立配置
+                AudioflowSettings.Instance.Load();
+                var mgr = MusicFloatControllerHost.Current;
+                if (mgr == null) return; // 控制器未注册（插件加载失败）时静默跳过
+                mgr.Show(mode, AudioflowSettings.Instance.FloatWindowBlurEnabled);
+                mgr.SetWindowLocked(AudioflowSettings.Instance.LockFloatWindow);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        // 静默模式：托盘是唯一入口，必须创建成功；失败回退显示主窗口（避免应用不可达）
+        if (StartSilent)
+        {
+            bool trayOk = SystemTrayHelper.Instance.Show(
+                tooltip: $"{App.WindowTitle} - 单击恢复主窗口",
+                onDoubleClick: () => Dispatcher.Invoke(RestoreFromTray),
+                onExitClick: () => Dispatcher.Invoke(Shutdown));
+            if (!trayOk)
+            {
+                System.Diagnostics.Debug.WriteLine("[MainWindow] 静默启动托盘创建失败，回退显示主窗口");
+                StartSilent = false;
+                Show();
+            }
+        }
+    }
+
+    /// <summary>从托盘恢复显示主窗口（静默驻留唤起与最小化到托盘恢复共用）</summary>
+    public void RestoreFromTray()
+    {
+        // 退出过程中收到唤起信号（托盘 Exit 后立刻双击 exe）→ 忽略，避免 Show 关闭中的窗口
+        if (_isShuttingDown) return;
+
+        // SystemTrayHelper 回调可能在非 UI 线程（命名事件等待线程）——切回 UI 线程
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(RestoreFromTray);
+            return;
+        }
+        ShowInTaskbar = true;
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+        SystemTrayHelper.Instance.Hide();
     }
 
     /// <summary>列表重建（搜索过滤等）后恢复导航状态。去抖：Clear+Add 触发多次事件，
@@ -877,17 +941,7 @@ public partial class MainWindow : Window
             e.Cancel = true;
             bool trayOk = SystemTrayHelper.Instance.Show(
                 tooltip: $"{App.WindowTitle} - \u70B9\u51FB\u6062\u590D",
-                onDoubleClick: () =>
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        ShowInTaskbar = true;
-                        Show();
-                        WindowState = WindowState.Normal;
-                        Activate();
-                        SystemTrayHelper.Instance.Hide();
-                    });
-                },
+                onDoubleClick: () => Dispatcher.Invoke(RestoreFromTray),
                 onExitClick: () =>
                 {
                     Dispatcher.Invoke(() => { Shutdown(); });

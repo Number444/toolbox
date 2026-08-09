@@ -67,6 +67,20 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _autoStartSilent = true;
+    /// <summary>开机自启时静默启动（不显示主界面，后台托盘驻留 + 悬浮窗照常）</summary>
+    public bool AutoStartSilent
+    {
+        get => _autoStartSilent;
+        set
+        {
+            if (_autoStartSilent == value) return;
+            _autoStartSilent = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     private bool _mouseHaloEnabled = true;
     public bool MouseHaloEnabled
     {
@@ -137,6 +151,36 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 启动自检：自启注册表值与期望值（当前 exe 路径 + --autostart）不一致时自动重写。
+    /// 2026-08-10：v1.6.2 起自启需带 --autostart 参数实现静默启动——旧版本写入的
+    /// 裸路径值、升级后安装路径变化，都靠这里自动纠正，**升级用户无需手动重新开关自启**。
+    /// 仅当注册表已有值（用户开过自启）时处理；从未开启过的不创建。
+    /// </summary>
+    public void EnsureStartupRegistryValue()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            if (key == null) return;
+            if (key.GetValue("Toolbox") is not string current) return; // 未开启自启
+
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath)) return;
+            var expected = $"\"{exePath}\" --autostart";
+            if (current == expected) return; // 已是最新格式与路径
+
+            key.SetValue("Toolbox", expected);
+            System.Diagnostics.Debug.WriteLine("[AppSettings] 自启注册表值已自动迁移为带 --autostart 的新格式");
+        }
+        catch (Exception ex)
+        {
+            // 杀软拦截/权限不足不影响启动
+            System.Diagnostics.Debug.WriteLine($"[AppSettings] 自启注册表值自检失败: {ex.Message}");
+        }
+    }
+
     private static void SetStartupRegistry(bool enable)
     {
         // 杀软拦截/权限不足可能抛异常，失败不影响设置项本身
@@ -150,7 +194,9 @@ public sealed class AppSettings : INotifyPropertyChanged
             {
                 var exePath = Environment.ProcessPath;
                 if (!string.IsNullOrEmpty(exePath))
-                    key.SetValue("Toolbox", $"\"{exePath}\"");
+                    // 2026-08-09：带 --autostart 参数，App 据此判断"开机自启"场景
+                    //（配合 AutoStartSilent 实现静默启动：不弹主界面、托盘驻留）
+                    key.SetValue("Toolbox", $"\"{exePath}\" --autostart");
             }
             else
             {
@@ -196,6 +242,10 @@ public sealed class AppSettings : INotifyPropertyChanged
         _autoStart = data.AutoStart;
         OnPropertyChanged(nameof(AutoStart));
 
+        // 旧版 settings.json 无此字段（null），默认开启静默
+        _autoStartSilent = data.AutoStartSilent ?? true;
+        OnPropertyChanged(nameof(AutoStartSilent));
+
         // 旧版 settings.json 无此字段（null），默认开启
         _mouseHaloEnabled = data.MouseHaloEnabled ?? true;
         OnPropertyChanged(nameof(MouseHaloEnabled));
@@ -227,6 +277,7 @@ public sealed class AppSettings : INotifyPropertyChanged
             AutoOpenFloatWindow = _autoOpenFloatWindow,
             MusicFloatSizeMode = _musicFloatSizeMode,
             AutoStart = _autoStart,
+            AutoStartSilent = _autoStartSilent,
             MouseHaloEnabled = _mouseHaloEnabled,
             ControlGlowEnabled = _controlGlowEnabled,
             AutoStartRemoteControl = _autoStartRemoteControl,
@@ -247,6 +298,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         public bool AutoOpenFloatWindow { get; set; }
         public string? MusicFloatSizeMode { get; set; }
         public bool AutoStart { get; set; }
+        public bool? AutoStartSilent { get; set; }
         public bool? MouseHaloEnabled { get; set; }
         public bool? ControlGlowEnabled { get; set; }
         public bool AutoStartRemoteControl { get; set; }

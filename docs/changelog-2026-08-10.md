@@ -1,0 +1,31 @@
+# Toolbox 更新日志（2026-08-10）
+
+> 当日工作日志：开机自启静默启动功能（v1.6.2）+ 全链路审查修复 + 设置页排版整理 + 发布。
+
+---
+
+## 1. 新增：开机自启静默启动
+
+自启时不再弹出主界面，后台驻留托盘，悬浮窗照常显示；从托盘（或再次双击 exe）恢复主窗口。
+
+- **触发链路**：注册表自启值改为 `"Toolbox.exe" --autostart`；App.OnStartup 解析参数，命中且 `AutoStartSilent`（新设置项，默认开）→ 静默启动
+- **初始化拆分**：托盘/悬浮窗等后台服务不依赖窗口显示（`InitializeBackgroundServices`，幂等）；DWM 圆角/布局等 UI 初始化延迟到首次显示（`OnWindowLoaded`）
+- **兜底**：静默时托盘创建失败 → 回退显示主窗口，应用不会不可达
+- **唤起机制**：命名事件 `ToolboxShowRequestEvent`——静默驻留/最小化到托盘期间双击 exe，第二实例经单实例互斥锁发信号，第一实例恢复显示（修复既有缺陷：隐藏窗口 `SetForegroundWindow` 无效导致双击无反应）
+- **设置页**：新增"自启时不显示主窗口（后台托盘驻留）"开关（ToggleSwitch，依赖开机自启开启）
+- **升级迁移**：`EnsureStartupRegistryValue` 启动自检——旧版裸路径值 / 安装路径变化自动重写为新格式（后台执行不占启动路径），升级用户无需手动重新开关自启
+
+## 2. 设置页排版整理
+
+- 首卡片间隔统一：行间距 16px、开关与说明 4px（原 8/16/24px 混用 + 说明零间距）
+
+## 3. 审查修复
+
+- `RestoreFromTray` 加 `_isShuttingDown` 防御（退出过程中收到唤起信号不再 Show 关闭中的窗口）
+- `ActivateExistingInstance` 按窗口可见性分流：可见 → 置前；不可见（驻留中）→ 事件唤起
+
+## 4. 发布
+
+- 版本号更新 **v1.6.1 → v1.6.2**（setup/ToolboxSetup.iss + 底部状态栏）
+- 产物：`setup/Toolbox_Setup.exe`（self-contained 单文件）
+- 已 push 云端
