@@ -74,8 +74,8 @@
 窗口从后台恢复（最小化还原 / 托盘恢复 / 静默驻留唤起）时播放，`PlayReturnAnimations()`。
 
 - **触发**：`_wasBackground` 标志（最小化 / 关闭到托盘 / 静默驻留三处置位）+ `Activated` 触发；普通失焦不触发（不监听 Deactivated）
-- **节奏**：左侧工具栏先落位（滑入 + 淡入 0-400ms），右侧工具页延迟 200ms 跟上（淡入 + 上滑 420ms）；位移 QuinticEase（开头快结尾缓）去僵硬感
-- **实测优化**：初版 400ms 同步动画存在"左侧空、右侧先显 + 僵硬"问题，按反馈错峰重调
+- **节奏**：左侧保持从左向右滑入淡入（400ms/位移 420ms）；右侧仿左侧完整动画，方向从下到上（淡入 + 大幅上滑 Y 100→0）。曾试错峰 + QuinticEase 优化版（左侧先落位、右侧延迟 200ms），实测不理想已回退
+- **首帧闪烁修复**（录屏逐帧验证，Kimi 协作定稿）：还原瞬间先显完整界面→闪到起点。① 后台置位点同步置起点状态 + 还原显示前再设一次（双保险，DWM 缓存完整帧问题由此暴露）；② **清场帧拦截**（最终方案）：`MinimizePreClearHook` 拦下 `WM_SYSCOMMAND/SC_MINIMIZE` → 置起点 → `WaitForRenderedFramesAsync(2)` 等清场帧提交进 DWM 缓存 → 程序化最小化。还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。自建标题栏最小化按钮改调 `PreClearThenMinimizeAsync`（不走 SC_MINIMIZE）。边界：Win+D/Win+M 不经 SC_MINIMIZE，该路径首帧闪烁保留（系统级限制），由 StateChanged 兜底播动画；托盘/静默路径无 DWM 缓存问题（Hide 销毁表面）
 
 ## 7. AppPaths 审查修复
 

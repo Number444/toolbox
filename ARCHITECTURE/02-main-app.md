@@ -86,7 +86,14 @@ Path.Data = CombinedGeometry(
 
 实现位置：`Win32Helper.WndProc()` + `MainWindow.xaml.cs` Loaded 事件。
 
-## 发布流程
+## 发布流程（完整执行顺序）
+
+1. **版本号更新**：`setup/ToolboxSetup.iss`（SetupVersion）+ `MainWindow.xaml` 状态栏版本文本
+2. **commit**：一次性提交全部改动（不拆主题）；push 在步骤 6 统一执行
+3. **清理构建缓存**：各项目 `obj/` + `bin/Release` + `setup/publish`（**保留 `bin/Debug`**——调试产物常用）
+4. **publish**（见下方命令）→ 5. **ISCC 打包**（`setup/ToolboxSetup.iss`，LZMA2 最高压缩）→ 产物 `setup/Toolbox_Setup.exe`
+6. **push**：`git push origin master`（代理已配为 git 全局 http.proxy/https.proxy；凭据在 Windows 凭据管理器；push 失败先查 Flclash 代理是否启动）
+7. **changelog**：`docs/changelog-YYYY-MM-DD.md` 补发布条目
 
 ```
 dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
@@ -96,7 +103,7 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 → setup/Toolbox_Setup.exe
 ```
 
-> ⚠️ **必须使用 `-c Release`**：AppPaths 按 `#if DEBUG` 隔离，若误用 Debug 配置发布，产物会使用 Toolbox-Debug 数据目录、8091 端口、独立互斥名/唤起事件名——"正式版"无法远程控制（端口不对）且与正式版并存不互斥。发布前清 `obj/Release` 缓存。
+> ⚠️ **步骤 4 必须使用 `-c Release`，是硬性要求**：AppPaths 按 `#if DEBUG` 编译期隔离（数据目录/互斥名/唤起事件/端口/注册表值名五重），误用 Debug 配置会产出"假正式版"——Toolbox-Debug 数据目录、8091 端口、独立互斥名，与正式版并存不互斥，且远程控制连不上（端口错位）。若 Debug/Release 行为出现意外差异，先查本文件"Services/AppPaths.cs"条目核对隔离清单。
 
 ## 相关文档
 

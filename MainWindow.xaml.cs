@@ -43,11 +43,22 @@ public partial class MainWindow : Window
         // 窗口状态变更时更新最大化/还原图标
         StateChanged += (_, _) => UpdateMaximizeIcon();
 
-        // 切回前台动画：最小化时置位后台标志；激活时播放（仅"不可见→可见"触发，
+        // 切回前台动画：最小化时置位后台标志并同步起点状态；激活时播放（仅"不可见→可见"触发，
         // 普通失焦再聚焦不触发——Deactivated 不监听，避免点悬浮窗/弹窗后误动画）
         StateChanged += (_, _) =>
         {
-            if (WindowState == WindowState.Minimized) _wasBackground = true;
+            if (WindowState == WindowState.Minimized)
+            {
+                _wasBackground = true;
+                SetReturnStartState();
+            }
+            else if (WindowState == WindowState.Normal && _wasBackground)
+            {
+                // 还原显示前（渲染管线在 StateChanged 同步处理后才提交新帧）再设一次起点：
+                // 最小化后 WPF 可能不再提交新帧，DWM 保留的是最小化前的完整界面帧，
+                // 仅靠最小化时设起点，还原瞬间会先闪 DWM 缓存的完整帧
+                SetReturnStartState();
+            }
         };
         Activated += (_, _) =>
         {
@@ -110,6 +121,9 @@ public partial class MainWindow : Window
             // 6. 拦截 WM_NCCALCSIZE，抹掉 WPF 1px GDI NC 边界
             var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
             source?.AddHook(Win32Helper.WndProc);
+
+            // 6.5 拦截 SC_MINIMIZE：最小化前先提交"清场帧"（见 MinimizePreClearHook）
+            source?.AddHook(MinimizePreClearHook);
 
             // 7. 强制 WPF DirectX 交换链背景透明，彻底消除白色底漆
             if (source?.CompositionTarget is System.Windows.Interop.HwndTarget hwndTarget)
@@ -239,6 +253,7 @@ public partial class MainWindow : Window
             else
             {
                 _wasBackground = true;   // 静默驻留：恢复显示时播放切回动画
+                SetReturnStartState();
             }
         }
     }
@@ -255,6 +270,7 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(RestoreFromTray);
             return;
         }
+        SetReturnStartState();   // Show 前同步起点：窗口首帧渲染的即是动画起点
         ShowInTaskbar = true;
         Show();
         WindowState = WindowState.Normal;
@@ -263,27 +279,103 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 从后台切回前台动画：左侧工具栏从左向右滑入淡入，右侧工具页随后加载淡入。
-    /// 错峰设计（修复实测三问题）：左侧 0-400ms 先落位，右侧延迟 200ms 跟上（200-620ms）——
-    /// 不再"左侧还空着、右侧已过半"；位移 QuinticEase EaseOut（开头快、结尾极缓）去僵硬感；
-    /// 总时长 620ms 比原 400ms 硬切舒缓。
+    /// 窗口进入后台（最小化/托盘隐藏/静默驻留）时，把界面同步置为切回动画起点状态。
+    /// 消除还原瞬间"先渲染一帧完整界面 → 闪烁到动画起点"的首帧闪烁（录屏逐帧验证）：
+    /// Activated 触发时窗口已渲染完整帧，BeginAnimation 的 From 救不了已提交的那帧，
+    /// 必须让起点状态在窗口重新显示前就生效——首帧渲染的即是起点，动画无缝衔接。
+    /// 先停动画再设本地值：动画播放期间直接设本地值会被动画值覆盖（动画优先级更高）。
+    /// 注：最小化路径下本方法由 MinimizePreClearHook 在最小化前调用并等待清场帧提交，
+    /// 否则 DWM 缓存的是最小化前的完整帧，此处设值改不了已上屏的缓存位图。
+    /// </summary>
+    private void SetReturnStartState()
+    {
+        NavPane.BeginAnimation(UIElement.OpacityProperty, null);
+        NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        NavPaneTransform.X = -220;
+        NavPane.Opacity = 0;
+
+        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty, null);
+        ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        ContentPaneTransform.Y = 100;
+        ContentScrollViewer.Opacity = 0;
+    }
+
+    // ---- 最小化"清场帧"拦截（修复还原首帧闪烁）----
+
+    /// <summary>清场流程执行中（重入保护：程序化最小化不再触发拦截）</summary>
+    private bool _preClearMinimize;
+
+    /// <summary>
+    /// 拦截最小化命令（最小化按钮 / 任务栏点击，均为 WM_SYSCOMMAND + SC_MINIMIZE）。
+    /// 还原瞬间 DWM 直接把最小化前缓存的最后一张窗口表面合成上屏——这张位图在最小化时
+    /// 已定型，之后无论多同步地改起点状态都改不了已上屏的缓存帧（录屏逐帧验证：
+    /// StateChanged/Activated 里设值 → DWM 先亮缓存完整帧 → WPF 下一帧才替换 = 闪一帧）。
+    /// 唯一解法：最小化前先把界面置为动画起点（透明），等"清场帧"真正渲染提交进 DWM 缓存，
+    /// 再执行最小化——还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。
+    /// 已知边界：Win+D / Win+M 不经过 SC_MINIMIZE，无法拦截（仍由 StateChanged 兜底播动画，
+    /// 该路径下首帧闪烁保留，属系统级机制限制）。
+    /// </summary>
+    private IntPtr MinimizePreClearHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_SYSCOMMAND = 0x0112;
+        const int SC_MINIMIZE = 0xF020;   // wParam 低 4 位为系统保留位，需掩码比较
+        if (msg == WM_SYSCOMMAND && (wParam.ToInt64() & 0xFFF0) == SC_MINIMIZE
+            && !_preClearMinimize && !_isShuttingDown)
+        {
+            handled = true;   // 先拦下这次最小化，清场帧提交后再程序化最小化
+            _ = PreClearThenMinimizeAsync();
+        }
+        return IntPtr.Zero;
+    }
+
+    private async System.Threading.Tasks.Task PreClearThenMinimizeAsync()
+    {
+        _preClearMinimize = true;
+        _wasBackground = true;
+        SetReturnStartState();
+        await WaitForRenderedFramesAsync(2);   // 等清场帧进入 DWM 缓存（2 帧 ≈ 33ms，不可感知）
+        WindowState = WindowState.Minimized;   // WPF 走 ShowWindow，不经过 SC_MINIMIZE，无递归
+        _preClearMinimize = false;
+    }
+
+    /// <summary>等待 N 个渲染帧（CompositionTarget.Rendering 回调），确保视觉状态已提交</summary>
+    private System.Threading.Tasks.Task WaitForRenderedFramesAsync(int frames)
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource();
+        int left = frames;
+        EventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            if (--left <= 0)
+            {
+                CompositionTarget.Rendering -= handler;
+                tcs.TrySetResult();
+            }
+        };
+        CompositionTarget.Rendering += handler;
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// 从后台切回前台动画：左侧工具栏保持从左向右滑入淡入（不动）；右侧工具页仿左侧的完整
+    /// 动画形式（淡入 + 大幅滑入），方向为从下到上（Y 100→0，约内容区高度 1/4，对等左侧整列滑入感）。
+    /// 双侧同步 400ms CubicEase EaseOut；纯 RenderTransform/Opacity，无布局抖动。
     /// 显式 From——常态值是 1/0，无 From 则动画原地不动（ComboBox 弹层同款教训）。
     /// </summary>
     private void PlayReturnAnimations()
     {
-        var slideEase = new QuinticEase { EasingMode = EasingMode.EaseOut };
-        var fadeEase = EaseOut();
+        var ease = EaseOut();
+        var ms = TimeSpan.FromMilliseconds(400);
 
         NavPane.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(400)) { EasingFunction = fadeEase });
+            new DoubleAnimation(0, 1, ms) { EasingFunction = ease });
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(-220, 0, TimeSpan.FromMilliseconds(380)) { EasingFunction = slideEase });
+            new DoubleAnimation(-220, 0, TimeSpan.FromMilliseconds(420)) { EasingFunction = ease });
 
-        var delay = TimeSpan.FromMilliseconds(200);
         ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420)) { BeginTime = delay, EasingFunction = fadeEase });
+            new DoubleAnimation(0, 1, ms) { EasingFunction = ease });
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(420)) { BeginTime = delay, EasingFunction = slideEase });
+            new DoubleAnimation(100, 0, ms) { EasingFunction = ease });
     }
 
     /// <summary>列表重建（搜索过滤等）后恢复导航状态。去抖：Clear+Add 触发多次事件，
@@ -1094,6 +1186,7 @@ public partial class MainWindow : Window
                 Hide();
                 ShowInTaskbar = false;
                 _wasBackground = true;   // \u6258\u76D8\u9690\u85CF\uFF1A\u6062\u590D\u663E\u793A\u65F6\u64AD\u653E\u5207\u56DE\u52A8\u753B
+                SetReturnStartState();
             }
             else
             {
@@ -1132,7 +1225,10 @@ public partial class MainWindow : Window
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e)
     {
-        WindowState = WindowState.Minimized;
+        // 走清场帧路径（WPF 直接设 WindowState 不产生 SC_MINIMIZE，拦截器收不到，
+        // 不走 PreClear 则 DWM 缓存完整帧 → 还原闪一帧，2026-08-10 实测确认）
+        if (!_preClearMinimize)
+            _ = PreClearThenMinimizeAsync();
     }
 
     private void MaximizeButton_Click(object sender, RoutedEventArgs e)

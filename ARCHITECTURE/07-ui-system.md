@@ -108,8 +108,8 @@ InitHalo():
 | ComboBox 弹层入场 | 150ms 透明 + 240ms 变换 | 二次/五次 EaseOut | 缩放 0.96→1 + 位移 -6→0，原点 (0.5,0) |
 | 设置层进入 | 360ms | 二次 EaseOut | 淡入 + 8px 上滑 |
 | 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑；设置页点工具时串行对齐（见下） |
-| 切回前台·左侧 | 0-400ms | QuinticEase EaseOut | 工具栏从左滑入（X -220→0）+ 淡入，先落位 |
-| 切回前台·右侧 | 延迟 200ms，420ms | QuinticEase EaseOut | 工具页淡入 + 上滑 8→0，随后跟上（总 620ms） |
+| 切回前台·左侧 | 400ms（位移 420ms） | CubicEase EaseOut | 工具栏从左滑入（X -220→0）+ 淡入 |
+| 切回前台·右侧 | 400ms | CubicEase EaseOut | 工具页淡入 + 大幅上滑 100→0（约内容区高度 1/4，对等左侧整列滑入感） |
 | 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
 | 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
 | 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移 |
@@ -128,9 +128,11 @@ InitHalo():
 
 **触发机制**：`_wasBackground` 标志 + `Activated` 事件。置位点仅三处——最小化（StateChanged）、关闭到托盘（OnClosing 隐藏成功）、静默驻留（托盘创建成功）。**不监听 Deactivated**：点悬浮窗/系统弹窗导致的普通失焦不触发；正常启动不播放（启动遮罩链负责入场）。
 
-**错峰节奏**（修复实测三问题：左侧空/右侧先显、双侧同步僵硬）：左侧 0-400ms 先落位（X -220→0，380ms + 淡入 400ms），右侧延迟 200ms 跟上（淡入 + 上滑 8→0，420ms，200-620ms 结束）。位移 QuinticEase EaseOut（开头快、结尾极缓），淡入 CubicEase EaseOut。
+**节奏**：双侧同步 400ms CubicEase EaseOut（与工具切换进场同语言），左侧位移 420ms 稍缓收尾。右侧为仿左侧的完整动画（淡入 + 大幅上滑 Y 100→0，方向从下到上，幅度对等左侧整列滑入感）。曾尝试错峰 + QuinticEase 优化版（左侧先落位、右侧延迟 200ms），实测不理想已回退（2026-08-10）。
 
 **实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；右侧动画只作用于 ContentScrollViewer（不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
+
+**首帧闪烁消除（清场帧拦截）**：还原瞬间 DWM 直接把最小化前缓存的最后一张窗口表面合成上屏——该位图在最小化时已定型，之后 `SetReturnStartState()` 无论多同步都改不了已上屏的缓存帧（录屏逐帧验证："后台置位 + 还原显示前再设"双保险仍闪一帧，2026-08-10 修复）。解法：`MinimizePreClearHook` 拦截 `WM_SYSCOMMAND / SC_MINIMIZE`（系统级最小化入口，如任务栏右键/点击最小化），先 `handled=true` 拦下最小化 → 同步置起点状态 → `WaitForRenderedFramesAsync(2)` 等"清场帧"（界面透明的起点状态）真正渲染提交进 DWM 缓存 → 再程序化 `WindowState=Minimized`（WPF 走 ShowWindow，不经 SC_MINIMIZE，无递归；`_preClearMinimize` 兼作重入保护）。自建标题栏最小化按钮（`MinimizeButton_Click`）直接设 `WindowState` 不产生 SC_MINIMIZE，须显式改调 `PreClearThenMinimizeAsync`（2026-08-10 实测：按钮路径闪烁即此遗漏）。还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。代价：最小化延迟约 2 帧（~33ms，不可感知）。已知边界：Win+D / Win+M 不经 SC_MINIMIZE 无法拦截，该路径首帧闪烁保留（系统级机制限制），仍由 `StateChanged` 兜底播动画。托盘隐藏/静默驻留路径不受 DWM 缓存影响（Hide 销毁表面，Show 首帧由 WPF 全新渲染），原有"Show 前同步起点"逻辑保留。
 
 ## 搜索框（MainWindow 左侧顶部）
 
