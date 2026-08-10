@@ -69,13 +69,6 @@ public class TransitioningContentControl : ContentControl
         _enterStoryboard = new Storyboard();
         _enterStoryboard.Children.Add(fadeIn);
         _enterStoryboard.Children.Add(slideUp);
-        // 进场完成清时钟：HoldEnd 保持值让 IsAnimated 永久 true（MainWindow 光晕闸门不关，
-        // 2026-08-11 实测）；值回落本地值（Opacity=1 / RenderTransform.Y=0 = 动画终值，无缝）
-        _enterStoryboard.Completed += (_, _) =>
-        {
-            BeginAnimation(OpacityProperty, null);
-            (RenderTransform as TranslateTransform)?.BeginAnimation(TranslateTransform.YProperty, null);
-        };
 
         // 退场：200ms，CubicEase EaseIn，仅淡出（无位移，避免与进场上滑方向打架）
         var fadeOut = new DoubleAnimation
@@ -132,10 +125,6 @@ public class TransitioningContentControl : ContentControl
     private void OnExitCompleted(object? sender, EventArgs e)
     {
         _isExiting = false;
-        // 清退场淡出时钟：HoldEnd 保持值让 IsAnimated 永久 true（光晕闸门不关）。
-        // 值回落本地值 1.0（下方/首次加载路径已设）——同回调内即切入新内容 + 进场动画接管，
-        // 中间态不渲染，无闪烁
-        BeginAnimation(OpacityProperty, null);
         ExitCompleted?.Invoke();
         var next = _pendingContent;
         _pendingContent = null;

@@ -39,7 +39,7 @@
 
 5. **目标清单管理**：只存元素引用不存坐标——每帧实时重算。`LayoutUpdated` → `_glowTargetsDirty` → 250ms 节流重建。工具切换/设置层显隐 → `ClearTargets()` 0ms 清除。
 
-6. **重绘触发与动画同步**：重绘仅三源——光标移动（`UpdateCursor` 去重）、滚动（`ScrollChanged` → `Refresh()`）、清单重建。RenderTransform 动画（设置层进出/工具切换/切回前台）不触发布局与滚动，光标静止时光圈会定格在动画起点：`HaloFrame` 内用 `DependencyPropertyHelper.GetValueSource(...).IsAnimated` 检测受跟踪动画（`IsAnyGlowTrackedAnimationActive`），活跃期逐帧 `Refresh()`。**闸门不可省**——无条件 `Refresh()` 的 `InvalidateVisual` 会自激产帧，把渲染循环永久钉在 60fps（旧实现已踩过并回退）。**HoldEnd 陷阱（2026-08-11 实测）**：动画自然完成后时钟进入 Filling 保持期，`IsAnimated` **仍为 true**——仅靠闸门查询不会自动关闭，必须同步清时钟：受跟踪动画完成时 `BeginAnimation(prop, null)`（值先回落本地值，`ClearClockOnCompleted` 辅助；TransitioningContentControl 进场/退场在控件内部清）。否则闸门永不关闭，与无条件 Refresh 同样把渲染循环钉在 60fps。**当前清单（9 项）**：`SettingsLayer.Opacity` / `SettingsLayerTransform.Y` / `SettingsLayerScale.ScaleX` / `NavPane.Opacity` / `NavPaneTransform.X` / `ContentScrollViewer.Opacity` / `ContentPaneTransform.Y` / `ContentTransitionControl.Opacity` / `TitleTransitionControl.Opacity`。**新增 RenderTransform 动画须两件事同时做**：① 元素/属性补进该清单；② 动画完成点补清时钟（否则闸门常开）。
+6. **重绘触发与动画同步**：重绘仅三源——光标移动（`UpdateCursor` 去重）、滚动（`ScrollChanged` → `Refresh()`）、清单重建。RenderTransform 动画（设置层进出/工具切换/切回前台）不触发布局与滚动，光标静止时光圈会定格在动画起点：`HaloFrame` 内用 `DependencyPropertyHelper.GetValueSource(...).IsAnimated` 检测受跟踪动画（`IsAnyGlowTrackedAnimationActive`），活跃期逐帧 `Refresh()`。**闸门不可省**——无条件 `Refresh()` 的 `InvalidateVisual` 会自激产帧，把渲染循环永久钉在 60fps（旧实现已踩过并回退）。**当前清单（9 项）**：`SettingsLayer.Opacity` / `SettingsLayerTransform.Y` / `SettingsLayerScale.ScaleX` / `NavPane.Opacity` / `NavPaneTransform.X` / `ContentScrollViewer.Opacity` / `ContentPaneTransform.Y` / `ContentTransitionControl.Opacity` / `TitleTransitionControl.Opacity`。**新增 RenderTransform 动画须把元素/属性补进该清单**。注（2026-08-11 决策）：动画完成后 HoldEnd 保持期 `IsAnimated` 仍为 true，闸门会持续逐帧 `Refresh()` 至下次动画——60fps 常驻为接受的预期（现代电脑不算性能浪费），**不做**动画完成清时钟（曾尝试，引入组件消失/状态机卡死两个回归，已回退）。
 
 **配套样式变更**（App.xaml）：Button/ToggleButton 模板 Border → `CornerRadius="6"`；ComboBoxItem 模板 → `CornerRadius="4"` + `Margin="2,1"`。
 
@@ -95,7 +95,7 @@ InitHalo():
 | `CustomScrollBar` | 深色滚动条（容器 16px，Thumb 居中：常态 6px 两侧各留 5px、展开 10px 各留 3px，不碰窗口边缘。四档：常态 #33FFFFFF → bar 悬停 #55 → thumb 悬停 #CC → 拖拽 Accent 绿 #CC76B580。导航区实例 `Margin="0,0,-3,0"` 右缩 3px，与内容区滚动条贴窗口右缘的圆角让位感对齐） |
 | （隐式 `ComboBox`） | 弹层自绘入场：弃系统 Slide；透明度 150ms 快到位 + 缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase（原点 0.5,0 从本体绽放；动画须显式 From 否则 HoldEnd 锁终值导致重播失效）。不加 DropShadow——透明 Popup 中四角会堆积暗色尖角 |
 | （隐式 `ToolTip`） | 深色样式（BgCard 底 + BorderSubtle 描边 + 6px 圆角，替换默认浅色系统样式）；Loaded 时 150ms 淡入。应用内右键菜单均走 `ThemedMenuWindow`（本样式不影响） |
-| `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐 |
+| `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐。⚠️ **进场完成清时钟须跳过 `_isExiting` 打断**（2026-08-11 快速连点回归）：Storyboard.Completed 是根时钟事件，进场子动画被退场替换后根时钟仍会触发 Completed——此时清时钟会误杀退场动画，`_isExiting` 永久 true 导致工具点击失效 + 设置层串行退出等待永不返回 |
 
 ## 动效参数总表（统一语言）
 

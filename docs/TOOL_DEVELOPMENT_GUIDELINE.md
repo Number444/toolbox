@@ -403,8 +403,8 @@ private static Style? FindResourceStyle(string key)
 >
 > **动画兼容**：主窗口新增 RenderTransform/透明度动画时（如自定义控件内部动画），若动画期间
 > 光标静止、元素轮廓会变，必须把对应元素/属性补进 `MainWindow.IsAnyGlowTrackedAnimationActive()`
-> 清单，并在动画完成点清时钟（`ClearClockOnCompleted` 或回调内 `BeginAnimation(prop, null)`）——
-> 只补清单不清时钟 = 闸门永不关闭、渲染循环 60fps 常驻；只清时钟不补清单 = 动画期间光圈定格。
+> 清单——漏补 = 动画期间光圈定格。**不做**动画完成清时钟（2026-08-11 决策：HoldEnd 保持期
+> 闸门持续刷新至 60fps 属预期；清时钟曾引入组件消失/状态机卡死回归，已整体回退）。
 > 详见 `ARCHITECTURE/07-ui-system.md`「重绘触发与动画同步」。
 
 ### 5.2 鼠标跟随光晕（Mouse Halo）
