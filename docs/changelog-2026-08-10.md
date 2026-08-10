@@ -113,5 +113,6 @@
 - **分组展开错落淡入**：展开时子项 25ms 间隔逐条淡入（150ms/条，与 Clip 揭示同向生长）；`GroupItemStaggerMs`=0 关闭，调参集中类级常量区
 - **设置层进出缩放**：进入 0.96→1 / 退出→0.98（与 ComboBox 绽放同语言）；显式 From 防 HoldEnd 锁值、复位先清动画再写本地值
 - **光晕与动画同步**：播放 RenderTransform 动画时边缘发光光圈不再定格——`IsAnyGlowTrackedAnimationActive` 闸门检测受跟踪动画（`IsAnimated` 查询），活跃期逐帧 `Refresh()`；补全清单遗漏的 NavPane/ContentScrollViewer 淡入。决策：动画完成后 HoldEnd 保持期闸门持续刷新至 60fps 为预期（现代电脑非性能浪费），**不做**动画完成清时钟——曾尝试清时钟方案引入组件消失/工具切换卡死两个回归，已整体回退（2026-08-11）。回归清单第 10 节含快速连点回归项
+- **启动遮罩两段式入场**：① 文字从下方 40px 滑入（EaseOut 先快后慢）+ 渐渐淡入（EaseIn 缓慢亮起，同步 1.3s；淡入不可用 EaseOut——DWM 首帧跳帧会吞掉前段飙升）→ ② 图标从文字背后（完全透明）淡入滑入文字左侧（位移 48px = 1.5×图标宽，文字同步右移 22px 让位，三者同刻起止 1.3s→2.3s）→ 定格 0.5s → 遮罩淡出（2.8s–3.3s）；调参集中 OnWindowLoaded 常量区
 - 版本号 v1.7.1 → **v1.7.2**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
 - 测试 161/161 全绿
