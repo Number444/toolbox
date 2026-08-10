@@ -956,9 +956,9 @@ public partial class MainWindow : Window
         SettingsLayer.Opacity = 0;
         SettingsLayerTransform.Y = 8;
         SettingsLayer.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)) { EasingFunction = EaseOut() });
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
         SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(180)) { EasingFunction = EaseOut() });
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
     }
 
     private void ExitSettingsView()
