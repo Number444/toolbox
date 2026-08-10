@@ -90,7 +90,7 @@ InitHalo():
 | `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画，轨道颜色同步渐变 #45475A↔#76B580） |
 | `CapsuleToggleStyle` | 纯开关胶囊（60x26，悬浮窗工具用，动画同 ToggleSwitchStyle） |
 | `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用；勾选时方框底色/描边 0.2s 渐变，对勾瞬时出现） |
-| `CustomScrollBar` | 深色滚动条（容器 12px；Thumb 常态 6px 细条，hover/拖拽 150ms 展开 10px，颜色 #33→#55→#CCFFFFFF 三档；细条+光标光晕会压缩感知差，档距需 ≥40% alpha） |
+| `CustomScrollBar` | 深色滚动条（容器 16px，Thumb 居中：常态 6px 两侧各留 5px、展开 10px 各留 3px，不碰窗口边缘。四档：常态 #33FFFFFF → bar 悬停 #55 → thumb 悬停 #CC → 拖拽 Accent 绿 #CC76B580） |
 | （隐式 `ComboBox`） | 弹层自绘入场：弃系统 Slide；透明度 150ms 快到位 + 缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase（原点 0.5,0 从本体绽放；动画须显式 From 否则 HoldEnd 锁终值导致重播失效）。不加 DropShadow——透明 Popup 中四角会堆积暗色尖角 |
 
 ## 相关文档

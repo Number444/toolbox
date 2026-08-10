@@ -84,6 +84,9 @@ public class CustomScrollBar : Control
     /// <summary>Bar 悬停时的中间档 Thumb 颜色（比 ThumbColor 亮、比 ThumbHoverColor 暗）</summary>
     private static readonly Color BarHoverColor = Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF);
 
+    /// <summary>拖拽档：Accent 绿 80%（与导航 HoverBar 的绿色语言一致，"已抓住"的明确反馈）</summary>
+    private static readonly Color DragColor = Color.FromArgb(0xCC, 0x76, 0xB5, 0x80);
+
     private const double ThumbWidthNormal = 6;
     private const double ThumbWidthExpanded = 10;
 
@@ -176,12 +179,13 @@ public class CustomScrollBar : Control
         UpdateThumbVisual(animate: true);
     }
 
-    /// <summary>按当前交互状态（拖拽/悬停 Thumb > 悬停 Bar > 常态）刷新 Thumb 颜色与宽度</summary>
+    /// <summary>按当前交互状态（拖拽 > 悬停 Thumb > 悬停 Bar > 常态，四档）刷新 Thumb 颜色与宽度</summary>
     private void UpdateThumbVisual(bool animate)
     {
         if (_thumbElement == null) return;
 
-        var color = (_isDragging || _isThumbHovered) ? ThumbHoverColor
+        var color = _isDragging ? DragColor
+                  : _isThumbHovered ? ThumbHoverColor
                   : _isBarHovered ? BarHoverColor
                   : ThumbColor;
         _thumbElement.Background = new SolidColorBrush(color);

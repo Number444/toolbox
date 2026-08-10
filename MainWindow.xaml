@@ -452,7 +452,7 @@
                         </Grid>
                     </ScrollViewer>
                     <helpers:CustomScrollBar Grid.Row="1" Grid.Column="1"
-                                             Width="12"
+                                             Width="16"
                                              TargetScrollViewer="{Binding ElementName=NavScrollViewer}"/>
                 </Grid>
             </Border>
@@ -519,7 +519,7 @@
                         </StackPanel>
                     </ScrollViewer>
                     <helpers:CustomScrollBar Grid.Column="1"
-                                             Width="12"
+                                             Width="16"
                                              TargetScrollViewer="{Binding ElementName=ContentScrollViewer}"/>
 
                     <!-- 设置叠加层（隐藏） -->
@@ -544,7 +544,7 @@
                                 <local:SettingsView x:Name="SettingsViewControl"/>
                             </ScrollViewer>
                             <helpers:CustomScrollBar Grid.Column="1"
-                                                     Width="12"
+                                                     Width="16"
                                                      TargetScrollViewer="{Binding ElementName=SettingsScrollViewer}"/>
                         </Grid>
                     </Border>

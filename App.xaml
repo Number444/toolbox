@@ -508,7 +508,7 @@
                                                             SnapsToDevicePixels="True"/>
                                         </ScrollViewer>
                                         <helpers:CustomScrollBar Grid.Column="1"
-                                                                 Width="12"
+                                                                 Width="16"
                                                                  TargetScrollViewer="{Binding ElementName=PopupScrollViewer}"/>
                                     </Grid>
                                 </Border>
@@ -565,14 +565,15 @@
 
     <!-- ====== CustomScrollBar 自定义滚动条样式 ====== -->
         <Style TargetType="helpers:CustomScrollBar">
-            <Setter Property="Width" Value="12"/>
+            <Setter Property="Width" Value="16"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="helpers:CustomScrollBar">
                         <Border Background="Transparent"
                                 SnapsToDevicePixels="True">
-                            <!-- Thumb 轨道区：常态 6px 细条居中于 12px 容器，hover 展开 10px
-                                 （宽度过渡由 CustomScrollBar.UpdateThumbVisual 驱动） -->
+                            <!-- Thumb 轨道区：常态 6px 细条居中于 16px 容器（常态两侧各留 5px、
+                                 展开 10px 各留 3px，任何状态都不碰窗口边缘）；
+                                 宽度/颜色四档过渡由 CustomScrollBar.UpdateThumbVisual 驱动 -->
                             <Border x:Name="ThumbElement"
                                     Background="#33FFFFFF"
                                     CornerRadius="3"
