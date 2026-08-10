@@ -46,7 +46,7 @@ App.xaml → App.xaml.cs OnStartup:
 
 ```
 点击标题栏齿轮按钮 → EnterSettingsView：ContentScrollViewer 折叠 → SettingsLayer 显示
-                   → 淡入 + 8px 上滑 180ms EaseOut（_settingsAnimToken 防连点）
+                   → 淡入 + 8px 上滑 360ms EaseOut（_settingsAnimToken 防连点）
                    → SettingsView 加载，绑定 AppSettings.Instance
                    → OCR 引擎状态每次进入设置页刷新（IsVisibleChanged，非启动时一次性检测）
 
