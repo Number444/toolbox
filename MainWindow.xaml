@@ -312,9 +312,16 @@
                                                     Cursor="Hand"
                                                     Height="38"
                                                     CornerRadius="6"
+                                                    RenderTransformOrigin="0.5,0.5"
                                                     MouseLeftButtonDown="GroupHeader_MouseLeftButtonDown"
+                                                    PreviewMouseLeftButtonDown="NavItem_PressDown"
+                                                    PreviewMouseLeftButtonUp="NavItem_PressUp"
                                                     MouseEnter="GroupHeader_MouseEnter"
                                                     MouseLeave="GroupHeader_MouseLeave">
+                                                <!-- Freeze=False：静态 XAML 默认冻结 Freezable，冻结后无法 BeginAnimation（按压缩放） -->
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform po:Freeze="False"/>
+                                                </Border.RenderTransform>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
@@ -383,9 +390,16 @@
                                                                     Cursor="Hand"
                                                                     Height="36"
                                                                     CornerRadius="6"
+                                                                    RenderTransformOrigin="0.5,0.5"
                                                                     MouseLeftButtonDown="NavItem_MouseLeftButtonDown"
+                                                                    PreviewMouseLeftButtonDown="NavItem_PressDown"
+                                                                    PreviewMouseLeftButtonUp="NavItem_PressUp"
                                                                     MouseEnter="NavItem_MouseEnter"
                                                                     MouseLeave="NavItem_MouseLeave">
+                                                                <!-- Freeze=False：静态 XAML 默认冻结 Freezable，冻结后无法 BeginAnimation（按压缩放） -->
+                                                                <Border.RenderTransform>
+                                                                    <ScaleTransform po:Freeze="False"/>
+                                                                </Border.RenderTransform>
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto"/>
@@ -535,9 +549,14 @@
                     <Border x:Name="SettingsLayer"
                             Grid.ColumnSpan="2"
                             Background="#99323232"
-                            Visibility="Collapsed">
+                            Visibility="Collapsed"
+                            RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
-                            <TranslateTransform x:Name="SettingsLayerTransform" Y="0"/>
+                            <TransformGroup>
+                                <!-- 进入 0.96→1 / 退出 →0.98 缩放（与 ComboBox 绽放同语言），位移动画沿用原 TranslateTransform -->
+                                <ScaleTransform x:Name="SettingsLayerScale" ScaleX="1" ScaleY="1"/>
+                                <TranslateTransform x:Name="SettingsLayerTransform" Y="0"/>
+                            </TransformGroup>
                         </Border.RenderTransform>
                         <Grid>
                             <Grid.ColumnDefinitions>

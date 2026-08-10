@@ -449,6 +449,20 @@ public partial class MainWindow : Window
     // 统一动效参数（时长/缓动集中管理，避免各处漂移）
     private const int HighlightAnimMs = 200;
     private const int GroupAnimMs = 200;
+
+    // ── 分组展开子项错落调参区（AnimateGroupRender 展开分支）──
+    /// <summary>相邻子项淡入间隔 ms（0 = 关闭错落，整组同时显现）</summary>
+    private const int GroupItemStaggerMs = 25;
+    /// <summary>单个子项淡入时长 ms</summary>
+    private const int GroupItemFadeMs = 150;
+
+    // ── 侧栏按压反馈调参区（NavItem_PressDown / ReleaseNavPress）──
+    /// <summary>按下时缩放比（1 = 关闭按压反馈）</summary>
+    private const double PressScale = 0.96;
+    /// <summary>按下压缩时长 ms</summary>
+    private const int PressDownMs = 90;
+    /// <summary>松开回弹时长 ms</summary>
+    private const int PressUpMs = 180;
     private const int HighlightFadeMs = 120;
     private static CubicEase EaseOut() => new() { EasingMode = EasingMode.EaseOut };
     private static CubicEase EaseIn() => new() { EasingMode = EasingMode.EaseIn };
@@ -719,8 +733,48 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement el) ShowHover(el);
     }
 
-    /// <summary>导航项鼠标离开——悬停条淡出</summary>
-    private void NavItem_MouseLeave(object sender, MouseEventArgs e) => HideHover();
+    /// <summary>导航项鼠标离开——悬停条淡出；同时复位按压缩放（按下后滑出判定为取消点击）</summary>
+    private void NavItem_MouseLeave(object sender, MouseEventArgs e)
+    {
+        HideHover();
+        ReleaseNavPress(sender);
+    }
+
+    /// <summary>侧栏按压反馈：按下缩至 PressScale（90ms EaseOut），松开/滑出回弹（180ms EaseOut）。
+    /// 仅渲染层 ScaleTransform，不触发布局；导航项/分组头共用（Preview 隧道阶段先于点击逻辑触发）</summary>
+    private void NavItem_PressDown(object sender, MouseButtonEventArgs e)
+    {
+        if (PressScale >= 1.0 || sender is not Border b) return;
+        var scale = EnsureMutableScale(b);
+        var anim = new DoubleAnimation(PressScale, TimeSpan.FromMilliseconds(PressDownMs))
+        { EasingFunction = EaseOut() };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+    }
+
+    /// <summary>松开回弹（PreviewMouseLeftButtonUp 触发）</summary>
+    private void NavItem_PressUp(object sender, MouseButtonEventArgs e) => ReleaseNavPress(sender);
+
+    private void ReleaseNavPress(object sender)
+    {
+        if (sender is not Border b) return;
+        // 必须经过 EnsureMutableScale：DataTemplate 中 po:Freeze="False" 不生效，
+        // 未按过下的项其 XAML ScaleTransform 仍是冻结实例，直接 BeginAnimation 会抛异常
+        var scale = EnsureMutableScale(b);
+        var anim = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(PressUpMs))
+        { EasingFunction = EaseOut() };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+    }
+
+    /// <summary>保证按压缩放 ScaleTransform 可动画（冻结实例统一替换为可变实例）</summary>
+    private static ScaleTransform EnsureMutableScale(Border b)
+    {
+        if (b.RenderTransform is ScaleTransform st && !st.IsFrozen) return st;
+        var fresh = new ScaleTransform();
+        b.RenderTransform = fresh;
+        return fresh;
+    }
 
     /// <summary>分类标题头点击——切换展开/折叠（渲染式动画；动画期间高亮与列表同步位移；选中工具不被强制切走）</summary>
     private void GroupHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -916,6 +970,25 @@ public partial class MainWindow : Window
         clipAnim.Completed += (_, _) => CommitGroupAnimation(container, expand, siblings, onCompleted);
         clip.BeginAnimation(RectangleGeometry.RectProperty, clipAnim);
 
+        // 展开时子项错落淡入（仅展开方向；折叠为整体收起不做错落）。
+        // 逐项清旧动画 → 置 0 → 延迟 BeginTime 淡入，与 Clip 揭示同向生长
+        if (expand && GroupItemStaggerMs > 0 && container.Child != null)
+        {
+            int staggerIndex = 0;
+            foreach (var item in FindVisualChildren<Border>(container.Child))
+            {
+                item.BeginAnimation(UIElement.OpacityProperty, null);
+                item.Opacity = 0;
+                item.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(
+                    1, TimeSpan.FromMilliseconds(GroupItemFadeMs))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(staggerIndex * GroupItemStaggerMs),
+                    EasingFunction = EaseOut()
+                });
+                staggerIndex++;
+            }
+        }
+
         // 兄弟平移动画（渲染线程）：展开 0→+delta，折叠 -delta→0
         foreach (var (_, tt) in siblings)
         {
@@ -992,10 +1065,11 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement element) ShowHover(element);
     }
 
-    /// <summary>分类头鼠标离开——悬停条淡出</summary>
+    /// <summary>分类头鼠标离开——悬停条淡出；同时复位按压缩放</summary>
     private void GroupHeader_MouseLeave(object sender, MouseEventArgs e)
     {
         HideHover();
+        ReleaseNavPress(sender);
     }
 
     /// <summary>搜索框按下 Enter 键——跳转到第一个匹配工具</summary>
@@ -1104,6 +1178,12 @@ public partial class MainWindow : Window
     // 进出动画令牌：Completed 回调只认最后一次动画，防止快速连点导致状态错乱
     private int _settingsAnimToken;
 
+    // ── 设置层进出动画调参区 ──
+    /// <summary>进入时缩放起点（1 = 关闭缩放，纯淡入上滑）</summary>
+    private const double SettingsEnterScale = 0.96;
+    /// <summary>退出时缩放终点</summary>
+    private const double SettingsExitScale = 0.98;
+
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         EnterSettingsView();
@@ -1119,13 +1199,22 @@ public partial class MainWindow : Window
         SettingsLayer.IsHitTestVisible = true;
         HighlightBar.Visibility = Visibility.Collapsed;
 
-        // 淡入 + 8px 上滑（180ms EaseOut，与 TransitioningContentControl 同参数族）
+        // 淡入 + 8px 上滑 + 轻微放大（360ms EaseOut，与 TransitioningContentControl 同参数族；
+        // 缩放飞 0.96→1，与 ComboBox 下拉绽放同语言，增加纵深感）
         SettingsLayer.Opacity = 0;
         SettingsLayerTransform.Y = 8;
         SettingsLayer.BeginAnimation(OpacityProperty,
             new DoubleAnimation(1, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
         SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
             new DoubleAnimation(0, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
+        if (SettingsEnterScale < 1.0)
+        {
+            // 显式 From：避免 BeginAnimation 读取到上次退场动画的保持值
+            var grow = new DoubleAnimation(SettingsEnterScale, 1.0, TimeSpan.FromMilliseconds(360))
+            { EasingFunction = EaseOut() };
+            SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        }
     }
 
     private void ExitSettingsView()
@@ -1163,11 +1252,23 @@ public partial class MainWindow : Window
                 SettingsLayer.Visibility = Visibility.Collapsed;
                 SettingsLayer.Opacity = 1;                 // 复位供下次进入
                 SettingsLayerTransform.Y = 0;
+                // 先清动画保持值再复位本地值（否则缩放复位被 HoldEnd 动画压住不生效）
+                SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                SettingsLayerScale.ScaleX = 1;
+                SettingsLayerScale.ScaleY = 1;
                 SettingsLayer.IsHitTestVisible = true;
             };
             SettingsLayer.BeginAnimation(OpacityProperty, fade);
             SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
                 new DoubleAnimation(8, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() });
+            if (SettingsEnterScale < 1.0)
+            {
+                var shrink = new DoubleAnimation(SettingsExitScale, TimeSpan.FromMilliseconds(150))
+                { EasingFunction = EaseIn() };
+                SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+                SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+            }
         }
 
         // 恢复高亮到当前选中工具（设置页期间可能已通过导航点击/插件跳转切换了选中项，

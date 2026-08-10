@@ -24,6 +24,39 @@
         <!-- 全局字体 -->
         <FontFamily x:Key="GlobalFont">Segoe UI, Microsoft YaHei</FontFamily>
 
+        <!-- ====== ToolTip 深色样式（替换 WPF 默认浅色系统样式；Loaded 时 150ms 淡入） ====== -->
+        <Style TargetType="ToolTip">
+            <Setter Property="FontFamily" Value="{StaticResource GlobalFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{StaticResource BgCardBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="10,6"
+                                Opacity="0">
+                            <Border.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Border.Triggers>
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ====== Button 样式（Fluent Design 风格） ====== -->
         <Style TargetType="Button">
             <Setter Property="FontFamily" Value="{StaticResource GlobalFont}"/>

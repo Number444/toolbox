@@ -92,6 +92,7 @@ InitHalo():
 | `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用；勾选时方框底色/描边 0.2s 渐变，对勾瞬时出现） |
 | `CustomScrollBar` | 深色滚动条（容器 16px，Thumb 居中：常态 6px 两侧各留 5px、展开 10px 各留 3px，不碰窗口边缘。四档：常态 #33FFFFFF → bar 悬停 #55 → thumb 悬停 #CC → 拖拽 Accent 绿 #CC76B580。导航区实例 `Margin="0,0,-3,0"` 右缩 3px，与内容区滚动条贴窗口右缘的圆角让位感对齐） |
 | （隐式 `ComboBox`） | 弹层自绘入场：弃系统 Slide；透明度 150ms 快到位 + 缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase（原点 0.5,0 从本体绽放；动画须显式 From 否则 HoldEnd 锁终值导致重播失效）。不加 DropShadow——透明 Popup 中四角会堆积暗色尖角 |
+| （隐式 `ToolTip`） | 深色样式（BgCard 底 + BorderSubtle 描边 + 6px 圆角，替换默认浅色系统样式）；Loaded 时 150ms 淡入。应用内右键菜单均走 `ThemedMenuWindow`（本样式不影响） |
 | `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐 |
 
 ## 动效参数总表（统一语言）
@@ -106,19 +107,21 @@ InitHalo():
 | 开关轨道颜色 | 200ms | CubicEase EaseOut | 轨道 #45475A↔#76B580 与滑块位移同步 |
 | 滚动条 Thumb 展开 | 150ms | QuadraticEase EaseOut | 宽度 6↔10px，四档颜色（#33/#55/#CC/拖拽绿） |
 | ComboBox 弹层入场 | 150ms 透明 + 240ms 变换 | 二次/五次 EaseOut | 缩放 0.96→1 + 位移 -6→0，原点 (0.5,0) |
-| 设置层进入 | 360ms | 二次 EaseOut | 淡入 + 8px 上滑 |
-| 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑；设置页点工具时串行对齐（见下） |
+| ToolTip 淡入 | 150ms | 线性 | Loaded 触发 |
+| 侧栏按压反馈 | 90ms 下压 / 180ms 回弹 | CubicEase EaseOut | 导航项/分组头缩放 0.96↔1（PreviewMouseLeftButtonDown/Up + MouseLeave 复位；`PressScale`/`PressDownMs`/`PressUpMs` 调参） |
+| 设置层进入 | 360ms | 二次 EaseOut | 淡入 + 8px 上滑 + 缩放 0.96→1（`SettingsEnterScale` 调参，1=关闭缩放） |
+| 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑 + 缩放→0.98（`SettingsExitScale`）；设置页点工具时串行对齐（见下） |
 | 切回前台·左侧 | 淡入 280ms + 位移 500ms | KeySpline(0.16,1,0.3,1) | 工具栏从左滑入（X -220→0）；淡入先于位移完成（≈55% 时长） |
 | 切回前台·右侧 | 延迟 60ms + 淡入 300ms + 位移 540ms | KeySpline(0.16,1,0.3,1) | 工具页淡入 + 大幅上滑 100→0（对等左侧滑入感）；60ms 微错峰润色 |
 | 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
 | 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
-| 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移 |
+| 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移；展开时子项 25ms 间隔错落淡入（`GroupItemStaggerMs`=0 关闭，`GroupItemFadeMs` 调单条时长） |
 
 ## 设置层过渡（进出 + 串行对齐）
 
-**进入**：`EnterSettingsView`——淡入 + 8px 上滑 360ms EaseOut（进慢出快的节奏，关闭保持 150ms）；`_settingsAnimToken` 递增令牌，动画完成回调只认最后一次，防快速连点状态错乱。
+**进入**：`EnterSettingsView`——淡入 + 8px 上滑 + 缩放 0.96→1，360ms EaseOut（进慢出快的节奏，关闭保持 150ms；缩放与 ComboBox 下拉绽放同语言增加纵深感，`SettingsEnterScale`=1 关闭缩放）；`_settingsAnimToken` 递增令牌，动画完成回调只认最后一次，防快速连点状态错乱。
 
-**退出（Back 返回）**：下层内容区立即可见 + 设置层 150ms 淡出下滑，完成后折叠并复位（Opacity=1 / Y=0）。
+**退出（Back 返回）**：下层内容区立即可见 + 设置层 150ms 淡出下滑 + 缩至 0.98（`SettingsExitScale`），完成后折叠并复位（Opacity=1 / Y=0 / Scale=1）。**复位顺序关键**：先 `BeginAnimation(null)` 清掉 HoldEnd 保持值再写本地值，否则缩放复位被动画优先级压住不生效。进入动画必须显式 From（防读取到上次退场动画保持值）。缩放挂在 `SettingsLayerScale`（RenderTransform 内 ScaleTransform，位于 TranslateTransform 前）。
 
 **退出（设置页内点击工具）——串行对齐**：工具切换退场（200ms）期间下层内容区**保持折叠**——退场动画（标题区/旧工具淡出）在折叠容器内不可见（设置层 60% 半透明遮不住，实测会"标题栏闪一下消失"）；等 `TransitioningContentControl.ExitCompleted`（退场完成、新内容切入淡入起点）再显示下层 + 设置层 150ms 快速退场，露出正在淡入的新内容。
 
