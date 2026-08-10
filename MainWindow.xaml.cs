@@ -86,7 +86,6 @@ public partial class MainWindow : Window
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Win32Helper.EnableRoundedCorners(hwnd);         // 1. 圆角
-            EnableAcrylicBackdrop();                        // 2. Acrylic 毛玻璃（替代 Mica）
             Win32Helper.EnableDarkMode(hwnd);               // 3. 沉浸式深色模式
             Win32Helper.ExtendFrameIntoClientArea(hwnd);    // 4. 扩展帧到标题栏
 
@@ -104,6 +103,26 @@ public partial class MainWindow : Window
         {
             System.Diagnostics.Debug.WriteLine($"[MainWindow] DWM/Win32 初始化失败: {ex.Message}");
         }
+
+        // 2. Acrylic 毛玻璃：延迟到 WPF 首帧提交后启用——若在 Loaded 同步启用，DWM 生效会早于
+        // 首帧内容提交（渲染线程正忙初始化），窗口短暂显示无内容的纯毛玻璃（毫秒级闪过）。
+        // Rendering 首次触发后取消订阅，再以 Background 优先级执行（当前帧提交之后）
+        bool firstRenderHandled = false;
+        void EnableAcrylicAfterFirstFrame(object? _, EventArgs __)
+        {
+            if (firstRenderHandled) return;
+            firstRenderHandled = true;
+            CompositionTarget.Rendering -= EnableAcrylicAfterFirstFrame;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { EnableAcrylicBackdrop(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainWindow] Acrylic 初始化失败: {ex.Message}");
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+        CompositionTarget.Rendering += EnableAcrylicAfterFirstFrame;
 
         // ── 非 DWM 初始化（原在同一个 try 内，现独立执行，任一步失败不互拖）──
 
@@ -140,6 +159,23 @@ public partial class MainWindow : Window
 
         // 后台服务（悬浮窗自启；静默启动由 App.OnStartup 直接调用，此处幂等防重入）
         InitializeBackgroundServices();
+
+        // 遮罩内容（图标 + 文字容器）：套用工具切换的淡入上滑动画（2s CubicEase EaseOut）
+        var ease = EaseOut();
+        MaskContent.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(2000)) { EasingFunction = ease });
+        MaskContentTransform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(2000)) { EasingFunction = ease });
+
+        // 启动遮罩（测试）：纯黑停留 2s，再 500ms 淡出。黑色与 DWM 首帧空窗帧同色（无缝），
+        // Acrylic 已在幕后就绪（延迟方案），淡出时毛玻璃透出
+        var maskFade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(500))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            BeginTime = TimeSpan.FromMilliseconds(2000)   // 先停留 2s 测试
+        };
+        maskFade.Completed += (_, _) => StartupMask.Visibility = Visibility.Collapsed;
+        StartupMask.BeginAnimation(UIElement.OpacityProperty, maskFade);
     }
 
     /// <summary>
