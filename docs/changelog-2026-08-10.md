@@ -99,3 +99,18 @@
 - 审查修正：参数类级常量防双写漂移、`PreClearThenMinimizeAsync` try-finally 防标志卡死、发布流程文档化（`-c Release` 硬性要求）
 - 版本号 v1.7.0 → **v1.7.1**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
 - 测试 161/161 全绿
+
+---
+
+## 9. v1.7.2 发布（交互增强）
+
+> 界面细节质感批次：ToolTip 深色样式 + 侧栏按压缩放反馈 + 分组展开子项错落淡入 + 设置层进出缩放。
+
+### 变更
+
+- **ToolTip 深色样式**（App.xaml 隐式样式）：BgCard 底 + BorderSubtle 描边 + 6px 圆角 + 150ms 淡入，替换系统浅色默认样式（影响面仅 PasswordGenerator 搜索框一处，应用内菜单均走 ThemedMenuWindow）
+- **侧栏按压反馈**：导航项/分组头按下缩至 0.96（90ms EaseOut）、松开回弹（180ms），滑出取消点击兜底复位；`EnsureMutableScale` 防冻结实例（DataTemplate 中 `po:Freeze="False"` 不生效，静态 XAML 默认冻结 Freezable）
+- **分组展开错落淡入**：展开时子项 25ms 间隔逐条淡入（150ms/条，与 Clip 揭示同向生长）；`GroupItemStaggerMs`=0 关闭，调参集中类级常量区
+- **设置层进出缩放**：进入 0.96→1 / 退出→0.98（与 ComboBox 绽放同语言）；显式 From 防 HoldEnd 锁值、复位先清动画再写本地值
+- 版本号 v1.7.1 → **v1.7.2**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
+- 测试 161/161 全绿
