@@ -95,7 +95,7 @@ InitHalo():
 | `CustomScrollBar` | 深色滚动条（容器 16px，Thumb 居中：常态 6px 两侧各留 5px、展开 10px 各留 3px，不碰窗口边缘。四档：常态 #33FFFFFF → bar 悬停 #55 → thumb 悬停 #CC → 拖拽 Accent 绿 #CC76B580。导航区实例 `Margin="0,0,-3,0"` 右缩 3px，与内容区滚动条贴窗口右缘的圆角让位感对齐） |
 | （隐式 `ComboBox`） | 弹层自绘入场：弃系统 Slide；透明度 150ms 快到位 + 缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase（原点 0.5,0 从本体绽放；动画须显式 From 否则 HoldEnd 锁终值导致重播失效）。不加 DropShadow——透明 Popup 中四角会堆积暗色尖角 |
 | （隐式 `ToolTip`） | 深色样式（BgCard 底 + BorderSubtle 描边 + 6px 圆角，替换默认浅色系统样式）；Loaded 时 150ms 淡入。应用内右键菜单均走 `ThemedMenuWindow`（本样式不影响） |
-| `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐。⚠️ **进场完成清时钟须跳过 `_isExiting` 打断**（2026-08-11 快速连点回归）：Storyboard.Completed 是根时钟事件，进场子动画被退场替换后根时钟仍会触发 Completed——此时清时钟会误杀退场动画，`_isExiting` 永久 true 导致工具点击失效 + 设置层串行退出等待永不返回 |
+| `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐。⚠️ 本控件**无**动画完成清时钟（曾尝试，2026-08-11 快速连点回归后随机制整体回退）；知识留档：Storyboard.Completed 是根时钟事件，进场子动画被退场替换后根时钟仍会触发 Completed，若在此回调清时钟会误杀退场动画导致状态机卡死 |
 
 ## 动效参数总表（统一语言）
 
