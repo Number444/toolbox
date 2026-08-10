@@ -32,6 +32,15 @@ public partial class MainWindow : Window
     /// <summary>窗口曾进入后台（最小化/托盘隐藏），下次激活时播放切回动画</summary>
     private bool _wasBackground;
 
+    // ── 切回前台动画调参区（PlayReturnAnimations 与 SetReturnStartState 共享，
+    //    起点与动画 From 同源，避免改一处漂移另一处——首帧闪烁的根因之一）──
+    private const double ReturnLeftFrom = -220;   // 左栏起点 X
+    private const double ReturnRightFrom = 100;   // 右侧起点 Y
+    private const int ReturnFadeMs = 280;         // 不透明度时长（先于位移完成）
+    private const int ReturnLeftMoveMs = 500;     // 左栏位移时长
+    private const int ReturnRightMoveMs = 540;    // 右侧位移时长（幅度较小但缓落更长）
+    private const int ReturnRightDelayMs = 60;    // 右侧微错峰（0 = 完全同步）
+
     public MainWindow()
     {
         InitializeComponent();
@@ -291,12 +300,12 @@ public partial class MainWindow : Window
     {
         NavPane.BeginAnimation(UIElement.OpacityProperty, null);
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, null);
-        NavPaneTransform.X = -220;
+        NavPaneTransform.X = ReturnLeftFrom;
         NavPane.Opacity = 0;
 
         ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty, null);
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, null);
-        ContentPaneTransform.Y = 100;
+        ContentPaneTransform.Y = ReturnRightFrom;
         ContentScrollViewer.Opacity = 0;
     }
 
@@ -331,11 +340,17 @@ public partial class MainWindow : Window
     private async System.Threading.Tasks.Task PreClearThenMinimizeAsync()
     {
         _preClearMinimize = true;
-        _wasBackground = true;
-        SetReturnStartState();
-        await WaitForRenderedFramesAsync(2);   // 等清场帧进入 DWM 缓存（2 帧 ≈ 33ms，不可感知）
-        WindowState = WindowState.Minimized;   // WPF 走 ShowWindow，不经过 SC_MINIMIZE，无递归
-        _preClearMinimize = false;
+        try
+        {
+            _wasBackground = true;
+            SetReturnStartState();
+            await WaitForRenderedFramesAsync(2);   // 等清场帧进入 DWM 缓存（2 帧 ≈ 33ms，不可感知）
+            WindowState = WindowState.Minimized;   // WPF 走 ShowWindow，不经过 SC_MINIMIZE，无递归
+        }
+        finally
+        {
+            _preClearMinimize = false;   // 任何异常路径都复位，防最小化拦截永久失效（P1-7 精神）
+        }
     }
 
     /// <summary>等待 N 个渲染帧（CompositionTarget.Rendering 回调），确保视觉状态已提交</summary>
@@ -368,33 +383,26 @@ public partial class MainWindow : Window
     /// </summary>
     private void PlayReturnAnimations()
     {
-        // ── 调参区（改数字即可，无需动下面逻辑）──
-        const double LeftFrom = -220, RightFrom = 100;
-        const int FadeMs = 280;        // 不透明度时长（先于位移完成）
-        const int LeftMoveMs = 500;    // 左栏位移时长
-        const int RightMoveMs = 540;   // 右侧位移时长（幅度较小但缓落更长）
-        const int RightDelayMs = 60;   // 右侧微错峰（0 = 完全同步）
-
         var spline = new KeySpline(0.16, 1, 0.3, 1);
         var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
-        // 左侧：淡入 280ms，位移 500ms spline
+        // 左侧：淡入先于位移完成（280/500ms），位移 KeySpline emphasized 曲线
         NavPane.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(FadeMs)) { EasingFunction = fadeEase });
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs)) { EasingFunction = fadeEase });
         var leftMove = new DoubleAnimationUsingKeyFrames
-        { Duration = TimeSpan.FromMilliseconds(LeftMoveMs) };
-        leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(LeftFrom, KeyTime.FromPercent(0)));
+        { Duration = TimeSpan.FromMilliseconds(ReturnLeftMoveMs) };
+        leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnLeftFrom, KeyTime.FromPercent(0)));
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, leftMove);
 
-        // 右侧：延迟 60ms，淡入 300ms，位移 540ms spline
-        var rightDelay = TimeSpan.FromMilliseconds(RightDelayMs);
+        // 右侧：微错峰后淡入 + 位移，缓落更长
+        var rightDelay = TimeSpan.FromMilliseconds(ReturnRightDelayMs);
         ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(FadeMs + 20))
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs + 20))
             { EasingFunction = fadeEase, BeginTime = rightDelay });
         var rightMove = new DoubleAnimationUsingKeyFrames
-        { Duration = TimeSpan.FromMilliseconds(RightMoveMs), BeginTime = rightDelay };
-        rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(RightFrom, KeyTime.FromPercent(0)));
+        { Duration = TimeSpan.FromMilliseconds(ReturnRightMoveMs), BeginTime = rightDelay };
+        rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnRightFrom, KeyTime.FromPercent(0)));
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, rightMove);
     }

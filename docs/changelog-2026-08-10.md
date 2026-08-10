@@ -76,9 +76,26 @@
 - **触发**：`_wasBackground` 标志（最小化 / 关闭到托盘 / 静默驻留三处置位）+ `Activated` 触发；普通失焦不触发（不监听 Deactivated）
 - **节奏**：左侧保持从左向右滑入淡入（400ms/位移 420ms）；右侧仿左侧完整动画，方向从下到上（淡入 + 大幅上滑 Y 100→0）。曾试错峰 + QuinticEase 优化版（左侧先落位、右侧延迟 200ms），实测不理想已回退
 - **首帧闪烁修复**（录屏逐帧验证，Kimi 协作定稿）：还原瞬间先显完整界面→闪到起点。① 后台置位点同步置起点状态 + 还原显示前再设一次（双保险，DWM 缓存完整帧问题由此暴露）；② **清场帧拦截**（最终方案）：`MinimizePreClearHook` 拦下 `WM_SYSCOMMAND/SC_MINIMIZE` → 置起点 → `WaitForRenderedFramesAsync(2)` 等清场帧提交进 DWM 缓存 → 程序化最小化。还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。自建标题栏最小化按钮改调 `PreClearThenMinimizeAsync`（不走 SC_MINIMIZE）。边界：Win+D/Win+M 不经 SC_MINIMIZE，该路径首帧闪烁保留（系统级限制），由 StateChanged 兜底播动画；托盘/静默路径无 DWM 缓存问题（Hide 销毁表面）
+- **动效精调**（现代动效三原则）：① 位移曲线 KeySpline(0.16,1,0.3,1)（Apple/Fluent emphasized，起步干脆收尾柔，替代 CubicEase 偏硬尾段）；② 淡入先于位移完成（280/300ms ≈ 位移 55%）；③ 右侧 60ms 微错峰。左移 500ms / 右移 540ms。**审查修正**：参数提升为类级常量（Return* 前缀）与 `SetReturnStartState` 同源，防起点/动画 From 双写漂移；`PreClearThenMinimizeAsync` 加 try-finally 防标志位卡死
 
 ## 7. AppPaths 审查修复
 
 - 审查 AppPaths.cs 重构：4 个消费文件原值与 Release 常量逐一一致 ✓
 - 修复 3 处硬编码残留：`RemoteControlSettings` 反序列化兜底端口、`RemoteControlTool` 自动启动端口兜底（均改 `AppPaths.DefaultRemotePort`）、测试断言跟随常量（Debug=8091/Release=8090）
 - 架构文档同步：02-main-app 发布流程警告（必须 `-c Release`）、07-ui-system 切回动画小节 + 动效总表
+
+---
+
+## 8. v1.7.1 发布（版本迭代）
+
+> 切回前台入场动画 + 还原首帧闪烁修复（Kimi 清场帧方案）+ AppPaths Debug/Release 四重隔离。
+
+### 变更
+
+- **切回前台动画**：窗口从后台恢复（最小化/托盘/静默唤起）时，左侧工具栏从左向右滑入淡入、右侧工具页从下到上大幅上滑淡入；`_wasBackground` 三处置位 + `Activated` 触发，普通失焦不触发
+- **动效精调**（现代动效三原则）：KeySpline(0.16,1,0.3,1) emphasized 曲线、淡入先于位移完成（≈55% 时长）、右侧 60ms 微错峰；参数集中在类级常量区与起点状态同源
+- **还原首帧闪烁修复**：SC_MINIMIZE 清场帧拦截（`MinimizePreClearHook` 拦最小化 → 置起点 → 等 2 帧提交 DWM 缓存 → 程序化最小化），还原时 DWM 亮出空窗帧无缝衔接；标题栏按钮/任务栏/托盘三入口一致
+- **AppPaths 四重隔离**：Debug 构建数据目录/互斥名/唤起事件/端口（8091）/注册表值名与正式版完全隔离，开发调试版可与正式版同时运行互不污染
+- 审查修正：参数类级常量防双写漂移、`PreClearThenMinimizeAsync` try-finally 防标志卡死、发布流程文档化（`-c Release` 硬性要求）
+- 版本号 v1.7.0 → **v1.7.1**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
+- 测试 161/161 全绿
