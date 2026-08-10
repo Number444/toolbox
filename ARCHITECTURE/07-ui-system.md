@@ -39,6 +39,8 @@
 
 5. **目标清单管理**：只存元素引用不存坐标——每帧实时重算。`LayoutUpdated` → `_glowTargetsDirty` → 250ms 节流重建。工具切换/设置层显隐 → `ClearTargets()` 0ms 清除。
 
+6. **重绘触发与动画同步**：重绘仅三源——光标移动（`UpdateCursor` 去重）、滚动（`ScrollChanged` → `Refresh()`）、清单重建。RenderTransform 动画（设置层进出/工具切换/切回前台）不触发布局与滚动，光标静止时光圈会定格在动画起点：`HaloFrame` 内用 `DependencyPropertyHelper.GetValueSource(...).IsAnimated` 检测受跟踪动画（`IsAnyGlowTrackedAnimationActive`），活跃期逐帧 `Refresh()`。**闸门不可省**——无条件 `Refresh()` 的 `InvalidateVisual` 会自激产帧，把渲染循环永久钉在 60fps（旧实现已踩过并回退）。**HoldEnd 陷阱（2026-08-11 实测）**：动画自然完成后时钟进入 Filling 保持期，`IsAnimated` **仍为 true**——仅靠闸门查询不会自动关闭，必须同步清时钟：受跟踪动画完成时 `BeginAnimation(prop, null)`（值先回落本地值，`ClearClockOnCompleted` 辅助；TransitioningContentControl 进场/退场在控件内部清）。否则闸门永不关闭，与无条件 Refresh 同样把渲染循环钉在 60fps。**当前清单（9 项）**：`SettingsLayer.Opacity` / `SettingsLayerTransform.Y` / `SettingsLayerScale.ScaleX` / `NavPane.Opacity` / `NavPaneTransform.X` / `ContentScrollViewer.Opacity` / `ContentPaneTransform.Y` / `ContentTransitionControl.Opacity` / `TitleTransitionControl.Opacity`。**新增 RenderTransform 动画须两件事同时做**：① 元素/属性补进该清单；② 动画完成点补清时钟（否则闸门常开）。
+
 **配套样式变更**（App.xaml）：Button/ToggleButton 模板 Border → `CornerRadius="6"`；ComboBoxItem 模板 → `CornerRadius="4"` + `Margin="2,1"`。
 
 **设置开关**：`AppSettings.MouseHaloEnabled`（鼠标光晕）、`ControlGlowEnabled`（控件边缘发光），均默认 true。

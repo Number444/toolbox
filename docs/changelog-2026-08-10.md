@@ -112,5 +112,6 @@
 - **侧栏按压反馈**：导航项/分组头按下缩至 0.96（90ms EaseOut）、松开回弹（180ms），滑出取消点击兜底复位；`EnsureMutableScale` 防冻结实例（DataTemplate 中 `po:Freeze="False"` 不生效，静态 XAML 默认冻结 Freezable）
 - **分组展开错落淡入**：展开时子项 25ms 间隔逐条淡入（150ms/条，与 Clip 揭示同向生长）；`GroupItemStaggerMs`=0 关闭，调参集中类级常量区
 - **设置层进出缩放**：进入 0.96→1 / 退出→0.98（与 ComboBox 绽放同语言）；显式 From 防 HoldEnd 锁值、复位先清动画再写本地值
+- **光晕与动画同步（审查修复）**：播放 RenderTransform 动画时边缘发光光圈不再定格——`IsAnyGlowTrackedAnimationActive` 闸门检测受跟踪动画（`IsAnimated` 查询），活跃期逐帧 `Refresh()`。审查实测发现 **HoldEnd 陷阱**：动画完成后时钟进入 Filling 保持期 `IsAnimated` 仍为 true，闸门永不关闭会把渲染循环钉在 60fps——全部受跟踪动画完成点补清时钟（`ClearClockOnCompleted` / 回调内 `BeginAnimation(null)`），并补全清单遗漏的 NavPane/ContentScrollViewer 淡入。回归清单新增第 10 节（动画同步实测项）
 - 版本号 v1.7.1 → **v1.7.2**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
 - 测试 161/161 全绿

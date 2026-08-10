@@ -500,7 +500,7 @@
                         <StackPanel>
                             <!-- 工具标题区（与内容区同款两段式过渡：旧标题 200ms 淡出 → 新标题 400ms 淡入上滑，
                                  通过 Content=SelectedTool 复用 TransitioningContentControl，硬切消除） -->
-                            <helpers:TransitioningContentControl Content="{Binding SelectedTool}" SlideFromY="-8">
+                            <helpers:TransitioningContentControl x:Name="TitleTransitionControl" Content="{Binding SelectedTool}" SlideFromY="-8">
                                 <helpers:TransitioningContentControl.ContentTemplate>
                                     <DataTemplate>
                                         <StackPanel>

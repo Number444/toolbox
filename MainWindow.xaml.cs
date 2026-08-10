@@ -387,23 +387,29 @@ public partial class MainWindow : Window
         var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
         // 左侧：淡入先于位移完成（280/500ms），位移 KeySpline emphasized 曲线
-        NavPane.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs)) { EasingFunction = fadeEase });
+        // 四个动画均挂完成清时钟（ClearClockOnCompleted）：动画终值 = 本地默认值（0/XAML 默认），
+        // 清除后值无缝回落，IsAnimated 回 false——光晕闸门（IsAnyGlowTrackedAnimationActive）才能关闭
+        var leftFade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs)) { EasingFunction = fadeEase };
+        ClearClockOnCompleted(leftFade, NavPane, UIElement.OpacityProperty);
+        NavPane.BeginAnimation(UIElement.OpacityProperty, leftFade);
         var leftMove = new DoubleAnimationUsingKeyFrames
         { Duration = TimeSpan.FromMilliseconds(ReturnLeftMoveMs) };
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnLeftFrom, KeyTime.FromPercent(0)));
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
+        ClearClockOnCompleted(leftMove, NavPaneTransform, TranslateTransform.XProperty);
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, leftMove);
 
         // 右侧：微错峰后淡入 + 位移，缓落更长
         var rightDelay = TimeSpan.FromMilliseconds(ReturnRightDelayMs);
-        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs + 20))
-            { EasingFunction = fadeEase, BeginTime = rightDelay });
+        var rightFade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs + 20))
+        { EasingFunction = fadeEase, BeginTime = rightDelay };
+        ClearClockOnCompleted(rightFade, ContentScrollViewer, UIElement.OpacityProperty);
+        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty, rightFade);
         var rightMove = new DoubleAnimationUsingKeyFrames
         { Duration = TimeSpan.FromMilliseconds(ReturnRightMoveMs), BeginTime = rightDelay };
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnRightFrom, KeyTime.FromPercent(0)));
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
+        ClearClockOnCompleted(rightMove, ContentPaneTransform, TranslateTransform.YProperty);
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, rightMove);
     }
 
@@ -1201,17 +1207,23 @@ public partial class MainWindow : Window
 
         // 淡入 + 8px 上滑 + 轻微放大（360ms EaseOut，与 TransitioningContentControl 同参数族；
         // 缩放飞 0.96→1，与 ComboBox 下拉绽放同语言，增加纵深感）
+        // 动画完成清时钟（ClearClockOnCompleted）：进入动画终值 ≠ 本地值（Opacity 本地 0 / Y 本地 8），
+        // 须经 setLocal 补写后再清——HoldEnd 保持值让 IsAnimated 永久 true（光晕闸门不关）
         SettingsLayer.Opacity = 0;
         SettingsLayerTransform.Y = 8;
-        SettingsLayer.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
-        SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() });
+        var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() };
+        ClearClockOnCompleted(fadeIn, SettingsLayer, OpacityProperty, () => SettingsLayer.Opacity = 1);
+        SettingsLayer.BeginAnimation(OpacityProperty, fadeIn);
+        var slideIn = new DoubleAnimation(0, TimeSpan.FromMilliseconds(360)) { EasingFunction = EaseOut() };
+        ClearClockOnCompleted(slideIn, SettingsLayerTransform, TranslateTransform.YProperty, () => SettingsLayerTransform.Y = 0);
+        SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty, slideIn);
         if (SettingsEnterScale < 1.0)
         {
             // 显式 From：避免 BeginAnimation 读取到上次退场动画的保持值
             var grow = new DoubleAnimation(SettingsEnterScale, 1.0, TimeSpan.FromMilliseconds(360))
             { EasingFunction = EaseOut() };
+            ClearClockOnCompleted(grow, SettingsLayerScale, ScaleTransform.ScaleXProperty);
+            ClearClockOnCompleted(grow, SettingsLayerScale, ScaleTransform.ScaleYProperty);
             SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
             SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
         }
@@ -1252,7 +1264,11 @@ public partial class MainWindow : Window
                 SettingsLayer.Visibility = Visibility.Collapsed;
                 SettingsLayer.Opacity = 1;                 // 复位供下次进入
                 SettingsLayerTransform.Y = 0;
-                // 先清动画保持值再复位本地值（否则缩放复位被 HoldEnd 动画压住不生效）
+                // 清三个动画时钟（Opacity/Y/Scale）：HoldEnd 保持值让 IsAnimated 永久 true，
+                // 光晕闸门（IsAnyGlowTrackedAnimationActive）永不关闭；先清动画保持值再复位本地值
+                // （否则缩放复位被 HoldEnd 动画压住不生效）
+                SettingsLayer.BeginAnimation(OpacityProperty, null);
+                SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty, null);
                 SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
                 SettingsLayerScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
                 SettingsLayerScale.ScaleX = 1;
@@ -1526,6 +1542,49 @@ public partial class MainWindow : Window
         // 传原始光标位置（非插值滞后的 _haloPos），保证移出控件瞬时熄灭（0ms）；
         // EdgeGlowLayer 内部去重：光标静止时零重绘
         GlowLayer.UpdateCursor(pt, inside && glowOn);
+
+        // 边缘发光与 RenderTransform 动画同步：设置层进出/工具切换/切回前台等动画只走渲染层
+        // （无 LayoutUpdated/ScrollChanged），光标静止时 UpdateCursor 去重跳过重绘，光圈会定格在
+        // 动画起点。动画活跃期逐帧 Refresh 补齐。闸门必要性：不能无条件 Refresh——
+        // InvalidateVisual 自身产脏区会自激，把渲染循环永久钉在 60fps（旧实现已踩过并回退）。
+        // 动画结束后闸门关闭，本帧 Refresh 造成的最后一帧渲染过后循环照常休眠。
+        if (glowOn && IsAnyGlowTrackedAnimationActive())
+            GlowLayer.Refresh();
+    }
+
+    /// <summary>检测受跟踪元素的动画是否活跃（IsAnimated 查询，开销可忽略）。
+    /// 覆盖主窗口全部 RenderTransform/透明度动画源：设置层进出、工具标题与内容切换、切回前台；
+    /// 新增 RenderTransform 动画时把对应元素/属性补进此清单。
+    /// ⚠️ HoldEnd 陷阱（2026-08-11 实测）：动画自然完成后时钟进入 Filling 保持期，
+    /// IsAnimated 仍为 true——因此受跟踪动画必须在完成时清时钟
+    /// （ClearClockOnCompleted / 回调内 BeginAnimation(null)），否则闸门永不关闭、
+    /// 渲染循环被钉在 60fps 常驻。</summary>
+    private bool IsAnyGlowTrackedAnimationActive()
+    {
+        return IsAnimating(SettingsLayer, OpacityProperty)
+            || IsAnimating(SettingsLayerTransform, TranslateTransform.YProperty)
+            || IsAnimating(SettingsLayerScale, ScaleTransform.ScaleXProperty)
+            || IsAnimating(NavPane, OpacityProperty)
+            || IsAnimating(NavPaneTransform, TranslateTransform.XProperty)
+            || IsAnimating(ContentScrollViewer, OpacityProperty)
+            || IsAnimating(ContentPaneTransform, TranslateTransform.YProperty)
+            || IsAnimating(ContentTransitionControl, OpacityProperty)
+            || IsAnimating(TitleTransitionControl, OpacityProperty);
+    }
+
+    private static bool IsAnimating(DependencyObject target, DependencyProperty property)
+        => DependencyPropertyHelper.GetValueSource(target, property).IsAnimated;
+
+    /// <summary>动画自然完成时清时钟并回落本地值：HoldEnd 保持值会让动画表达式永久挂载、
+    /// IsAnimated 永久为 true（光晕闸门因此永不关闭，2026-08-11 实测验证）。
+    /// 调用方须保证本地值 = 动画终值（不一致时经 setLocal 补写），清除后值无缝回落</summary>
+    private static void ClearClockOnCompleted(DoubleAnimationBase anim, IAnimatable target, DependencyProperty property, Action? setLocal = null)
+    {
+        anim.Completed += (_, _) =>
+        {
+            setLocal?.Invoke();
+            target.BeginAnimation(property, null);
+        };
     }
 
     /// <summary>界面/工具切换时立即销毁全部发光（0ms 残留），下一帧重建目标清单</summary>

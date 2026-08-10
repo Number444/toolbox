@@ -60,7 +60,7 @@ public class MyNewTool : ITool
 ## 关键规则
 
 - **UI 构建**：卡片标准模板（`BuildCard`）、按钮规范（标准/危险）、状态反馈模式（✅/❌/⚠️），见规范第四节
-- **特效兼容**：Button/TextBox/ComboBox 自动发光；卡片 Border 手动标记；改动 EdgeGlowLayer 必读回归清单
+- **特效兼容**：Button/TextBox/ComboBox 自动发光；卡片 Border 手动标记；改动 EdgeGlowLayer 必读回归清单；主窗口新增动画须补光晕跟踪清单 + 完成清时钟（见 07-ui-system「重绘触发与动画同步」）
 - **异常处理**：Process.Start / 文件 IO / 注册表必须 try-catch + 用户可见错误
 - **禁止事项**：自定义颜色常量、自绘右键菜单、手写 JSON、根元素外包 ScrollViewer、非标准间距
 - **复用边界**：只能使用/创建公共或本工具私有的方法和接口；不得调用其他工具类的内部方法、不得抽取其他工具逻辑

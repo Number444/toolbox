@@ -400,6 +400,12 @@ private static Style? FindResourceStyle(string key)
 > 任何改动它或其调用方（hover 跟踪、ScrollViewer、裁剪）前，必读并按
 > `docs/EDGE_GLOW_REGRESSION_CHECKLIST.md` 逐项实测后方可交付。
 > 复选框等小控件享有更大的感应半径（`CheckBoxRangeScale`），属预期行为。
+>
+> **动画兼容**：主窗口新增 RenderTransform/透明度动画时（如自定义控件内部动画），若动画期间
+> 光标静止、元素轮廓会变，必须把对应元素/属性补进 `MainWindow.IsAnyGlowTrackedAnimationActive()`
+> 清单，并在动画完成点清时钟（`ClearClockOnCompleted` 或回调内 `BeginAnimation(prop, null)`）——
+> 只补清单不清时钟 = 闸门永不关闭、渲染循环 60fps 常驻；只清时钟不补清单 = 动画期间光圈定格。
+> 详见 `ARCHITECTURE/07-ui-system.md`「重绘触发与动画同步」。
 
 ### 5.2 鼠标跟随光晕（Mouse Halo）
 
