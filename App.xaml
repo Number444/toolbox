@@ -438,14 +438,62 @@
                             </Border>
                             <Popup x:Name="PART_Popup"
                                    AllowsTransparency="True"
-                                   PopupAnimation="Slide"
+                                   PopupAnimation="None"
                                    IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                    Placement="Bottom">
+                                <!-- 自绘入场（替代系统 Slide）：透明度 150ms 快速到位 +
+                                     缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase 强减速，
+                                     缩放原点 (0.5,0) → 从 ComboBox 本体"生长"而出的绽放感。
+                                     注意：不要给弹层加 DropShadowEffect——透明 Popup 中阴影会在
+                                     四角堆积成暗色尖角（已实测翻车移除），层次靠 1px 描边区分 -->
                                 <Border Background="{StaticResource BgSurfaceBrush}"
                                         BorderBrush="{StaticResource BorderSubtleBrush}"
                                         BorderThickness="1"
                                         CornerRadius="5"
-                                        MaxHeight="200">
+                                        MaxHeight="200"
+                                        Opacity="0"
+                                        RenderTransformOrigin="0.5,0">
+                                    <Border.RenderTransform>
+                                        <TransformGroup>
+                                            <ScaleTransform ScaleX="0.96" ScaleY="0.96"/>
+                                            <TranslateTransform Y="-6"/>
+                                        </TransformGroup>
+                                    </Border.RenderTransform>
+                                    <Border.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <!-- 透明度快速到位，变换随后缓缓收定（分层时长是"优雅感"的关键）。
+                                                         必须显式 From：否则 FillBehavior=HoldEnd 把终值锁在元素上，
+                                                         第二次起每次打开都是"终值→终值"，动画形同失效 -->
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                     From="0" To="1" Duration="0:0:0.15">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuadraticEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleX)"
+                                                                     From="0.96" To="1" Duration="0:0:0.24">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuinticEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TransformGroup.Children)[0].(ScaleTransform.ScaleY)"
+                                                                     From="0.96" To="1" Duration="0:0:0.24">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuinticEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TransformGroup.Children)[1].(TranslateTransform.Y)"
+                                                                     From="-6" To="0" Duration="0:0:0.24">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuinticEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Border.Triggers>
                                     <ScrollViewer>
                                         <ItemsPresenter x:Name="ItemsPresenter"
                                                         KeyboardNavigation.DirectionalNavigation="Contained"
@@ -511,11 +559,12 @@
                     <ControlTemplate TargetType="helpers:CustomScrollBar">
                         <Border Background="Transparent"
                                 SnapsToDevicePixels="True">
-                            <!-- Thumb 轨道区：10px 条居中于 12px 的 Width（白色高光最浅档 20%） -->
+                            <!-- Thumb 轨道区：常态 6px 细条居中于 12px 容器，hover 展开 10px
+                                 （宽度过渡由 CustomScrollBar.UpdateThumbVisual 驱动） -->
                             <Border x:Name="ThumbElement"
                                     Background="#33FFFFFF"
-                                    CornerRadius="5"
-                                    Width="10"
+                                    CornerRadius="3"
+                                    Width="6"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Top"
                                     SnapsToDevicePixels="True"/>

@@ -46,11 +46,11 @@ public class CustomScrollBar : Control
         set => SetValue(ThumbLengthRatioProperty, value);
     }
 
-    /// <summary>Thumb 默认颜色</summary>
+    /// <summary>Thumb 默认颜色（#33 = 20% 白，与模板初始值/文档一致；原 0x21 是 13% 导致常态档偏暗半档）</summary>
     public static readonly DependencyProperty ThumbColorProperty =
         DependencyProperty.Register(
             nameof(ThumbColor), typeof(Color), typeof(CustomScrollBar),
-            new PropertyMetadata(Color.FromArgb(0x21, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
+            new PropertyMetadata(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
 
     public Color ThumbColor
     {
@@ -58,11 +58,11 @@ public class CustomScrollBar : Control
         set => SetValue(ThumbColorProperty, value);
     }
 
-    /// <summary>Thumb 悬停颜色</summary>
+    /// <summary>Thumb 悬停颜色（#CC = 80% 白：Thumb 是细条且被光标光晕覆盖，alpha 差距必须 ≥40% 才肉眼可辨）</summary>
     public static readonly DependencyProperty ThumbHoverColorProperty =
         DependencyProperty.Register(
             nameof(ThumbHoverColor), typeof(Color), typeof(CustomScrollBar),
-            new PropertyMetadata(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
+            new PropertyMetadata(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
 
     public Color ThumbHoverColor
     {
@@ -76,8 +76,16 @@ public class CustomScrollBar : Control
 
     private Border? _thumbElement;
     private bool _isDragging;
+    private bool _isBarHovered;    // 鼠标在整条滚动条上（Win11 细条 hover 展开）
+    private bool _isThumbHovered;
     private Point _dragStartPoint;
     private double _scrollStartOffset;
+
+    /// <summary>Bar 悬停时的中间档 Thumb 颜色（比 ThumbColor 亮、比 ThumbHoverColor 暗）</summary>
+    private static readonly Color BarHoverColor = Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF);
+
+    private const double ThumbWidthNormal = 6;
+    private const double ThumbWidthExpanded = 10;
 
     #endregion
 
@@ -141,16 +149,55 @@ public class CustomScrollBar : Control
 
     #region Thumb 拖拽
 
+    /// <summary>鼠标进入整条滚动条（含轨道空白区）→ 细条展开 + 中间档提亮</summary>
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        _isBarHovered = true;
+        UpdateThumbVisual(animate: true);
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _isBarHovered = false;
+        UpdateThumbVisual(animate: true);
+    }
+
     private void OnThumbMouseEnter(object? sender, MouseEventArgs e)
     {
-        if (!_isDragging && _thumbElement != null)
-            _thumbElement.Background = new SolidColorBrush(ThumbHoverColor);
+        _isThumbHovered = true;
+        UpdateThumbVisual(animate: true);
     }
 
     private void OnThumbMouseLeave(object? sender, MouseEventArgs e)
     {
-        if (!_isDragging && _thumbElement != null)
-            _thumbElement.Background = new SolidColorBrush(ThumbColor);
+        _isThumbHovered = false;
+        UpdateThumbVisual(animate: true);
+    }
+
+    /// <summary>按当前交互状态（拖拽/悬停 Thumb > 悬停 Bar > 常态）刷新 Thumb 颜色与宽度</summary>
+    private void UpdateThumbVisual(bool animate)
+    {
+        if (_thumbElement == null) return;
+
+        var color = (_isDragging || _isThumbHovered) ? ThumbHoverColor
+                  : _isBarHovered ? BarHoverColor
+                  : ThumbColor;
+        _thumbElement.Background = new SolidColorBrush(color);
+
+        double targetWidth = (_isDragging || _isBarHovered) ? ThumbWidthExpanded : ThumbWidthNormal;
+        if (animate)
+        {
+            _thumbElement.BeginAnimation(WidthProperty, new DoubleAnimation(
+                targetWidth, TimeSpan.FromMilliseconds(150))
+            { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        }
+        else
+        {
+            _thumbElement.BeginAnimation(WidthProperty, null);
+            _thumbElement.Width = targetWidth;
+        }
     }
 
     private void OnThumbMouseDown(object? sender, MouseButtonEventArgs e)
@@ -165,8 +212,8 @@ public class CustomScrollBar : Control
         _thumbElement.MouseMove += OnThumbMouseMove;
         _thumbElement.MouseLeftButtonUp += OnThumbMouseUp;
 
-        // 拖拽中提亮
-        _thumbElement.Background = new SolidColorBrush(ThumbHoverColor);
+        // 拖拽中提亮 + 保持展开宽度
+        UpdateThumbVisual(animate: true);
         e.Handled = true;
     }
 
@@ -201,7 +248,7 @@ public class CustomScrollBar : Control
             _thumbElement.ReleaseMouseCapture();
             _thumbElement.MouseMove -= OnThumbMouseMove;
             _thumbElement.MouseLeftButtonUp -= OnThumbMouseUp;
-            _thumbElement.Background = new SolidColorBrush(ThumbColor);
+            UpdateThumbVisual(animate: true);
         }
 
         e.Handled = true;
@@ -255,10 +302,7 @@ public class CustomScrollBar : Control
 
     private void ApplyVisualProperties()
     {
-        if (_thumbElement != null)
-        {
-            _thumbElement.Background = new SolidColorBrush(ThumbColor);
-        }
+        UpdateThumbVisual(animate: false);
     }
 
     private static void OnVisualPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

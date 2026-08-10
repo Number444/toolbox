@@ -168,10 +168,16 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="🔍"
-                                       FontSize="14"
-                                       VerticalAlignment="Center"
-                                       Margin="4,0,6,0"/>
+                            <!-- 矢量放大镜（替换 emoji，与标题栏齿轮同风格） -->
+                            <Path Data="M0.75,5.5 a4.75,4.75 0 1,0 9.5,0 a4.75,4.75 0 1,0 -9.5,0 M8.9,8.9 L13.5,13.5"
+                                  Stroke="{StaticResource TextSecondaryBrush}"
+                                  StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  Width="13" Height="13"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Center"
+                                  Margin="4,0,7,0"/>
                             <Grid Grid.Column="1">
                                 <!-- 输入框（提亮背景） -->
                                 <TextBox x:Name="SearchInput"
@@ -203,6 +209,37 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                                <!-- focus 底部 Accent 绿线（Win11 文本框语言；120ms 淡入 / 150ms 淡出） -->
+                                <Border Height="2"
+                                        VerticalAlignment="Bottom"
+                                        Margin="2,0"
+                                        CornerRadius="1"
+                                        Background="{StaticResource AccentBrush}"
+                                        Opacity="0"
+                                        IsHitTestVisible="False">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsFocused, ElementName=SearchInput}" Value="True">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                </Border>
                             </Grid>
                         </Grid>
                     </Border>
@@ -258,7 +295,7 @@
                             </Border>
 
                             <!-- 分组列表 -->
-                            <ItemsControl ItemsSource="{Binding VisibleGroups}">
+                            <ItemsControl x:Name="NavGroupsControl" ItemsSource="{Binding VisibleGroups}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="m:ToolGroup">
                                         <StackPanel>
@@ -392,6 +429,26 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- 搜索无结果空态（分组集合为空时显示） -->
+                            <TextBlock Text="无匹配工具"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Top"
+                                       Margin="0,24,0,0"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasItems, ElementName=NavGroupsControl}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
                     </ScrollViewer>
                     <helpers:CustomScrollBar Grid.Row="1" Grid.Column="1"
