@@ -18,8 +18,8 @@ public class TransitioningContentControl : ContentControl
     {
         RenderTransform = new TranslateTransform();
 
-        // 200ms，CubicEase EaseOut：淡入 + 上滑同步进行
-        var duration = new Duration(TimeSpan.FromMilliseconds(200));
+        // 400ms，CubicEase EaseOut：淡入 + 上滑同步进行
+        var duration = new Duration(TimeSpan.FromMilliseconds(400));
         IEasingFunction ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
         var fadeIn = new DoubleAnimation
