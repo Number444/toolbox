@@ -357,25 +357,46 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 从后台切回前台动画：左侧工具栏保持从左向右滑入淡入（不动）；右侧工具页仿左侧的完整
-    /// 动画形式（淡入 + 大幅滑入），方向为从下到上（Y 100→0，约内容区高度 1/4，对等左侧整列滑入感）。
-    /// 双侧同步 400ms CubicEase EaseOut；纯 RenderTransform/Opacity，无布局抖动。
+    /// 从后台切回前台动画：左侧工具栏从左向右滑入淡入；右侧工具页仿左侧的完整动画形式
+    /// （淡入 + 大幅滑入），方向从下到上（Y 100→0）。纯 RenderTransform/Opacity，无布局抖动。
     /// 显式 From——常态值是 1/0，无 From 则动画原地不动（ComboBox 弹层同款教训）。
+    /// 2026-08-10 精调（现代动效三原则）：
+    /// ① 曲线 KeySpline(0.16,1 → 0.3,1) = CSS cubic-bezier(.16,1,.3,1)（Apple/Fluent emphasized），
+    ///    起步干脆、收尾长而柔——替代 CubicEase EaseOut（尾段均匀偏硬）；
+    /// ② 不透明度先于位移完成（≈55% 时长）：淡入早落定、运动继续缓落；
+    /// ③ 右侧 60ms 微错峰（润色级，非 200ms 大错峰——后者实测不理想已回退过）。
     /// </summary>
     private void PlayReturnAnimations()
     {
-        var ease = EaseOut();
-        var ms = TimeSpan.FromMilliseconds(400);
+        // ── 调参区（改数字即可，无需动下面逻辑）──
+        const double LeftFrom = -220, RightFrom = 100;
+        const int FadeMs = 280;        // 不透明度时长（先于位移完成）
+        const int LeftMoveMs = 500;    // 左栏位移时长
+        const int RightMoveMs = 540;   // 右侧位移时长（幅度较小但缓落更长）
+        const int RightDelayMs = 60;   // 右侧微错峰（0 = 完全同步）
 
+        var spline = new KeySpline(0.16, 1, 0.3, 1);
+        var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+        // 左侧：淡入 280ms，位移 500ms spline
         NavPane.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, ms) { EasingFunction = ease });
-        NavPaneTransform.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(-220, 0, TimeSpan.FromMilliseconds(420)) { EasingFunction = ease });
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(FadeMs)) { EasingFunction = fadeEase });
+        var leftMove = new DoubleAnimationUsingKeyFrames
+        { Duration = TimeSpan.FromMilliseconds(LeftMoveMs) };
+        leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(LeftFrom, KeyTime.FromPercent(0)));
+        leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
+        NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, leftMove);
 
+        // 右侧：延迟 60ms，淡入 300ms，位移 540ms spline
+        var rightDelay = TimeSpan.FromMilliseconds(RightDelayMs);
         ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, ms) { EasingFunction = ease });
-        ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(100, 0, ms) { EasingFunction = ease });
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(FadeMs + 20))
+            { EasingFunction = fadeEase, BeginTime = rightDelay });
+        var rightMove = new DoubleAnimationUsingKeyFrames
+        { Duration = TimeSpan.FromMilliseconds(RightMoveMs), BeginTime = rightDelay };
+        rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(RightFrom, KeyTime.FromPercent(0)));
+        rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
+        ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, rightMove);
     }
 
     /// <summary>列表重建（搜索过滤等）后恢复导航状态。去抖：Clear+Add 触发多次事件，

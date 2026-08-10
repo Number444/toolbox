@@ -128,7 +128,7 @@ InitHalo():
 
 **触发机制**：`_wasBackground` 标志 + `Activated` 事件。置位点仅三处——最小化（StateChanged）、关闭到托盘（OnClosing 隐藏成功）、静默驻留（托盘创建成功）。**不监听 Deactivated**：点悬浮窗/系统弹窗导致的普通失焦不触发；正常启动不播放（启动遮罩链负责入场）。
 
-**节奏**：双侧同步 400ms CubicEase EaseOut（与工具切换进场同语言），左侧位移 420ms 稍缓收尾。右侧为仿左侧的完整动画（淡入 + 大幅上滑 Y 100→0，方向从下到上，幅度对等左侧整列滑入感）。曾尝试错峰 + QuinticEase 优化版（左侧先落位、右侧延迟 200ms），实测不理想已回退（2026-08-10）。
+**节奏**：2026-08-10 精调为现代动效三原则——① 位移曲线 `KeySpline(0.16,1 → 0.3,1)`（= CSS `cubic-bezier(.16,1,.3,1)`，Apple/Fluent emphasized，起步干脆、收尾长而柔，替代 CubicEase EaseOut 的偏硬尾段）；② 不透明度先于位移完成（淡入 280/300ms ≈ 位移时长的 55%，运动继续缓落）；③ 右侧 60ms 微错峰润色。位移时长左侧 500ms / 右侧 540ms。参数集中在 `PlayReturnAnimations()` 顶部常量区（LeftFrom/RightFrom/FadeMs/LeftMoveMs/RightMoveMs/RightDelayMs，RightDelayMs=0 回完全同步）。曾尝试 200ms 大错峰 + QuinticEase（左侧先落位、右侧延迟），实测不理想已回退（2026-08-10）。
 
 **实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；右侧动画只作用于 ContentScrollViewer（不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
 
