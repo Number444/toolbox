@@ -50,6 +50,7 @@ public partial class MainWindow : Window
         // （重建后新模板实例：展开组 Height 归 0、箭头角度归零、选中 Tag 丢失、高亮位置漂移，
         //   由 RunNavigationRefresh 一并恢复，见下方方法定义）
         if (DataContext is ViewModels.MainViewModel navVm)
+        {
             navVm.VisibleGroups.CollectionChanged += (_, _) =>
             {
                 _toolBorders.Clear();
@@ -58,6 +59,15 @@ public partial class MainWindow : Window
                 Dispatcher.BeginInvoke(new Action(RunNavigationRefresh),
                     System.Windows.Threading.DispatcherPriority.Background);
             };
+
+            // 工具切换（含搜索选中）时内容区滚动回顶：
+            // 否则从长工具底部切到另一长工具，新内容从旧滚动位置（中间）开始显示
+            navVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ViewModels.MainViewModel.SelectedTool))
+                    ContentScrollViewer.ScrollToVerticalOffset(0);
+            };
+        }
 
         // 窗口加载后：Win11 外观 + 首次显示才需要的 UI 初始化
         // （静默启动不 Show 不触发 Loaded，首次从托盘恢复显示时自然执行）
@@ -919,22 +929,43 @@ public partial class MainWindow : Window
     {
         int token = ++_settingsAnimToken;
 
-        // 下层内容区立即露出，设置层自身渐隐 + 下滑 150ms EaseIn，完成后才折叠（无"空窗"）
-        ContentScrollViewer.Visibility = Visibility.Visible;
         SettingsLayer.IsHitTestVisible = false;   // 淡出期间挡点击，避免误触层内控件
 
-        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() };
-        fade.Completed += (_, _) =>
+        // 内容切换退场进行中（设置页期间点击工具）：下层内容区保持折叠不显示——
+        // 标题区/旧工具的退场动画在折叠容器内不可见（设置层 60% 半透明遮不住，
+        // 实测会"标题栏闪一下消失"）；等退场完成（ExitCompleted）再显示内容区并快速退场，
+        // 露出正在淡入的新内容
+        if (ContentTransitionControl.IsExiting)
         {
-            if (token != _settingsAnimToken) return;   // 期间又进入了设置页，放弃本次收尾
-            SettingsLayer.Visibility = Visibility.Collapsed;
-            SettingsLayer.Opacity = 1;                 // 复位供下次进入
-            SettingsLayerTransform.Y = 0;
-            SettingsLayer.IsHitTestVisible = true;
-        };
-        SettingsLayer.BeginAnimation(OpacityProperty, fade);
-        SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(8, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() });
+            ContentTransitionControl.ExitCompleted += StartSettingsExit;
+            return;
+        }
+
+        // 无内容切换（Back 返回等）：下层立即露出，设置层自身渐隐 + 下滑 150ms
+        ContentScrollViewer.Visibility = Visibility.Visible;
+        StartSettingsExit();
+
+        void StartSettingsExit()
+        {
+            ContentTransitionControl.ExitCompleted -= StartSettingsExit;   // 一次性订阅
+            if (token != _settingsAnimToken) return;   // 等待期间又进入了设置页，放弃本次收尾
+
+            // 退场完成（仅等退场路径）：此刻新内容已切入、正在淡入起点，可以露出下层
+            ContentScrollViewer.Visibility = Visibility.Visible;
+
+            var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() };
+            fade.Completed += (_, _) =>
+            {
+                if (token != _settingsAnimToken) return;
+                SettingsLayer.Visibility = Visibility.Collapsed;
+                SettingsLayer.Opacity = 1;                 // 复位供下次进入
+                SettingsLayerTransform.Y = 0;
+                SettingsLayer.IsHitTestVisible = true;
+            };
+            SettingsLayer.BeginAnimation(OpacityProperty, fade);
+            SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(8, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() });
+        }
 
         // 恢复高亮到当前选中工具（设置页期间可能已通过导航点击/插件跳转切换了选中项，
         // 必须用 vm.SelectedTool 而非进入时保存的旧引用，否则高亮会被拽回旧工具）

@@ -21,6 +21,12 @@ public class TransitioningContentControl : ContentControl
     private bool _suppressContentChange;  // 回写 Content 时抑制 OnContentChanged 递归
     private readonly DoubleAnimation _slideUpAnimation;
 
+    /// <summary>退场动画进行中（设置层退场需等它完成再启动，保持全程遮挡不露馅）</summary>
+    public bool IsExiting => _isExiting;
+
+    /// <summary>退场动画完成（旧内容已淡出、新内容即将切入时触发；含内容被清空的路径）</summary>
+    public event Action? ExitCompleted;
+
     /// <summary>进场位移起始 Y（px）。默认 8 = 从下方上滑生长；负值 = 从上方下滑落下（如工具标题区，与内容区形成对向关系）</summary>
     public static readonly DependencyProperty SlideFromYProperty =
         DependencyProperty.Register(
@@ -119,6 +125,7 @@ public class TransitioningContentControl : ContentControl
     private void OnExitCompleted(object? sender, EventArgs e)
     {
         _isExiting = false;
+        ExitCompleted?.Invoke();
         var next = _pendingContent;
         _pendingContent = null;
 
