@@ -20,7 +20,7 @@
 | Win32Helper.cs | Win32 业务封装（圆角/深色模式/帧扩展/窗口查找 + WndProc 消息钩子；P/Invoke 声明统一在 Core 的 Win32Native） |
 | SystemTrayHelper.cs | 纯 Win32 系统托盘图标（不依赖 WinForms） |
 | CustomScrollBar.cs | 自定义迷你滚动条（深色主题，替代系统 ScrollBar） |
-| TransitioningContentControl.cs | 内容切换淡入动画控件 |
+| TransitioningContentControl.cs | 内容切换过渡控件（旧内容 200ms 淡出 → 新内容 400ms 淡入+滑入，退场期间回写旧内容实现真正先后交接；`SlideFromY` 控制滑入方向：默认 8 上滑，工具标题区用 -8 下滑形成对向关系） |
 | TextBoxContextMenuHelper.cs | 统一深色主题 TextBox 右键菜单 |
 
 > ⚠️ 主程序专用：`Win32Helper` / `CustomScrollBar` / `TransitioningContentControl` 位于主程序，插件层仅引用 Core，无法访问（避免循环依赖）。

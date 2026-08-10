@@ -494,11 +494,23 @@
                                             </BeginStoryboard>
                                         </EventTrigger>
                                     </Border.Triggers>
-                                    <ScrollViewer>
-                                        <ItemsPresenter x:Name="ItemsPresenter"
-                                                        KeyboardNavigation.DirectionalNavigation="Contained"
-                                                        SnapsToDevicePixels="True"/>
-                                    </ScrollViewer>
+                                    <!-- 弹层内滚动同样用自定义条（系统亮色条在深色弹层里扎眼） -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ScrollViewer x:Name="PopupScrollViewer"
+                                                      Grid.Column="0"
+                                                      VerticalScrollBarVisibility="Hidden">
+                                            <ItemsPresenter x:Name="ItemsPresenter"
+                                                            KeyboardNavigation.DirectionalNavigation="Contained"
+                                                            SnapsToDevicePixels="True"/>
+                                        </ScrollViewer>
+                                        <helpers:CustomScrollBar Grid.Column="1"
+                                                                 Width="12"
+                                                                 TargetScrollViewer="{Binding ElementName=PopupScrollViewer}"/>
+                                    </Grid>
                                 </Border>
                             </Popup>
                         </Grid>

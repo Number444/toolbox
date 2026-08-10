@@ -477,28 +477,37 @@
                                   VerticalScrollBarVisibility="Hidden"
                                   Padding="32,16">
                         <StackPanel>
-                            <!-- 当前工具标题 -->
-                            <TextBlock Text="{Binding SelectedToolName}"
-                                       FontSize="22"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       Margin="0,0,0,4"/>
-
-                            <!-- 当前工具描述（为空时整块折叠，不占布局空间） -->
-                            <TextBlock Text="{Binding SelectedToolDescription}"
-                                       FontSize="13"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,0,10">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding SelectedToolDescription}" Value="">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
+                            <!-- 工具标题区（与内容区同款两段式过渡：旧标题 200ms 淡出 → 新标题 400ms 淡入上滑，
+                                 通过 Content=SelectedTool 复用 TransitioningContentControl，硬切消除） -->
+                            <helpers:TransitioningContentControl Content="{Binding SelectedTool}" SlideFromY="-8">
+                                <helpers:TransitioningContentControl.ContentTemplate>
+                                    <DataTemplate>
+                                        <StackPanel>
+                                            <!-- 当前工具标题 -->
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="22"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       Margin="0,0,0,4"/>
+                                            <!-- 当前工具描述（为空时整块折叠，不占布局空间） -->
+                                            <TextBlock Text="{Binding Description}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Margin="0,0,0,10">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Description}" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </helpers:TransitioningContentControl.ContentTemplate>
+                            </helpers:TransitioningContentControl>
 
                             <!-- 分隔线 -->
                             <Rectangle Height="1"
@@ -523,9 +532,21 @@
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="SettingsLayerTransform" Y="0"/>
                         </Border.RenderTransform>
-                        <ScrollViewer x:Name="SettingsScrollViewer" VerticalScrollBarVisibility="Auto">
-                            <local:SettingsView x:Name="SettingsViewControl"/>
-                        </ScrollViewer>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 自定义滚动条替代系统条（与导航/内容区同款，原为系统默认亮色样式） -->
+                            <ScrollViewer x:Name="SettingsScrollViewer"
+                                          Grid.Column="0"
+                                          VerticalScrollBarVisibility="Hidden">
+                                <local:SettingsView x:Name="SettingsViewControl"/>
+                            </ScrollViewer>
+                            <helpers:CustomScrollBar Grid.Column="1"
+                                                     Width="12"
+                                                     TargetScrollViewer="{Binding ElementName=SettingsScrollViewer}"/>
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>
