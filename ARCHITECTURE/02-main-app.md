@@ -9,7 +9,7 @@
 | App.xaml | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6） |
 | App.xaml.cs | 单实例互斥 + 三层全局异常捕获 + crash.log（2MB 轮转存档） |
 | MainWindow.xaml | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
-| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 鼠标光晕 + 边缘发光集成 |
+| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 设置层进出过渡（淡入上滑/渐隐）+ 鼠标光晕 + 边缘发光集成 |
 | AssemblyInfo.cs | 程序集信息 |
 | Toolbox.ico | 应用图标 |
 

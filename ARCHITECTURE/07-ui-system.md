@@ -71,7 +71,7 @@ InitHalo():
 | `BgCardBrush` | `#323232` | 卡片/输入框背景 |
 | `BgHoverBrush` | `#3A3A3A` | 悬停高亮 |
 | `AccentBrush` | `#76B580` | 主色调（按钮默认背景、ToggleSwitch 选中色） |
-| `AccentHoverBrush` | `#92CD9B` | 按钮悬停 |
+| `AccentHoverBrush` | `#92CD9B` | 按钮悬停提亮参考值（WPF 端已改白叠层法不再直接引用；HTML 控制面板色板对齐用） |
 | `TextPrimaryBrush` | `#F0F0F0` | 主文字 |
 | `TextSecondaryBrush` | `#999999` | 次要/描述文字 |
 | `BorderSubtleBrush` | `#3F3F3F` | 分隔线/边框 |
@@ -83,10 +83,13 @@ InitHalo():
 
 | 样式 Key | 说明 |
 |----------|------|
+| （隐式 `Button`） | Accent 绿主按钮：hover/press 为白 10%/黑 12% 叠层 90~120ms 淡变（保留各按钮自身色调，红按钮不再 hover 变绿）+ 0.97 按压缩放 |
+| `StandardButtonStyle` | 次级按钮（BgSurface 灰底 + 1px BorderSubtle 描边）：导航/取消等非主操作用，hover 白叠层减半档 6%，其余同上 |
 | `WindowButtonStyle` | 46x38 透明→#3A3A3A 标题栏按钮，内 Border CornerRadius=0,0,6,6（异径圆角） |
 | `CloseButtonStyle` | 继承+悬停#E81123 关闭按钮 |
-| `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画） |
-| `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用） |
+| `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画，轨道颜色同步渐变 #45475A↔#76B580） |
+| `CapsuleToggleStyle` | 纯开关胶囊（60x26，悬浮窗工具用，动画同 ToggleSwitchStyle） |
+| `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用；勾选时方框底色/描边 0.2s 渐变，对勾瞬时出现） |
 | `CustomScrollBar` | 深色滚动条（容器 12px，滑块 10px 圆角 5px，#33FFFFFF 20% 白色高光） |
 
 ## 相关文档

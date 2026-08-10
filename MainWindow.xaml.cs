@@ -22,7 +22,6 @@ public partial class MainWindow : Window
     private bool _isShuttingDown;
     private bool _selfCheckShown;
     private bool _backgroundServicesInitialized;
-    private Models.ITool? _savedSelectedTool;
 
     /// <summary>
     /// 静默启动（命令行含 --autostart 且 AutoStartSilent 开启）：不显示主界面，
@@ -889,6 +888,9 @@ public partial class MainWindow : Window
 
     // --- 设置页 ---
 
+    // 进出动画令牌：Completed 回调只认最后一次动画，防止快速连点导致状态错乱
+    private int _settingsAnimToken;
+
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         EnterSettingsView();
@@ -896,28 +898,54 @@ public partial class MainWindow : Window
 
     private void EnterSettingsView()
     {
-        // 保存当前选中工具引用以便返回时恢复高亮
-        _savedSelectedTool = (DataContext as ViewModels.MainViewModel)?.SelectedTool;
+        _settingsAnimToken++;
 
         // 隐藏内容区，显示设置层
         ContentScrollViewer.Visibility = Visibility.Collapsed;
         SettingsLayer.Visibility = Visibility.Visible;
+        SettingsLayer.IsHitTestVisible = true;
         HighlightBar.Visibility = Visibility.Collapsed;
+
+        // 淡入 + 8px 上滑（180ms EaseOut，与 TransitioningContentControl 同参数族）
+        SettingsLayer.Opacity = 0;
+        SettingsLayerTransform.Y = 8;
+        SettingsLayer.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)) { EasingFunction = EaseOut() });
+        SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(180)) { EasingFunction = EaseOut() });
     }
 
     private void ExitSettingsView()
     {
-        SettingsLayer.Visibility = Visibility.Collapsed;
-        ContentScrollViewer.Visibility = Visibility.Visible;
+        int token = ++_settingsAnimToken;
 
-        // 恢复高亮（如果有选中工具）
-        if (_savedSelectedTool != null
-            && DataContext is ViewModels.MainViewModel vm
-            && vm.VisibleGroups.Any(g => g.IsExpanded && g.Tools.Contains(_savedSelectedTool)))
+        // 下层内容区立即露出，设置层自身渐隐 + 下滑 150ms EaseIn，完成后才折叠（无"空窗"）
+        ContentScrollViewer.Visibility = Visibility.Visible;
+        SettingsLayer.IsHitTestVisible = false;   // 淡出期间挡点击，避免误触层内控件
+
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() };
+        fade.Completed += (_, _) =>
         {
+            if (token != _settingsAnimToken) return;   // 期间又进入了设置页，放弃本次收尾
+            SettingsLayer.Visibility = Visibility.Collapsed;
+            SettingsLayer.Opacity = 1;                 // 复位供下次进入
+            SettingsLayerTransform.Y = 0;
+            SettingsLayer.IsHitTestVisible = true;
+        };
+        SettingsLayer.BeginAnimation(OpacityProperty, fade);
+        SettingsLayerTransform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(8, TimeSpan.FromMilliseconds(150)) { EasingFunction = EaseIn() });
+
+        // 恢复高亮到当前选中工具（设置页期间可能已通过导航点击/插件跳转切换了选中项，
+        // 必须用 vm.SelectedTool 而非进入时保存的旧引用，否则高亮会被拽回旧工具）
+        if (DataContext is ViewModels.MainViewModel vm
+            && vm.SelectedTool != null
+            && vm.VisibleGroups.Any(g => g.IsExpanded && g.Tools.Contains(vm.SelectedTool)))
+        {
+            var selected = vm.SelectedTool;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                var target = FindToolBorderByTool(_savedSelectedTool);
+                var target = FindToolBorderByTool(selected);
                 if (target != null)
                     PositionHighlight(target);
                 else

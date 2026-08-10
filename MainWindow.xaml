@@ -457,11 +457,15 @@
                                              TargetScrollViewer="{Binding ElementName=ContentScrollViewer}"/>
 
                     <!-- 设置叠加层（隐藏） -->
-                    <!-- 设置叠加层：模态浮层取最暗档（60%），压住下层内容保证可读性 -->
+                    <!-- 设置叠加层：模态浮层取最暗档（60%），压住下层内容保证可读性；
+                         进入/退出为淡入+上滑过渡（EnterSettingsView/ExitSettingsView 驱动） -->
                     <Border x:Name="SettingsLayer"
                             Grid.ColumnSpan="2"
                             Background="#99323232"
                             Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="SettingsLayerTransform" Y="0"/>
+                        </Border.RenderTransform>
                         <ScrollViewer x:Name="SettingsScrollViewer" VerticalScrollBarVisibility="Auto">
                             <local:SettingsView x:Name="SettingsViewControl"/>
                         </ScrollViewer>

@@ -12,12 +12,8 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Button x:Name="BackButton" Content="← 返回工具箱"
-                    Foreground="{StaticResource TextPrimaryBrush}"
-                    BorderBrush="{StaticResource BorderSubtleBrush}"
-                    BorderThickness="1"
-                    Padding="12,6"
+                    Style="{StaticResource StandardButtonStyle}"
                     FontSize="13"
-                    Cursor="Hand"
                     Click="BackButton_Click"/>
             <TextBlock Grid.Column="1" Text="设置" FontSize="22"
                        FontWeight="SemiBold"
