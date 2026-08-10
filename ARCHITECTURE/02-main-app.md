@@ -9,7 +9,7 @@
 | App.xaml | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6） |
 | App.xaml.cs | 单实例互斥 + 三层全局异常捕获 + crash.log（2MB 轮转存档） |
 | MainWindow.xaml | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
-| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 设置层进出过渡（淡入上滑/渐隐）+ 鼠标光晕 + 边缘发光集成 |
+| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠 + 设置层进出过渡（淡入上滑/渐隐，设置页点工具时与切换退场**串行对齐**：退场期间下层折叠、`ExitCompleted` 后 150ms 快速退场）+ 工具切换内容区回顶 + 鼠标光晕 + 边缘发光集成 |
 | AssemblyInfo.cs | 程序集信息 |
 | Toolbox.ico | 应用图标 |
 
@@ -20,7 +20,7 @@
 | Win32Helper.cs | Win32 业务封装（圆角/深色模式/帧扩展/窗口查找 + WndProc 消息钩子；P/Invoke 声明统一在 Core 的 Win32Native） |
 | SystemTrayHelper.cs | 纯 Win32 系统托盘图标（不依赖 WinForms） |
 | CustomScrollBar.cs | 自定义迷你滚动条（深色主题，替代系统 ScrollBar） |
-| TransitioningContentControl.cs | 内容切换过渡控件（旧内容 200ms 淡出 → 新内容 400ms 淡入+滑入，退场期间回写旧内容实现真正先后交接；`SlideFromY` 控制滑入方向：默认 8 上滑，工具标题区用 -8 下滑形成对向关系） |
+| TransitioningContentControl.cs | 内容切换过渡控件（旧内容 200ms 淡出 → 新内容 400ms 淡入+滑入，退场期间回写旧内容实现真正先后交接；`SlideFromY` 控制滑入方向：默认 8 上滑，工具标题区用 -8 下滑形成对向关系；`_pendingContent` 退场中再切换以最新为准；暴露 `IsExiting`/`ExitCompleted` 供设置层退出串行对齐） |
 | TextBoxContextMenuHelper.cs | 统一深色主题 TextBox 右键菜单 |
 
 > ⚠️ 主程序专用：`Win32Helper` / `CustomScrollBar` / `TransitioningContentControl` 位于主程序，插件层仅引用 Core，无法访问（避免循环依赖）。

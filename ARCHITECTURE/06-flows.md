@@ -45,11 +45,18 @@ App.xaml → App.xaml.cs OnStartup:
 ## 设置流程
 
 ```
-点击标题栏齿轮按钮 → ContentScrollViewer 隐藏 → SettingsLayer 显示
+点击标题栏齿轮按钮 → EnterSettingsView：ContentScrollViewer 折叠 → SettingsLayer 显示
+                   → 淡入 + 8px 上滑 180ms EaseOut（_settingsAnimToken 防连点）
                    → SettingsView 加载，绑定 AppSettings.Instance
                    → OCR 引擎状态每次进入设置页刷新（IsVisibleChanged，非启动时一次性检测）
-                   → BackButton → BackRequestedEvent → MainWindow 隐藏设置层
-                   → 恢复高亮条位置
+
+退出（Back 返回）→ ExitSettingsView：
+                   → 下层内容区立即可见 + 设置层 150ms 淡出下滑 → 完成后折叠复位
+
+退出（设置页内点击工具）→ 串行对齐：
+                   → 工具切换退场（200ms）期间下层保持折叠（退场在折叠容器内不可见）
+                   → TransitioningContentControl.ExitCompleted 后显示下层 + 设置层 150ms 快速退场
+                   → 露出正在淡入的新内容 → 恢复高亮条位置
 ```
 
 ## 切换工具流程
@@ -57,9 +64,12 @@ App.xaml → App.xaml.cs OnStartup:
 ```
 点击导航项 (Border) → NavItem_MouseLeftButtonDown
                     → MainViewModel.SelectedTool = tool
+                    → 内容区滚动回顶（SelectedTool PropertyChanged 订阅，Collapsed 下设置偏移安全）
                     → PropertyChanged → CurrentContent 重新创建（缓存复用）
-                    → TransitioningContentControl 淡入
+                    → TransitioningContentControl 两段式：旧内容 200ms 淡出 → 新内容 400ms 淡入+滑入
+                      （标题区同款对向动画：-8 下滑；退场期间回写旧内容，_pendingContent 以最新为准）
                     → PositionHighlight() 高亮条动画移动
+                    → 若设置页打开：设置层退场串行对齐（见设置流程）
 ```
 
 ## 分组展开/折叠流程

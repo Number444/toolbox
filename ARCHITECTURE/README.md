@@ -15,7 +15,7 @@ Toolbox/
 │   ├── 04-plugins.md                 插件层总览 + 工具索引（完整工具清单见此处）
 │   ├── 05-tests.md                   测试项目
 │   ├── 06-flows.md                   ★ 横切：关键流程（启动/设置/切换/悬浮窗状态机）
-│   ├── 07-ui-system.md               ★ 横切：光晕系统/主题资源/滚动条
+│   ├── 07-ui-system.md               ★ 横切：光晕系统/主题资源/动效体系/设置层过渡/滚动条
 │   ├── 08-settings.md                ★ 横切：AppSettings / AudioflowSettings 配置项
 │   ├── 09-tool-dev.md                ★ 横切：新工具开发指南（引用现有规范）
 │   └── tools/                        叶子节点：每个工具一个文档（清单见 04-plugins.md 索引）

@@ -92,6 +92,39 @@ InitHalo():
 | `ClassicCheckBoxStyle` | 方框+对勾传统复选框（备用；勾选时方框底色/描边 0.2s 渐变，对勾瞬时出现） |
 | `CustomScrollBar` | 深色滚动条（容器 16px，Thumb 居中：常态 6px 两侧各留 5px、展开 10px 各留 3px，不碰窗口边缘。四档：常态 #33FFFFFF → bar 悬停 #55 → thumb 悬停 #CC → 拖拽 Accent 绿 #CC76B580） |
 | （隐式 `ComboBox`） | 弹层自绘入场：弃系统 Slide；透明度 150ms 快到位 + 缩放 0.96→1 / 位移 -6→0 走 240ms QuinticEase（原点 0.5,0 从本体绽放；动画须显式 From 否则 HoldEnd 锁终值导致重播失效）。不加 DropShadow——透明 Popup 中四角会堆积暗色尖角 |
+| `TransitioningContentControl` | 内容切换两段式：旧内容 200ms 淡出（EaseIn，无位移）→ 新内容 400ms 淡入 + 滑入（EaseOut）；退场期间回写旧内容真正停留，`_pendingContent` 以最新内容为准；`SlideFromY` 控制滑入方向（标题区 -8 与内容区 8 对向）；暴露 `IsExiting`/`ExitCompleted` 供设置层串行对齐 |
+
+## 动效参数总表（统一语言）
+
+各动画时长/缓动集中一览（新改动先看这里，避免各处漂移）：
+
+| 动画 | 时长 | 缓动 | 说明 |
+|------|------|------|------|
+| 内容切换·退场 | 200ms | CubicEase EaseIn | 旧内容淡出（无位移，避免与进场上滑方向打架） |
+| 内容切换·进场 | 400ms | CubicEase EaseOut | 新内容淡入 + 上滑 8→0（标题区 -8 对向下滑） |
+| 按钮 hover/press 叠层 | 90/120ms | 二次 EaseOut/EaseIn | 白 10%/黑 12% 叠层；按压缩放 0.97（80/120ms） |
+| 开关轨道颜色 | 200ms | CubicEase EaseOut | 轨道 #45475A↔#76B580 与滑块位移同步 |
+| 滚动条 Thumb 展开 | 150ms | QuadraticEase EaseOut | 宽度 6↔10px，四档颜色（#33/#55/#CC/拖拽绿） |
+| ComboBox 弹层入场 | 150ms 透明 + 240ms 变换 | 二次/五次 EaseOut | 缩放 0.96→1 + 位移 -6→0，原点 (0.5,0) |
+| 设置层进入 | 180ms | 二次 EaseOut | 淡入 + 8px 上滑 |
+| 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑；设置页点工具时串行对齐（见下） |
+| 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
+| 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
+| 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移 |
+
+## 设置层过渡（进出 + 串行对齐）
+
+**进入**：`EnterSettingsView`——淡入 + 8px 上滑 180ms EaseOut；`_settingsAnimToken` 递增令牌，动画完成回调只认最后一次，防快速连点状态错乱。
+
+**退出（Back 返回）**：下层内容区立即可见 + 设置层 150ms 淡出下滑，完成后折叠并复位（Opacity=1 / Y=0）。
+
+**退出（设置页内点击工具）——串行对齐**：工具切换退场（200ms）期间下层内容区**保持折叠**——退场动画（标题区/旧工具淡出）在折叠容器内不可见（设置层 60% 半透明遮不住，实测会"标题栏闪一下消失"）；等 `TransitioningContentControl.ExitCompleted`（退场完成、新内容切入淡入起点）再显示下层 + 设置层 150ms 快速退场，露出正在淡入的新内容。
+
+## 搜索框（MainWindow 左侧顶部）
+
+- 矢量放大镜 `Path`（替换 emoji 🔍，与标题栏齿轮同风格）
+- focus 底部 Accent 绿线：`DataTrigger` 绑定 `SearchInput.IsFocused`，120ms 淡入 / 150ms 淡出（Win11 文本框语言）
+- 无结果空态："无匹配工具" 提示（`NavGroupsControl.HasItems=False` 时显示）
 
 ## 相关文档
 

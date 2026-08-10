@@ -34,6 +34,7 @@
 | PaddleOcrWrapper.cs | PaddleOCR 高精度引擎包装（原生库加载/释放） |
 | EngineDownloader.cs | OCR 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
 | ImageFileHelper.cs | 图片文件校验与格式判断 |
+| ClipboardHelper.cs | 剪贴板写入辅助：专用 STA 线程执行（剪贴板被占用时 WPF 内部重试可阻塞 UI 数百 ms，UI 线程直调会"卡一下"），结果经 Dispatcher 回传；NetworkInfoTool 已接入，其余工具复制可复用 |
 
 ## 共享 Services/
 
