@@ -4,7 +4,7 @@ using Toolbox.Core.Services;
 namespace Toolbox.Plugins.Services;
 
 /// <summary>
-/// 远程控制工具独立设置（单一 json：%LOCALAPPDATA%/Toolbox/remote-control.json，与 AppSettings 解耦，参照 AudioflowSettings 惯例）。
+/// 远程控制工具独立设置（单一 json：%LOCALAPPDATA%/{AppPaths.DataFolderName}/remote-control.json，与 AppSettings 解耦，参照 AudioflowSettings 惯例）。
 /// 内容：上次密钥/端口、自动生成开关、曾连接设备表（用户决策 2026-08-08：合并为单文件，密钥明文落盘换取"上次密钥自动回填"便利，UI 明示警告）。
 /// </summary>
 public sealed class RemoteControlSettings
@@ -24,7 +24,7 @@ public sealed class RemoteControlSettings
         set { _lastKey = value; Save(); }
     }
 
-    private string _lastPort = "8090";
+    private string _lastPort = AppPaths.DefaultRemotePort;
     /// <summary>上次使用的端口（输入框回填用）</summary>
     public string LastPort
     {
@@ -92,8 +92,7 @@ public sealed class RemoteControlSettings
         }
     }
 
-    public RemoteControlSettings() : this(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox", "remote-control.json"))
+    public RemoteControlSettings() : this(Path.Combine(AppPaths.DataDir, "remote-control.json"))
     { }
 
     internal RemoteControlSettings(string path)
@@ -110,7 +109,7 @@ public sealed class RemoteControlSettings
         var data = JsonSettingsFile.Load<SettingsData>(path);
         if (data == null) return;
         _lastKey = data.LastKey ?? "";
-        _lastPort = data.LastPort ?? "8090";
+        _lastPort = data.LastPort ?? AppPaths.DefaultRemotePort;
         _autoGenerateKey = data.AutoGenerateKey ?? true;
         if (data.KnownDevices != null) _knownDevices = data.KnownDevices;
     }

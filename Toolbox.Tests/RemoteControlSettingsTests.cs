@@ -1,4 +1,5 @@
 using System.IO;
+using Toolbox.Core.Services;
 using Toolbox.Plugins.Services;
 using Xunit;
 
@@ -43,7 +44,7 @@ public class RemoteControlSettingsTests
         {
             var settings = new RemoteControlSettings(path);
             Assert.Equal("", settings.LastKey);
-            Assert.Equal("8090", settings.LastPort);
+            Assert.Equal(AppPaths.DefaultRemotePort, settings.LastPort);   // Debug=8091 / Release=8090，跟随编译期常量
             Assert.True(settings.AutoGenerateKey);
             Assert.Empty(settings.KnownDevices);
         }

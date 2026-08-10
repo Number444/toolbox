@@ -123,7 +123,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
-    private string _remoteControlDefaultPort = "8090";
+    private string _remoteControlDefaultPort = AppPaths.DefaultRemotePort;
     /// <summary>远程控制默认端口（工具面板端口输入框的初始值）</summary>
     public string RemoteControlDefaultPort
     {
@@ -171,7 +171,7 @@ public sealed class AppSettings : INotifyPropertyChanged
             var expected = $"\"{exePath}\" --autostart";
             if (current == expected) return; // 已是最新格式与路径
 
-            key.SetValue("Toolbox", expected);
+            key.SetValue(AppPaths.DataFolderName, expected);
             System.Diagnostics.Debug.WriteLine("[AppSettings] 自启注册表值已自动迁移为带 --autostart 的新格式");
         }
         catch (Exception ex)
@@ -196,12 +196,12 @@ public sealed class AppSettings : INotifyPropertyChanged
                 if (!string.IsNullOrEmpty(exePath))
                     // 2026-08-09：带 --autostart 参数，App 据此判断"开机自启"场景
                     //（配合 AutoStartSilent 实现静默启动：不弹主界面、托盘驻留）
-                    key.SetValue("Toolbox", $"\"{exePath}\" --autostart");
+                    key.SetValue(AppPaths.DataFolderName, $"\"{exePath}\" --autostart");
             }
             else
             {
-                if (key.GetValue("Toolbox") != null)
-                    key.DeleteValue("Toolbox", false);
+                if (key.GetValue(AppPaths.DataFolderName) != null)
+                    key.DeleteValue(AppPaths.DataFolderName, false);
             }
         }
         catch (Exception ex)
@@ -210,8 +210,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
     }
 
-    public AppSettings() : this(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox"))
+    public AppSettings() : this(AppPaths.DataDir)
     { }
 
     // 测试用：可注入自定义目录

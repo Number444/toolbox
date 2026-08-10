@@ -59,7 +59,7 @@ public class RemoteControlTool : ITool
             if (!AppSettings.Instance.AutoStartRemoteControl || SharedServer.IsRunning) return;
             var port = int.TryParse(AppSettings.Instance.RemoteControlDefaultPort, out var p) && p is >= 1 and <= 65535
                 ? p
-                : 8090;
+                : int.Parse(AppPaths.DefaultRemotePort);
             var key = string.IsNullOrWhiteSpace(AppSettings.Instance.RemoteControlDefaultKey)
                 ? null
                 : AppSettings.Instance.RemoteControlDefaultKey.Trim();

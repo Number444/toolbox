@@ -15,10 +15,10 @@ namespace Toolbox;
 public partial class App : System.Windows.Application
 {
     private static Mutex? _singleInstanceMutex;
-    private const string MutexName = "ToolboxSingleInstanceMutex";
+    private const string MutexName = AppPaths.SingleInstanceMutexName;
 
     /// <summary>静默驻留唤起事件名（第二实例找不到窗口时 Set，第一个实例据此恢复显示）</summary>
-    private const string ShowRequestEventName = "ToolboxShowRequestEvent";
+    private const string ShowRequestEventName = AppPaths.ShowRequestEventName;
     private static EventWaitHandle? _showRequestEvent;
     private static RegisteredWaitHandle? _showRequestWait;
 
@@ -29,9 +29,7 @@ public partial class App : System.Windows.Application
     /// </summary>
     public const string WindowTitle = "🧰 Toolbox";
 
-    private static readonly string CrashLogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Toolbox", "crash.log");
+    private static readonly string CrashLogPath = Path.Combine(AppPaths.DataDir, "crash.log");
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {

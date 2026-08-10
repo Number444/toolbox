@@ -50,3 +50,35 @@
 - 搜索框美化（矢量放大镜/focus 绿线/无结果空态）
 - 工具切换时内容区滚动回顶
 - 架构文档动效体系同步 + README 更新
+
+---
+
+## 5. Debug / 正式版实例隔离
+
+> 开发调试版与正式安装版可同时运行、互不干扰——编译 Debug 不再需要先关闭正在跑的正式版。
+
+- **新增 `Toolbox.Core/Services/AppPaths.cs`**：`#if DEBUG` 编译期常量统一承载隔离点（Release 产物行为零变化）
+- **隔离清单**：
+  - 单实例 Mutex：`ToolboxSingleInstanceMutex` ↔ `...Debug`（Debug 与正式版可共存；正式版之间仍互斥）
+  - 唤起事件：`ToolboxShowRequestEvent` ↔ `...Debug`（防唤起信号串扰弹窗）
+  - 数据目录：`%LocalAppData%/Toolbox` ↔ `Toolbox-Debug`（AppSettings / audioflow.json / remote-control.json / crash.log 全隔离）
+  - 远程控制默认端口：8090 ↔ 8091（避免双实例同时监听冲突）
+  - 自启注册表值名：`Toolbox` ↔ `Toolbox-Debug`（防互抢开机自启）
+- **保留共享**：PaddleOCR 引擎目录 `%LocalAppData%/Toolbox/PaddleOCR`（避免 Debug 版重复下载）
+- 测试 161/161 全绿
+
+---
+
+## 6. 切回前台动画（后台 → 前台入场）
+
+窗口从后台恢复（最小化还原 / 托盘恢复 / 静默驻留唤起）时播放，`PlayReturnAnimations()`。
+
+- **触发**：`_wasBackground` 标志（最小化 / 关闭到托盘 / 静默驻留三处置位）+ `Activated` 触发；普通失焦不触发（不监听 Deactivated）
+- **节奏**：左侧工具栏先落位（滑入 + 淡入 0-400ms），右侧工具页延迟 200ms 跟上（淡入 + 上滑 420ms）；位移 QuinticEase（开头快结尾缓）去僵硬感
+- **实测优化**：初版 400ms 同步动画存在"左侧空、右侧先显 + 僵硬"问题，按反馈错峰重调
+
+## 7. AppPaths 审查修复
+
+- 审查 AppPaths.cs 重构：4 个消费文件原值与 Release 常量逐一一致 ✓
+- 修复 3 处硬编码残留：`RemoteControlSettings` 反序列化兜底端口、`RemoteControlTool` 自动启动端口兜底（均改 `AppPaths.DefaultRemotePort`）、测试断言跟随常量（Debug=8091/Release=8090）
+- 架构文档同步：02-main-app 发布流程警告（必须 `-c Release`）、07-ui-system 切回动画小节 + 动效总表

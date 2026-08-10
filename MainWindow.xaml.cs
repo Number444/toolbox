@@ -29,6 +29,9 @@ public partial class MainWindow : Window
     /// </summary>
     public bool StartSilent { get; set; }
 
+    /// <summary>窗口曾进入后台（最小化/托盘隐藏），下次激活时播放切回动画</summary>
+    private bool _wasBackground;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -39,6 +42,21 @@ public partial class MainWindow : Window
 
         // 窗口状态变更时更新最大化/还原图标
         StateChanged += (_, _) => UpdateMaximizeIcon();
+
+        // 切回前台动画：最小化时置位后台标志；激活时播放（仅"不可见→可见"触发，
+        // 普通失焦再聚焦不触发——Deactivated 不监听，避免点悬浮窗/弹窗后误动画）
+        StateChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Minimized) _wasBackground = true;
+        };
+        Activated += (_, _) =>
+        {
+            if (_wasBackground)
+            {
+                _wasBackground = false;
+                PlayReturnAnimations();
+            }
+        };
 
         // 鼠标跟随呼吸光晕
         InitHalo();
@@ -218,6 +236,10 @@ public partial class MainWindow : Window
                 StartSilent = false;
                 Show();
             }
+            else
+            {
+                _wasBackground = true;   // 静默驻留：恢复显示时播放切回动画
+            }
         }
     }
 
@@ -237,7 +259,31 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
-        SystemTrayHelper.Instance.Hide();
+        SystemTrayHelper.Instance.Hide();   // 窗口已回任务栏，隐藏托盘图标
+    }
+
+    /// <summary>
+    /// 从后台切回前台动画：左侧工具栏从左向右滑入淡入，右侧工具页随后加载淡入。
+    /// 错峰设计（修复实测三问题）：左侧 0-400ms 先落位，右侧延迟 200ms 跟上（200-620ms）——
+    /// 不再"左侧还空着、右侧已过半"；位移 QuinticEase EaseOut（开头快、结尾极缓）去僵硬感；
+    /// 总时长 620ms 比原 400ms 硬切舒缓。
+    /// 显式 From——常态值是 1/0，无 From 则动画原地不动（ComboBox 弹层同款教训）。
+    /// </summary>
+    private void PlayReturnAnimations()
+    {
+        var slideEase = new QuinticEase { EasingMode = EasingMode.EaseOut };
+        var fadeEase = EaseOut();
+
+        NavPane.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(400)) { EasingFunction = fadeEase });
+        NavPaneTransform.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(-220, 0, TimeSpan.FromMilliseconds(380)) { EasingFunction = slideEase });
+
+        var delay = TimeSpan.FromMilliseconds(200);
+        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420)) { BeginTime = delay, EasingFunction = fadeEase });
+        ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(420)) { BeginTime = delay, EasingFunction = slideEase });
     }
 
     /// <summary>列表重建（搜索过滤等）后恢复导航状态。去抖：Clear+Add 触发多次事件，
@@ -1047,6 +1093,7 @@ public partial class MainWindow : Window
                 // 2026-08-03 \u5BA1\u67E5\u53D1\u73B0\uFF1ANIM_ADD \u5931\u8D25 + \u9690\u85CF\u7A97\u53E3 + \u5355\u5B9E\u4F8B\u4E92\u65A5\u9501 = \u5E94\u7528\u84B8\u53D1\uFF09
                 Hide();
                 ShowInTaskbar = false;
+                _wasBackground = true;   // \u6258\u76D8\u9690\u85CF\uFF1A\u6062\u590D\u663E\u793A\u65F6\u64AD\u653E\u5207\u56DE\u52A8\u753B
             }
             else
             {

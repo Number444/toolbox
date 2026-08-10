@@ -145,8 +145,11 @@
             </Grid.ColumnDefinitions>
 
             <!-- 左侧导航（搜索框 + 手风琴分组 + 浮动高亮移动动画 + 自定义滚动条） -->
-            <Border Grid.Column="0"
+            <Border Grid.Column="0" x:Name="NavPane"
                     Background="#992D2D2D">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="NavPaneTransform"/>
+                </Border.RenderTransform>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>   <!-- 搜索框 -->
@@ -477,6 +480,9 @@
                                   Grid.Column="0"
                                   VerticalScrollBarVisibility="Hidden"
                                   Padding="32,16">
+                        <ScrollViewer.RenderTransform>
+                            <TranslateTransform x:Name="ContentPaneTransform"/>
+                        </ScrollViewer.RenderTransform>
                         <StackPanel>
                             <!-- 工具标题区（与内容区同款两段式过渡：旧标题 200ms 淡出 → 新标题 400ms 淡入上滑，
                                  通过 Content=SelectedTool 复用 TransitioningContentControl，硬切消除） -->

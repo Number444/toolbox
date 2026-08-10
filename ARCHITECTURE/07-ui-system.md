@@ -108,6 +108,8 @@ InitHalo():
 | ComboBox 弹层入场 | 150ms 透明 + 240ms 变换 | 二次/五次 EaseOut | 缩放 0.96→1 + 位移 -6→0，原点 (0.5,0) |
 | 设置层进入 | 360ms | 二次 EaseOut | 淡入 + 8px 上滑 |
 | 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑；设置页点工具时串行对齐（见下） |
+| 切回前台·左侧 | 0-400ms | QuinticEase EaseOut | 工具栏从左滑入（X -220→0）+ 淡入，先落位 |
+| 切回前台·右侧 | 延迟 200ms，420ms | QuinticEase EaseOut | 工具页淡入 + 上滑 8→0，随后跟上（总 620ms） |
 | 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
 | 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
 | 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移 |
@@ -119,6 +121,16 @@ InitHalo():
 **退出（Back 返回）**：下层内容区立即可见 + 设置层 150ms 淡出下滑，完成后折叠并复位（Opacity=1 / Y=0）。
 
 **退出（设置页内点击工具）——串行对齐**：工具切换退场（200ms）期间下层内容区**保持折叠**——退场动画（标题区/旧工具淡出）在折叠容器内不可见（设置层 60% 半透明遮不住，实测会"标题栏闪一下消失"）；等 `TransitioningContentControl.ExitCompleted`（退场完成、新内容切入淡入起点）再显示下层 + 设置层 150ms 快速退场，露出正在淡入的新内容。
+
+## 切回前台动画（后台 → 前台入场）
+
+窗口从后台恢复（最小化还原 / 托盘恢复 / 静默驻留唤起）时播放，`PlayReturnAnimations()`。
+
+**触发机制**：`_wasBackground` 标志 + `Activated` 事件。置位点仅三处——最小化（StateChanged）、关闭到托盘（OnClosing 隐藏成功）、静默驻留（托盘创建成功）。**不监听 Deactivated**：点悬浮窗/系统弹窗导致的普通失焦不触发；正常启动不播放（启动遮罩链负责入场）。
+
+**错峰节奏**（修复实测三问题：左侧空/右侧先显、双侧同步僵硬）：左侧 0-400ms 先落位（X -220→0，380ms + 淡入 400ms），右侧延迟 200ms 跟上（淡入 + 上滑 8→0，420ms，200-620ms 结束）。位移 QuinticEase EaseOut（开头快、结尾极缓），淡入 CubicEase EaseOut。
+
+**实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；右侧动画只作用于 ContentScrollViewer（不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
 
 ## 搜索框（MainWindow 左侧顶部）
 

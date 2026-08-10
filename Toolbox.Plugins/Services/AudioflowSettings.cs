@@ -8,7 +8,7 @@ namespace Toolbox.Plugins.Services;
 
 /// <summary>
 /// 网易云音乐悬浮窗独立设置
-/// 存储在 %LOCALAPPDATA%/Toolbox/audioflow.json
+/// 存储在 %LOCALAPPDATA%/{AppPaths.DataFolderName}/audioflow.json（Debug 构建与正式版目录隔离）
 /// 与 AppSettings 解耦，独立保存/加载
 /// </summary>
 public sealed class AudioflowSettings : INotifyPropertyChanged
@@ -129,8 +129,7 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         }
     }
 
-    public AudioflowSettings() : this(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Toolbox"))
+    public AudioflowSettings() : this(AppPaths.DataDir)
     { }
 
     internal AudioflowSettings(string customDir)

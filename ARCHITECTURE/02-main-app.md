@@ -30,6 +30,7 @@
 | 文件 | 职责 |
 |------|------|
 | ToolRegistry.cs | 工具注册中心：单策略插件加载（Assembly.Load 默认加载上下文）+ 反射注册悬浮窗控制器 |
+| AppPaths.cs | 应用级路径/命名常量（Toolbox.Core/Services）：`#if DEBUG` 编译期常量统一承载全部隔离点——数据目录名、单实例互斥名、唤起事件名、远程默认端口。Debug 构建与 Release 完全隔离（目录/互斥/事件/端口四重隔离），开发调试版可与正式安装版同时运行互不干扰；Release 常量与原硬编码值逐一一致（行为不变）。全项目共 4 个消费文件（App.xaml.cs / AppSettings / AudioflowSettings / RemoteControlSettings）+ 1 处自动启动端口兜底（RemoteControlTool） |
 
 ## Views / ViewModels
 
@@ -94,6 +95,8 @@ dotnet publish Toolbox.csproj -c Release -r win-x64 --self-contained true ^
 → ISCC.exe setup/ToolboxSetup.iss (LZMA2 最高压缩)
 → setup/Toolbox_Setup.exe
 ```
+
+> ⚠️ **必须使用 `-c Release`**：AppPaths 按 `#if DEBUG` 隔离，若误用 Debug 配置发布，产物会使用 Toolbox-Debug 数据目录、8091 端口、独立互斥名/唤起事件名——"正式版"无法远程控制（端口不对）且与正式版并存不互斥。发布前清 `obj/Release` 缓存。
 
 ## 相关文档
 
