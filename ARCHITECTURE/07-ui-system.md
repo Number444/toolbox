@@ -118,6 +118,8 @@ InitHalo():
 | 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
 | 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
 | 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移；展开时子项 25ms 间隔错落淡入（`GroupItemStaggerMs`=0 关闭，`GroupItemFadeMs` 调单条时长） |
+| 启动遮罩·文字 | 淡入 1300ms EaseIn + 上滑 40px 1300ms EaseOut | CubicEase | 从下往上滑入 + 渐渐亮起（位移先快后慢、淡入 EaseIn 缓慢显，同步 1.3s 完成） |
+| 启动遮罩·图标 | 淡入 700ms EaseIn + 位移 48px 1000ms EaseOut | CubicEase | 从文字背后（起点 -18）滑入文字左侧（终点 -66）；文字同步右移 22px——三者同刻起止（1.3s→2.3s），详见「启动遮罩（两段式）」 |
 
 ## 设置层过渡（进出 + 串行对齐）
 
@@ -138,6 +140,19 @@ InitHalo():
 **实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；右侧动画只作用于 ContentScrollViewer（不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
 
 **首帧闪烁消除（清场帧拦截）**：还原瞬间 DWM 直接把最小化前缓存的最后一张窗口表面合成上屏——该位图在最小化时已定型，之后 `SetReturnStartState()` 无论多同步都改不了已上屏的缓存帧（录屏逐帧验证："后台置位 + 还原显示前再设"双保险仍闪一帧，2026-08-10 修复）。解法：`MinimizePreClearHook` 拦截 `WM_SYSCOMMAND / SC_MINIMIZE`（系统级最小化入口，如任务栏右键/点击最小化），先 `handled=true` 拦下最小化 → 同步置起点状态 → `WaitForRenderedFramesAsync(2)` 等"清场帧"（界面透明的起点状态）真正渲染提交进 DWM 缓存 → 再程序化 `WindowState=Minimized`（WPF 走 ShowWindow，不经 SC_MINIMIZE，无递归；`_preClearMinimize` 兼作重入保护）。自建标题栏最小化按钮（`MinimizeButton_Click`）直接设 `WindowState` 不产生 SC_MINIMIZE，须显式改调 `PreClearThenMinimizeAsync`（2026-08-10 实测：按钮路径闪烁即此遗漏）。还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。代价：最小化延迟约 2 帧（~33ms，不可感知）。已知边界：Win+D / Win+M 不经 SC_MINIMIZE 无法拦截，该路径首帧闪烁保留（系统级机制限制），仍由 `StateChanged` 兜底播动画。托盘隐藏/静默驻留路径不受 DWM 缓存影响（Hide 销毁表面，Show 首帧由 WPF 全新渲染），原有"Show 前同步起点"逻辑保留。
+
+## 启动遮罩（两段式入场）
+
+纯黑遮罩（与 DWM 首帧空窗帧同色，无缝衔接），`MaskTitle` 文字 + `MaskIcon` 图标分层定位（Grid 内均居中基准，图标声明在前=下层，从文字背后出发）。`OnWindowLoaded` 驱动（静默启动首次托盘唤起同样生效）。
+
+**时间线**（2026-08-11 定稿）：
+- **0–1.3s 阶段 1**：文字从下方 40px 滑入 + 渐渐淡入（位移 CubicEase EaseOut 先快后慢；淡入 CubicEase EaseIn 缓慢亮起，同步完成）
+- **1.3–2.3s 阶段 2**：图标从文字背后（起点 = 终点 + 48px，与文字重叠处）淡入（EaseIn，700ms）并向左滑入文字左侧（终点 = 文字右移后的左缘外 12px，动态计算，兜底 -66）；文字同步右移 22px（= (图标宽 32 + 间距 12)/2，保证组合居中）
+- **2.3–2.8s 定格 → 2.8–3.3s 遮罩淡出**（500ms EaseOut，完成后 Collapsed，Acrylic 透出）
+
+**协同约束**：图标位移与文字右移共用同一时长常量 + 同一 BeginTime + 同一缓动，严格同时开始同时结束；图标动画前先写入起点本地值（消除 From ≠ 实际位置的跳变）。调参集中在 OnWindowLoaded 方法内常量（MaskPhase1Ms / MaskIconMoveMs / MaskIconFadeMs / MaskIconTravelX / MaskTitleShiftX / MaskTitleRiseFrom）。
+
+**注意**：启动动画**不在**光晕闸门清单（IsAnyGlowTrackedAnimationActive）内，无需清时钟——HoldEnd 保持终值即可（遮罩期 GlowLayer 被黑罩遮挡，无定格问题）。
 
 ## 搜索框（MainWindow 左侧顶部）
 

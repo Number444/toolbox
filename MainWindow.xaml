@@ -642,33 +642,42 @@
                                IsHitTestVisible="False"/>
 
         <!-- ▸ 启动遮罩（测试）：纯黑——与 DWM 首帧空窗帧同色，无缝衔接（灰遮罩会暴露黑→灰跳变）；
-             居中图标 + "Toolbox" 文字横排，套用工具切换的淡入上滑动画（代码驱动，容器级同步）；
+             两段式入场（代码驱动）：① 文字居中淡入 → ② 图标从文字后（右）从右往左滑入 + 文字右移让位；
              停留 2s 后整体淡出（OnWindowLoaded；静默启动首次托盘唤起同样生效） -->
         <Border x:Name="StartupMask"
                 Grid.RowSpan="3"
                 Background="#FF000000"
                 IsHitTestVisible="False">
-            <StackPanel x:Name="MaskContent"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Margin="0,4,0,0"
-                        Opacity="0">
-                <StackPanel.RenderTransform>
-                    <TranslateTransform x:Name="MaskContentTransform" Y="8"/>
-                </StackPanel.RenderTransform>
-                <Image Source="/Assets/toolbox_icon.png"
+            <Grid>
+                <!-- 图标声明在前（下层）：阶段 2 与文字重叠出发时在文字"背后"（从背后滑出）；
+                     阶段 1 完全透明；阶段 2 淡入并从文字背后向左滑入文字左侧 -->
+                <Image x:Name="MaskIcon"
+                       Source="/Assets/toolbox_icon.png"
                        Width="32" Height="32"
                        Stretch="Uniform"
+                       HorizontalAlignment="Center"
                        VerticalAlignment="Center"
-                       Margin="0,8,0,0"/>
-                <TextBlock Text="Toolbox"
+                       Margin="0,12,0,0"
+                       Opacity="0">
+                    <Image.RenderTransform>
+                        <TranslateTransform x:Name="MaskIconTransform" X="0"/>
+                    </Image.RenderTransform>
+                </Image>
+                <!-- 文字：阶段 1 从下往上弹入（Y 位移 + 淡入）；阶段 2 右移让位（X 0→+ShiftX） -->
+                <TextBlock x:Name="MaskTitle"
+                           Text="Toolbox"
                            FontSize="34"
                            FontWeight="SemiBold"
                            Foreground="#F0F0F0"
+                           HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="12,0,0,0"/>
-            </StackPanel>
+                           Margin="0,4,0,0"
+                           Opacity="0">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="MaskTitleTransform" X="0"/>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
+            </Grid>
         </Border>
     </Grid>
 </Border>

@@ -201,19 +201,54 @@ public partial class MainWindow : Window
         // 后台服务（悬浮窗自启；静默启动由 App.OnStartup 直接调用，此处幂等防重入）
         InitializeBackgroundServices();
 
-        // 遮罩内容（图标 + 文字容器）：套用工具切换的淡入上滑动画（2s CubicEase EaseOut）
+        // 启动遮罩两段式入场：① 文字从下往上弹入（1s）→ ② 图标从文字背后（完全透明）向左滑入文字左侧
+        // + 文字右移让位。最终图标左、文字右并排居中。动画显式 From（项目惯例：防 HoldEnd 锁值导致重播失效）
         var ease = EaseOut();
-        MaskContent.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(2000)) { EasingFunction = ease });
-        MaskContentTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(2000)) { EasingFunction = ease });
+        const double MaskTitleShiftX = 22;       // 文字右移量 = (图标宽 32 + 间距 12) / 2，保证组合居中
+        const double MaskTitleRiseFrom = 40;     // 文字弹入起点（下方 40px）
+        const double MaskTitleFadeMs = 1300;     // 文字淡入时长（渐渐淡入：EaseIn 缓慢亮起，与弹入同步完成）
+        const double MaskPhase1Ms = 1300;        // 阶段 1 时长（文字从下往上弹入，放缓至 1.3s）
+        const double MaskIconMoveMs = 1000;      // 阶段 2 位移时长（图标滑入 + 文字右移，1.3s→2.3s）
+        const double MaskIconFadeMs = 700;       // 图标淡入时长（略短于位移：到位前渐显，EaseIn 前期隐没）
+        const double MaskIconTravelX = 48;       // 图标位移距离 = 1.5 × 图标宽 32（用户调参：距离过长会显得显现太早/太急）
 
-        // 启动遮罩（测试）：纯黑停留 2s，再 500ms 淡出。黑色与 DWM 首帧空窗帧同色（无缝），
+        // 阶段 1：文字从下往上滑入——位移先快后慢（CubicEase EaseOut：起步干脆、收尾渐缓）；
+        // 淡入渐渐（EaseIn：缓慢亮起，与弹入同步 1s 完成，非先于位移完成的快进快出）
+        MaskTitle.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskTitleFadeMs)) { EasingFunction = EaseIn() });
+        MaskTitleTransform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(MaskTitleRiseFrom, 0, TimeSpan.FromMilliseconds(MaskPhase1Ms))
+            { EasingFunction = ease });
+
+        // 阶段 2：图标从文字背后淡入并向左滑入文字左侧，文字同步右移让位。
+        // 终点动态取文字左缘外侧（+MaskTitleShiftX 修正基准：图标中心 = 窗口中心 + 文字右移量
+        // - 文字半宽 - 间距 - 图标半宽，恰好留 12px 间距）；起点 = 终点右侧 1.5 个图标宽处
+        // （MaskIconTravelX：位移距离缩短后图标更早到位，显现节奏与文字协调）
+        double iconTargetX = MaskTitleShiftX - (MaskTitle.ActualWidth / 2 + 12 + 32 / 2);
+        if (iconTargetX >= -32) iconTargetX = -66;   // 兜底（ActualWidth 未就绪时估算值：22-60-12-16）
+        var phase2 = TimeSpan.FromMilliseconds(MaskPhase1Ms);
+        // ⚠️ 协同约束（2026-08-11）：图标位移与文字右移共用 MaskIconMoveMs + 同一 BeginTime +
+        // 同一缓动——严格同时开始（1.3s）同时结束（2.3s）。图标起点先写入本地值
+        // （动画 From 与其一致），消除"动画前位置 0 → 动画起点 -18"的跳变（错位感来源之一）
+        MaskIconTransform.X = iconTargetX + MaskIconTravelX;
+        // 淡入 EaseIn + 位移 EaseOut 反向曲线组合：位移前期快（图标快速离开文字背后）、
+        // 淡入前期隐（到位前几乎不可见），到位（位移 EaseOut 后段减速）时才渐渐透出
+        MaskIcon.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskIconFadeMs))
+            { EasingFunction = EaseIn(), BeginTime = phase2 });
+        MaskIconTransform.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(iconTargetX + MaskIconTravelX, iconTargetX, TimeSpan.FromMilliseconds(MaskIconMoveMs))
+            { EasingFunction = ease, BeginTime = phase2 });
+        MaskTitleTransform.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(0, MaskTitleShiftX, TimeSpan.FromMilliseconds(MaskIconMoveMs))
+            { EasingFunction = ease, BeginTime = phase2 });
+
+        // 启动遮罩（测试）：纯黑停留 2.8s，再 500ms 淡出。黑色与 DWM 首帧空窗帧同色（无缝），
         // Acrylic 已在幕后就绪（延迟方案），淡出时毛玻璃透出
         var maskFade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(500))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-            BeginTime = TimeSpan.FromMilliseconds(2000)   // 先停留 2s 测试
+            BeginTime = TimeSpan.FromMilliseconds(2800)   // 动画完成（2.3s）后停留 0.5s 再淡出
         };
         maskFade.Completed += (_, _) => StartupMask.Visibility = Visibility.Collapsed;
         StartupMask.BeginAnimation(UIElement.OpacityProperty, maskFade);
@@ -387,29 +422,31 @@ public partial class MainWindow : Window
         var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
         // 左侧：淡入先于位移完成（280/500ms），位移 KeySpline emphasized 曲线
-        // 四个动画均挂完成清时钟（ClearClockOnCompleted）：动画终值 = 本地默认值（0/XAML 默认），
-        // 清除后值无缝回落，IsAnimated 回 false——光晕闸门（IsAnyGlowTrackedAnimationActive）才能关闭
+        // 四个动画均挂完成清时钟（ClearClockOnCompleted），setLocal 补写终值：⚠️ 本地值在
+        // SetReturnStartState 中被设成动画起点（Opacity=0/位移起点），不清本地值就清时钟会回落起点
+        // （组件消失，2026-08-11 实测回归）；补写终值后清时钟值无缝，IsAnimated 回 false——
+        // 光晕闸门（IsAnyGlowTrackedAnimationActive）才能关闭
         var leftFade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs)) { EasingFunction = fadeEase };
-        ClearClockOnCompleted(leftFade, NavPane, UIElement.OpacityProperty);
+        ClearClockOnCompleted(leftFade, NavPane, UIElement.OpacityProperty, () => NavPane.Opacity = 1);
         NavPane.BeginAnimation(UIElement.OpacityProperty, leftFade);
         var leftMove = new DoubleAnimationUsingKeyFrames
         { Duration = TimeSpan.FromMilliseconds(ReturnLeftMoveMs) };
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnLeftFrom, KeyTime.FromPercent(0)));
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
-        ClearClockOnCompleted(leftMove, NavPaneTransform, TranslateTransform.XProperty);
+        ClearClockOnCompleted(leftMove, NavPaneTransform, TranslateTransform.XProperty, () => NavPaneTransform.X = 0);
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, leftMove);
 
         // 右侧：微错峰后淡入 + 位移，缓落更长
         var rightDelay = TimeSpan.FromMilliseconds(ReturnRightDelayMs);
         var rightFade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs + 20))
         { EasingFunction = fadeEase, BeginTime = rightDelay };
-        ClearClockOnCompleted(rightFade, ContentScrollViewer, UIElement.OpacityProperty);
+        ClearClockOnCompleted(rightFade, ContentScrollViewer, UIElement.OpacityProperty, () => ContentScrollViewer.Opacity = 1);
         ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty, rightFade);
         var rightMove = new DoubleAnimationUsingKeyFrames
         { Duration = TimeSpan.FromMilliseconds(ReturnRightMoveMs), BeginTime = rightDelay };
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnRightFrom, KeyTime.FromPercent(0)));
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
-        ClearClockOnCompleted(rightMove, ContentPaneTransform, TranslateTransform.YProperty);
+        ClearClockOnCompleted(rightMove, ContentPaneTransform, TranslateTransform.YProperty, () => ContentPaneTransform.Y = 0);
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, rightMove);
     }
 
