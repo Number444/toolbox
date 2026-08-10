@@ -232,18 +232,15 @@ public class NetworkInfoTool : ITool
         return string.Join(":", Enumerable.Range(0, 6).Select(i => raw.Substring(i * 2, 2)));
     }
 
-    /// <summary>复制文本到剪贴板，结果反馈到指定文本块的颜色上</summary>
+    /// <summary>复制文本到剪贴板，结果反馈到指定文本块的颜色上。
+    /// 剪贴板是全局互斥资源，被占用时 WPF Clipboard 在调用线程内部重试可阻塞 UI 数百 ms
+    /// （2026-08-10 实测"点击复制卡一下"）→ 专用 STA 线程执行，UI 永不阻塞</summary>
     private static void TryCopyToClipboard(string text, TextBlock feedback)
     {
-        try
+        ClipboardHelper.CopyText(text, feedback.Dispatcher, ok =>
         {
-            Clipboard.SetText(text);
-            feedback.Foreground = new SolidColorBrush(ThemeColors.Success);
-        }
-        catch
-        {
-            feedback.Foreground = new SolidColorBrush(ThemeColors.Danger);
-        }
+            feedback.Foreground = new SolidColorBrush(ok ? ThemeColors.Success : ThemeColors.Danger);
+        });
     }
 
     /// <summary>构建分组卡片：深灰圆角容器 + 组标题，内容随后追加；
