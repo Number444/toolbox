@@ -116,3 +116,22 @@
 - **启动遮罩两段式入场**：① 文字从下方 40px 滑入（EaseOut 先快后慢）+ 渐渐淡入（EaseIn 缓慢亮起，同步 1.3s；淡入不可用 EaseOut——DWM 首帧跳帧会吞掉前段飙升）→ ② 图标从文字背后（完全透明）淡入滑入文字左侧（位移 48px = 1.5×图标宽，文字同步右移 22px 让位，三者同刻起止 1.3s→2.3s）→ 定格 0.5s → 遮罩淡出（2.8s–3.3s）；调参集中 OnWindowLoaded 常量区
 - 版本号 v1.7.1 → **v1.7.2**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
 - 测试 161/161 全绿
+
+---
+
+## 10. v1.8.0 发布（文件传输工具）
+
+> 局域网文件传输工具 + 传输层流式化改造 + 修复批次。
+
+### 变更
+
+- **新增文件传输工具（FileTransferTool）**：手机浏览器与电脑双向传大文件（HTTP over TCP 流式，不落内存）；与远程控制**同端口同页面**（2026-08-11 用户决策）——服务生命周期归远程控制页，路由挂在 RemoteControlServer，控制面板并入文件传输区
+- **传输层流式化**：`IRemoteHttpServer.StreamingRoutes` 流式路由旁路（上传不预读 body，豁免 1MB 限长/30s 整体超时）、`RemoteHttpResponse.BodyStream` 流式下载；TcpHttpServer（主方案）每块读写 60s 空闲超时、64 连接上限；HttpListenerServer（备方案）同步对齐
+- **FileTransferService**：文件名净化（防 `../../` 穿越）、磁盘空间预检、重名自动编号、100ms 进度节流、40 条记录容量淘汰、失败清理半成品；接收目录持久化 file-transfer.json
+- **认证零新增**：transfer 路由全走既有会话认证，上传额外校验 X-Requested-With（CSRF）；控制页 textContent 渲染防 XSS
+- **修复：手机上传 SAEA 竞态**（真机实测踩中）——取消 socket 异步操作与数据到达竞争时下一次 ReadAsync 抛 "socket operation is already in progress"；改同步 Read/Write + SO_RCVTIMEO/SO_SNDTIMEO，60s 空闲超时不变
+- **修复：100-continue 支持**——部分手机浏览器/WebView 上传先等确认才发 body，不回 100 会对端空等撞空闲超时；头解析后 body 前回 100 Continue
+- **修复：自启迁移误建 Debug 版自启值**——`EnsureStartupRegistryValue` 读注册表硬编码 "Toolbox"、写入用 `AppPaths.DataFolderName`，Debug 版任意一次运行都会误建自己的自启值导致开机双后台；读写统一值名，Release 行为零变化
+- **UI 美化**（WPF 面板 + 控制页）：服务状态卡改状态圆点 + 主标题 + 次级说明；接收目录内嵌底色框；清单/记录行项卡片化（BgCard + 6px 圆角、文件名省略 + 悬浮全路径）；自绘细进度条替代原生 ProgressBar；空状态居中图标；控制页上传改虚线投放区（点按/拖拽）、上传项淡入、下载改实心 Accent 胶囊
+- 版本号 v1.7.2 → **v1.8.0**（iss + 状态栏）；产物 `setup/Toolbox_Setup.exe`（self-contained 单文件）
+- 测试 181/181 全绿
