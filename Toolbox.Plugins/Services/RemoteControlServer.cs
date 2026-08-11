@@ -43,6 +43,7 @@ public sealed class RemoteControlServer
 
     private readonly IRemoteHttpServer _http;
     private readonly IRemoteCommandHandler[] _handlers;
+    private readonly FileTransferService _transfer;
     private readonly ConcurrentQueue<LogEntry> _logs = new();
     private readonly SemaphoreSlim _commandLock = new(1, 1);
 
@@ -63,16 +64,25 @@ public sealed class RemoteControlServer
     private bool _noKeyMode;
 
     public RemoteControlServer(IRemoteHttpServer http, params IRemoteCommandHandler[] handlers)
-        : this(http, RemoteControlSettings.Instance, handlers)
+        : this(http, RemoteControlSettings.Instance, FileTransferService.Instance, handlers)
     { }
 
     /// <param name="settings">设置对象（测试注入临时路径的实例，避免污染真实 LocalAppData）</param>
     internal RemoteControlServer(IRemoteHttpServer http, RemoteControlSettings settings, params IRemoteCommandHandler[] handlers)
+        : this(http, settings,
+              new FileTransferService(Path.Combine(Path.GetTempPath(), $"toolbox-ft-{Guid.NewGuid():N}", "file-transfer.json")),
+              handlers)
+    { }
+
+    /// <param name="transfer">文件传输服务（测试注入临时目录实例；上传落盘目录在其内部设置中指定）</param>
+    internal RemoteControlServer(IRemoteHttpServer http, RemoteControlSettings settings, FileTransferService transfer, params IRemoteCommandHandler[] handlers)
     {
         _http = http;
         _handlers = handlers;
         _settings = settings;
+        _transfer = transfer;
         _http.RequestHandler = HandleRequest;
+        _http.StreamingRoutes.Add("POST /api/transfer/upload");
     }
 
     /// <summary>服务运行状态（面板状态灯的唯一事实源）</summary>
@@ -165,6 +175,12 @@ public sealed class RemoteControlServer
                 return RequireSession(request, () => HandleKick(request));
             if (request.Method == "POST" && request.Path == "/api/app/shutdown")
                 return RequireSession(request, () => HandleAppShutdown(request));
+            if (request.Method == "POST" && request.Path == "/api/transfer/upload")
+                return RequireSession(request, () => HandleTransferUpload(request));
+            if (request.Method == "GET" && request.Path == "/api/transfer/list")
+                return RequireSession(request, HandleTransferList);
+            if (request.Method == "GET" && request.Path == "/api/transfer/download")
+                return RequireSession(request, () => HandleTransferDownload(request));
             return JsonError(404, $"not found: {request.Method} {request.Path}");
         }
         catch (Exception ex)
@@ -504,6 +520,57 @@ public sealed class RemoteControlServer
         });
 
         return Json(RemoteControlResponse.Ok());
+    }
+
+    // ==================== 文件传输（/api/transfer/*，业务委托 FileTransferService） ====================
+
+    /// <summary>上传（手机→电脑）：流式路由（传输层不预读 body），raw body + X-File-Name 头直写接收目录</summary>
+    private RemoteHttpResponse HandleTransferUpload(RemoteHttpRequest request)
+    {
+        // 写操作：CSRF 校验（与 /api/command 一致）
+        if (!request.Headers.TryGetValue("X-Requested-With", out var csrf) ||
+            !string.Equals(csrf, "RemoteControl", StringComparison.Ordinal))
+            return JsonError(403, "missing X-Requested-With header");
+
+        if (request.RawStream == null)
+            return JsonError(400, "stream body expected");
+        if (!request.Headers.TryGetValue("X-File-Name", out var rawName) || string.IsNullOrWhiteSpace(rawName))
+            return JsonError(400, "missing X-File-Name header");
+
+        string fileName;
+        try { fileName = Uri.UnescapeDataString(rawName); }
+        catch (Exception) { fileName = rawName; } // 畸形编码按原名走净化兜底
+
+        var (ok, savedName, error) = _transfer.ReceiveUpload(request.RawStream, request.RawLength, fileName);
+        if (!ok) return JsonError(500, error ?? "upload failed");
+        return Json(RemoteControlResponse.Ok(new { name = savedName }));
+    }
+
+    /// <summary>待发送文件清单（手机端下载列表）</summary>
+    private RemoteHttpResponse HandleTransferList()
+        => Json(RemoteControlResponse.Ok(_transfer.SharedFiles.Select(f => new { f.Id, f.Name, f.Size })));
+
+    /// <summary>下载（电脑→手机）：id 引用 PC 登记的文件，流式响应 + UTF-8 附件名</summary>
+    private RemoteHttpResponse HandleTransferDownload(RemoteHttpRequest request)
+    {
+        if (!request.Query.TryGetValue("id", out var idText) || !int.TryParse(idText, out var id))
+            return JsonError(400, "missing id");
+
+        var entry = _transfer.GetSharedFile(id);
+        if (entry == null) return JsonError(404, "file not found");
+
+        var stream = _transfer.OpenSharedFileStream(entry);
+        if (stream == null) return JsonError(410, "file unavailable"); // 已删除/无权限
+
+        var response = new RemoteHttpResponse
+        {
+            ContentType = "application/octet-stream",
+            BodyStream = stream,
+            // 长度取流打开时的真实文件长度（entry.Size 是登记时刻值，文件中途被改动过会不一致）
+            BodyStreamLength = stream.Length
+        };
+        response.Headers["Content-Disposition"] = $"attachment; filename*=UTF-8''{Uri.EscapeDataString(entry.Name)}";
+        return response;
     }
 
     // ==================== 响应工具 ====================

@@ -14,7 +14,7 @@ public sealed class TcpHttpServer : IRemoteHttpServer
     /// <summary>请求头总长度上限（16KB，防畸形请求拖垮服务）</summary>
     private const int MaxHeaderBytes = 16 * 1024;
 
-    /// <summary>请求体长度上限（1MB，本项目无大文件传输）</summary>
+    /// <summary>请求体长度上限（1MB；流式路由 StreamingRoutes 不受此限——大文件上传走 RawStream）</summary>
     private const int MaxBodyBytes = 1024 * 1024;
 
     /// <summary>单请求处理时限（30s，超时即断开，防挂起连接堆积）</summary>
@@ -23,7 +23,15 @@ public sealed class TcpHttpServer : IRemoteHttpServer
     /// <summary>并发连接上限（慢连接洪水防线：超出直接断开，防线程池饥饿——审查 P2-6）</summary>
     private const int MaxConcurrentConnections = 64;
 
+    /// <summary>流式传输每块读/写的空闲超时（传输中不限总时长，无数据 60s 才断）</summary>
+    private static readonly TimeSpan StreamIdleTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>流式分块大小（64KB）</summary>
+    private const int StreamChunkBytes = 64 * 1024;
+
     private readonly SemaphoreSlim _connectionSlots = new(MaxConcurrentConnections, MaxConcurrentConnections);
+
+    private readonly HashSet<string> _streamingRoutes = new(StringComparer.Ordinal);
 
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -34,6 +42,8 @@ public sealed class TcpHttpServer : IRemoteHttpServer
     public int ActualPort => _actualPort;
 
     public Func<RemoteHttpRequest, RemoteHttpResponse>? RequestHandler { get; set; }
+
+    public ISet<string> StreamingRoutes => _streamingRoutes;
 
     public void Start(int port)
     {
@@ -96,15 +106,18 @@ public sealed class TcpHttpServer : IRemoteHttpServer
             try
             {
                 using var stream = client.GetStream();
-                using var timeoutCts = new CancellationTokenSource(RequestTimeout);
+                // 读/写阶段各自独立计时（修复：流式上传可能超过 30s，若共用同一 cts，
+                // 处理器返回后 cts 已触发，成功响应会写不出去——文件落盘了手机却显示失败）
+                using var readCts = new CancellationTokenSource(RequestTimeout);
 
-                var request = await ReadRequestAsync(stream, client, timeoutCts.Token);
+                var request = await ReadRequestAsync(stream, client, readCts.Token);
                 if (request == null) return; // 解析失败已尝试响应，或对端提前关闭
 
                 var response = RequestHandler?.Invoke(request)
                     ?? new RemoteHttpResponse { StatusCode = 404, Body = """{"success":false,"error":"no handler"}""" };
 
-                await WriteResponseAsync(stream, response, timeoutCts.Token);
+                using var writeCts = new CancellationTokenSource(RequestTimeout);
+                await WriteResponseAsync(stream, response, writeCts.Token);
             }
             catch (Exception)
             {
@@ -142,6 +155,27 @@ public sealed class TcpHttpServer : IRemoteHttpServer
                 var colon = line.IndexOf(':');
                 if (colon <= 0) continue; // 畸形头行忽略
                 headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            }
+
+            // 流式路由（大文件上传）：不预读 body、不受 MaxBodyBytes 约束，裸流交处理器
+            if (_streamingRoutes.Contains(method + " " + path))
+            {
+                if (!headers.TryGetValue("Content-Length", out var rawLengthText) ||
+                    !long.TryParse(rawLengthText, out var rawLength) || rawLength < 0)
+                {
+                    await WriteSimpleAsync(stream, 411, "text/plain; charset=utf-8", "content-length required", ct);
+                    return null;
+                }
+                return new RemoteHttpRequest
+                {
+                    Method = method,
+                    Path = path,
+                    Query = query,
+                    Headers = headers,
+                    RawStream = stream,
+                    RawLength = rawLength,
+                    RemoteIp = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString() ?? ""
+                };
             }
 
             var body = "";
@@ -219,12 +253,15 @@ public sealed class TcpHttpServer : IRemoteHttpServer
     private static async Task WriteResponseAsync(NetworkStream stream, RemoteHttpResponse response, CancellationToken ct)
     {
         var reason = StatusReason(response.StatusCode);
-        var bodyBytes = Encoding.UTF8.GetBytes(response.Body);
+        var bodyBytes = response.BodyStream == null ? Encoding.UTF8.GetBytes(response.Body) : Array.Empty<byte>();
+        var contentLength = response.BodyStream != null
+            ? response.BodyStreamLength ?? response.BodyStream.Length
+            : bodyBytes.Length;
 
         var sb = new StringBuilder(256);
         sb.Append("HTTP/1.1 ").Append(response.StatusCode).Append(' ').Append(reason).Append("\r\n");
         sb.Append("Content-Type: ").Append(response.ContentType).Append("\r\n");
-        sb.Append("Content-Length: ").Append(bodyBytes.Length).Append("\r\n");
+        sb.Append("Content-Length: ").Append(contentLength).Append("\r\n");
         sb.Append("Connection: close\r\n");
         foreach (var (key, value) in response.Headers)
             sb.Append(key).Append(": ").Append(value).Append("\r\n");
@@ -232,8 +269,32 @@ public sealed class TcpHttpServer : IRemoteHttpServer
 
         var headBytes = Encoding.ASCII.GetBytes(sb.ToString());
         await stream.WriteAsync(headBytes, ct);
-        if (bodyBytes.Length > 0)
+
+        if (response.BodyStream != null)
+        {
+            // 流式响应（大文件下载）：分块拷贝，豁免 30s 整体超时，每块读写 60s 空闲超时
+            try
+            {
+                var buffer = new byte[StreamChunkBytes];
+                while (true)
+                {
+                    int read;
+                    using (var readCts = new CancellationTokenSource(StreamIdleTimeout))
+                        read = await response.BodyStream.ReadAsync(buffer.AsMemory(0, buffer.Length), readCts.Token);
+                    if (read == 0) break;
+                    using (var writeCts = new CancellationTokenSource(StreamIdleTimeout))
+                        await stream.WriteAsync(buffer.AsMemory(0, read), writeCts.Token);
+                }
+            }
+            finally
+            {
+                try { await response.BodyStream.DisposeAsync(); } catch (Exception) { /* 忽略 */ }
+            }
+        }
+        else if (bodyBytes.Length > 0)
+        {
             await stream.WriteAsync(bodyBytes, ct);
+        }
         await stream.FlushAsync(ct);
     }
 
@@ -254,6 +315,8 @@ public sealed class TcpHttpServer : IRemoteHttpServer
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
+        410 => "Gone",
+        411 => "Length Required",
         413 => "Payload Too Large",
         429 => "Too Many Requests",
         500 => "Internal Server Error",

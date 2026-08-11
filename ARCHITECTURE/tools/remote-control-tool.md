@@ -25,6 +25,12 @@
 
 > 状态以 `docs/待解决-2026-07-31.md` 为准（唯一事实源），本页不复述具体条目以避免状态过时。
 
+## 文件传输扩展（2026-08-11）
+
+- 同端口同页面：新增 `/api/transfer/upload`（流式）· `/api/transfer/list` · `/api/transfer/download` 三条路由，全部走 RequireSession
+- 传输层流式化：`IRemoteHttpServer.StreamingRoutes` 旁路（详见设计文档 2026-08-11 条目）
+- 业务服务 `FileTransferService`；面板与手机端页面细节见 [file-transfer-tool.md](file-transfer-tool.md)
+
 ## 测试覆盖
 
 - `RemoteControlServerTests.cs`（路由/认证/CSRF/设备/免登录/关闭按钮/畸形请求）

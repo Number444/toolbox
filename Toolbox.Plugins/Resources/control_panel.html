@@ -143,6 +143,11 @@
   #device-list div { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #3a3a3a; font-size: 12px; color: var(--text-dim); }
   #device-list button { flex: 0 0 auto; min-width: 0; padding: 4px 10px; font-size: 12px; }
   #device-list button.kick { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+  /* 文件传输卡片：上传进度条复用 .meter/.bar；共享清单行样式对齐设备列表 */
+  #upload-list { margin-top: 4px; }
+  #share-list div { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #3a3a3a; font-size: 12px; color: var(--text-dim); }
+  #share-list span { word-break: break-all; padding-right: 8px; }
+  #share-list a { color: var(--accent); text-decoration: none; flex: 0 0 auto; padding: 4px 10px; border: 1px solid var(--accent); border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -159,6 +164,19 @@
     <button onclick="quick('monitor_off')">关显示器</button>
     <button onclick="quick('explorer_restart')">重启资源管理器</button>
   </div>
+</div>
+
+<div class="card">
+  <h2>📁 文件传输</h2>
+  <!-- 发送到电脑：raw body + X-File-Name 头流式上传（服务端直写磁盘，大文件不落内存） -->
+  <input id="file-input" type="file" multiple style="display:none" onchange="uploadFiles(this.files)">
+  <div class="btns">
+    <button onclick="document.getElementById('file-input').click()">📤 发送文件到电脑</button>
+  </div>
+  <div id="upload-list"></div>
+  <div class="divider" style="margin-top:12px"></div>
+  <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">电脑共享的文件</div>
+  <div id="share-list">（加载中…）</div>
 </div>
 
 <div class="card">
@@ -286,6 +304,7 @@
       refreshStatus();
       refreshLogs();
       refreshDevices();
+      refreshShares();
     } catch (e) {
       document.getElementById('auth-msg').textContent = '无法连接服务器：' + e.message;
     }
@@ -583,9 +602,97 @@
     } catch (e) { flash('❌ ' + e.message); }
   }
 
+  // ==================== 文件传输 ====================
+  function uploadFiles(files) {
+    Array.from(files || []).forEach(f => uploadOne(f));
+    document.getElementById('file-input').value = ''; // 清空选择：允许重复选同一文件
+  }
+
+  // 单文件 XHR 上传（upload.onprogress 提供真实进度；fetch 无上传进度事件）
+  // 文件名一律 textContent 渲染，杜绝 XSS 注入面（与日志/设备列表一致）
+  function uploadOne(file) {
+    const box = document.getElementById('upload-list');
+    const item = document.createElement('div');
+    item.className = 'meter';
+    const label = document.createElement('div');
+    label.className = 'label';
+    const nameEl = document.createElement('span');
+    nameEl.textContent = '⬆ ' + file.name;
+    const pctEl = document.createElement('span');
+    pctEl.textContent = '0%';
+    label.appendChild(nameEl); label.appendChild(pctEl);
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    const fill = document.createElement('div');
+    fill.style.width = '0%';
+    bar.appendChild(fill);
+    item.appendChild(label); item.appendChild(bar);
+    box.appendChild(item);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/transfer/upload');
+    xhr.setRequestHeader('X-Requested-With', 'RemoteControl'); // CSRF 防线（服务端强校验）
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      const p = Math.round(e.loaded / e.total * 100);
+      fill.style.width = p + '%';
+      pctEl.textContent = p + '%';
+    };
+    xhr.onload = () => {
+      if (xhr.status === 401) { item.remove(); handleUnauthorized({ status: 401 }); return; }
+      let ok = false, msg = '';
+      try { const j = JSON.parse(xhr.responseText); ok = !!j.success; msg = j.error || ''; } catch (e) { /* 非 JSON 响应按失败处理 */ }
+      if (ok) {
+        fill.style.width = '100%';
+        pctEl.textContent = '✅ 已完成';
+      } else {
+        fill.style.background = 'var(--danger)';
+        pctEl.textContent = '❌ ' + (msg || '失败');
+      }
+    };
+    xhr.onerror = () => {
+      fill.style.background = 'var(--danger)';
+      pctEl.textContent = '❌ 网络错误';
+    };
+    xhr.send(file); // 浏览器自动带 Content-Length（服务端流式接收的必需头）
+  }
+
+  async function refreshShares() {
+    try {
+      const res = await fetchWithTimeout('/api/transfer/list', {}, 5000);
+      if (handleUnauthorized(res)) return;
+      const json = await res.json();
+      if (!json.success) return;
+      const box = document.getElementById('share-list');
+      box.textContent = ''; // textContent 渲染：文件名一律当文本
+      const items = json.data || [];
+      if (!items.length) { box.textContent = '（暂无共享文件）'; return; }
+      items.forEach(f => {
+        const row = document.createElement('div');
+        const info = document.createElement('span');
+        info.textContent = f.name + ' · ' + formatSize(f.size);
+        const a = document.createElement('a');
+        a.textContent = '下载';
+        a.href = '/api/transfer/download?id=' + encodeURIComponent(f.id);
+        row.appendChild(info); row.appendChild(a);
+        box.appendChild(row);
+      });
+    } catch (e) { /* 连接失败不打断轮询 */ }
+  }
+
+  function formatSize(bytes) {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return bytes + ' B';
+  }
+
   // ==================== 启动 ====================
   setInterval(refreshStatus, 1200); // 状态检测 1200ms 刷新
   setInterval(refreshLogs, 5000);
+  setInterval(refreshShares, 3000); // 共享文件清单 3s 轮询
 
   // 已记录设备：服务端已注入真实密钥 → 自动填入输入框（踢出后不再注入）
   if (window.__AUTO_KEY__) {
@@ -596,6 +703,7 @@
 
   // 首屏：尝试直接拉状态，401 则弹认证遮罩
   refreshStatus();
+  refreshShares();
 </script>
 </body>
 </html>

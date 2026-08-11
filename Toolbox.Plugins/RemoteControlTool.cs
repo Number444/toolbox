@@ -23,6 +23,9 @@ public class RemoteControlTool : ITool
         new PowerCommandHandler(),
         new StatusCommandHandler());
 
+    /// <summary>服务运行状态（FileTransferTool 面板探测用：文件传输与本服务同端口，未启动时引导至此启动）</summary>
+    public static bool IsServerRunning => SharedServer.IsRunning;
+
     private TextBlock? _statusLight;
     private TextBox? _portBox;
     private TextBox? _keyBox;

@@ -525,3 +525,23 @@ GET /api/status
   ⑭ 设置页新增"远程控制"卡片：自动启动服务开关 + 默认端口 + 默认密钥
      （授权扩展 Core AppSettings：AutoStartRemoteControl / RemoteControlDefaultPort / RemoteControlDefaultKey）
   ⑮ 设备表/设置测试注入临时路径，不污染真实 LocalAppData
+- 2026-08-11（文件传输扩展：同端口同页面双向大文件传输，测试 180/180）：
+  ① **传输层流式化**：IRemoteHttpServer 新增 StreamingRoutes 路由表（"METHOD /path" 登记）；
+     命中路由跳过 body 预读、不受 1MB 限长与 30s 整体超时约束，
+     裸流经 RemoteHttpRequest.RawStream 交业务层（缺 Content-Length 回应 411）；
+     响应侧 RemoteHttpResponse.BodyStream 按 64KB 分块写出（Content-Length 取 BodyStreamLength）；
+     流式传输改每块读/写 60s 空闲超时；非流式路由语义不变（413/30s 回归测试锁定）
+  ② 新增路由（全部走 RequireSession 继承认证/会话/Host 白名单）：
+     POST /api/transfer/upload（CSRF 头校验 + X-File-Name URL 编码文件名，raw body 直写磁盘）、
+     GET /api/transfer/list（共享清单 JSON）、
+     GET /api/transfer/download?id=N（流式响应 + Content-Disposition filename*=UTF-8'' 中文名兼容）
+  ③ 新增 FileTransferService 静态单例：接收目录（file-transfer.json 持久化，默认 DataDir/Received）、
+     待发送文件表（内存会话级，按完整路径去重）、文件名净化（Path.GetFileName 剥离路径防穿越 +
+     非法字符替换 + 空名兜底 unnamed）、重名自动 "name (1).ext" 编号、磁盘剩余空间预检、
+     进度事件 100ms 节流 + 记录环形上限 40
+  ④ 控制页 control_panel.html 新增「📁 文件传输」卡片（原文件内扩展，不新建页面）：
+     XHR 上传（upload.onprogress 真实进度，fetch 无此事件）+ 共享清单 3s 轮询 +
+     文件名一律 textContent 渲染（防 XSS）
+  ⑤ 新增 FileTransferTool 面板（🌐 网络分类）：服务状态探测（未启动时 ToolNavigation 引导至远程控制页）、
+     接收目录（OpenFolderDialog/资源管理器打开）、待发送清单增删、传输记录实时进度
+     （Loaded/Unloaded 挂摘事件订阅防泄漏）；服务生命周期仍归远程控制页管理

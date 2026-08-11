@@ -16,11 +16,15 @@ public sealed class HttpListenerServer : IRemoteHttpServer
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
 
+    private readonly HashSet<string> _streamingRoutes = new(StringComparer.Ordinal);
+
     public bool IsRunning => _listener?.IsListening == true;
 
     public int ActualPort { get; private set; }
 
     public Func<RemoteHttpRequest, RemoteHttpResponse>? RequestHandler { get; set; }
+
+    public ISet<string> StreamingRoutes => _streamingRoutes;
 
     public void Start(int port)
     {
@@ -70,8 +74,12 @@ public sealed class HttpListenerServer : IRemoteHttpServer
     {
         try
         {
-            // 超大 body：直接 413（与主方案语义一致）
-            if (context.Request.ContentLength64 > MaxBodyBytes)
+            var method = context.Request.HttpMethod.ToUpperInvariant();
+            var path = context.Request.Url?.AbsolutePath ?? "/";
+            var isStreaming = _streamingRoutes.Contains(method + " " + path);
+
+            // 超大 body：直接 413（流式路由豁免——body 由处理器经 RawStream 流式消费，不预读）
+            if (!isStreaming && context.Request.ContentLength64 > MaxBodyBytes)
             {
                 await WriteResponseAsync(context.Response,
                     new RemoteHttpResponse { StatusCode = 413, Body = "body too large" });
@@ -80,11 +88,13 @@ public sealed class HttpListenerServer : IRemoteHttpServer
 
             var request = new RemoteHttpRequest
             {
-                Method = context.Request.HttpMethod,
-                Path = context.Request.Url?.AbsolutePath ?? "/",
+                Method = method,
+                Path = path,
                 Query = BuildQuery(context.Request.QueryString),
                 Headers = BuildHeaders(context.Request.Headers),
-                Body = await ReadBodyAsync(context.Request),
+                Body = isStreaming ? "" : await ReadBodyAsync(context.Request),
+                RawStream = isStreaming ? context.Request.InputStream : null,
+                RawLength = isStreaming ? context.Request.ContentLength64 : 0,
                 RemoteIp = context.Request.RemoteEndPoint?.Address.ToString() ?? ""
             };
 
@@ -140,13 +150,29 @@ public sealed class HttpListenerServer : IRemoteHttpServer
 
     private static async Task WriteResponseAsync(HttpListenerResponse response, RemoteHttpResponse content)
     {
-        var bodyBytes = Encoding.UTF8.GetBytes(content.Body);
+        var bodyBytes = content.BodyStream == null ? Encoding.UTF8.GetBytes(content.Body) : Array.Empty<byte>();
         response.StatusCode = content.StatusCode;
         response.ContentType = content.ContentType;
-        response.ContentLength64 = bodyBytes.Length;
+        response.ContentLength64 = content.BodyStream != null
+            ? content.BodyStreamLength ?? content.BodyStream.Length
+            : bodyBytes.Length;
         foreach (var (key, value) in content.Headers)
             response.Headers[key] = value;
-        if (bodyBytes.Length > 0)
+        if (content.BodyStream != null)
+        {
+            // 流式响应（大文件下载）：64KB 分块拷贝，写完释放流
+            try
+            {
+                await content.BodyStream.CopyToAsync(response.OutputStream, 64 * 1024);
+            }
+            finally
+            {
+                try { await content.BodyStream.DisposeAsync(); } catch (Exception) { /* 忽略 */ }
+            }
+        }
+        else if (bodyBytes.Length > 0)
+        {
             await response.OutputStream.WriteAsync(bodyBytes);
+        }
     }
 }
