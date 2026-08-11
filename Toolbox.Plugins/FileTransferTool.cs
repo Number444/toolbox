@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using Microsoft.Win32;
 using Toolbox.Core.Models;
 using Toolbox.Models;
@@ -20,7 +21,9 @@ public class FileTransferTool : ITool
 {
     private static FileTransferService Service => FileTransferService.Instance;
 
-    private TextBlock? _serverStatus;
+    private Ellipse? _statusDot;
+    private TextBlock? _statusTitle;
+    private TextBlock? _statusCaption;
     private Button? _gotoRemoteButton;
     private TextBlock? _dirValue;
     private ItemsControl? _shareItems;
@@ -44,52 +47,73 @@ public class FileTransferTool : ITool
             Margin = new Thickness(0, 0, 0, 16)
         });
 
-        // ② 服务状态卡片
+        // ② 服务状态卡片：状态圆点 + 主标题 + 次级说明（对齐远程控制页状态行语言）
         var statusCard = BuildCard("服务状态");
         var statusInner = (StackPanel)statusCard.Child;
-        _serverStatus = new TextBlock { FontSize = 14, Margin = new Thickness(0, 0, 0, 10) };
-        statusInner.Children.Add(_serverStatus);
-        _gotoRemoteButton = new Button
+        var statusRow = new StackPanel { Orientation = Orientation.Horizontal };
+        _statusDot = new Ellipse
         {
-            Content = "🛰️ 前往远程控制启动服务",
-            FontSize = 13,
-            Padding = new Thickness(12, 5, 12, 5),
-            Height = 34,
-            HorizontalAlignment = HorizontalAlignment.Left
+            Width = 10,
+            Height = 10,
+            Margin = new Thickness(1, 1, 8, 0), // 下移 1px 与文字基线视觉对齐（2026-08-11 用户微调）
+            VerticalAlignment = VerticalAlignment.Center
         };
+        _statusTitle = new TextBlock
+        {
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary)
+        };
+        statusRow.Children.Add(_statusDot);
+        statusRow.Children.Add(_statusTitle);
+        statusInner.Children.Add(statusRow);
+        _statusCaption = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
+            Margin = new Thickness(19, 4, 0, 0)
+        };
+        statusInner.Children.Add(_statusCaption);
+        _gotoRemoteButton = BuildButton("🛰️ 前往远程控制启动服务");
+        _gotoRemoteButton.HorizontalAlignment = HorizontalAlignment.Left;
+        _gotoRemoteButton.Margin = new Thickness(19, 10, 0, 0);
         _gotoRemoteButton.Click += (_, _) => ToolNavigation.Request("远程控制");
         statusInner.Children.Add(_gotoRemoteButton);
         statusCard.Margin = new Thickness(0, 0, 0, 12);
         panel.Children.Add(statusCard);
 
-        // ③ 接收设置卡片
+        // ③ 接收设置卡片：目录内嵌底色框（层级清晰）
         var receiveCard = BuildCard("接收设置");
         var receiveInner = (StackPanel)receiveCard.Child;
+        receiveInner.Children.Add(new TextBlock
+        {
+            Text = "手机上传的文件保存到",
+            FontSize = 12,
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+        var dirBox = new Border
+        {
+            Background = ResBrush("BgCardBrush", Color.FromRgb(0x32, 0x32, 0x32)),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(0, 0, 0, 10)
+        };
         _dirValue = new TextBlock
         {
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = new SolidColorBrush(ThemeColors.TextPrimary),
-            Margin = new Thickness(0, 0, 0, 10)
+            Foreground = new SolidColorBrush(ThemeColors.TextPrimary)
         };
-        receiveInner.Children.Add(_dirValue);
+        dirBox.Child = _dirValue;
+        receiveInner.Children.Add(dirBox);
         var dirRow = new StackPanel { Orientation = Orientation.Horizontal };
-        var changeButton = new Button
-        {
-            Content = "📂 更改目录…",
-            FontSize = 13,
-            Padding = new Thickness(12, 5, 12, 5),
-            Height = 34
-        };
+        var changeButton = BuildButton("📂 更改目录…");
         changeButton.Click += (_, _) => ChangeDirectory();
-        var openButton = new Button
-        {
-            Content = "🗂 打开目录",
-            FontSize = 13,
-            Padding = new Thickness(12, 5, 12, 5),
-            Height = 34,
-            Margin = new Thickness(10, 0, 0, 0)
-        };
+        var openButton = BuildButton("🗂 打开目录");
+        openButton.Margin = new Thickness(10, 0, 0, 0);
         openButton.Click += (_, _) => OpenDirectory();
         dirRow.Children.Add(changeButton);
         dirRow.Children.Add(openButton);
@@ -97,28 +121,16 @@ public class FileTransferTool : ITool
         receiveCard.Margin = new Thickness(0, 0, 0, 12);
         panel.Children.Add(receiveCard);
 
-        // ④ 待发送文件卡片（手机端可见的下载清单）
+        // ④ 待发送文件卡片（手机端可见的下载清单）：行项卡片化
         var shareCard = BuildCard("待发送文件（手机端可下载）");
         var shareInner = (StackPanel)shareCard.Child;
         _shareItems = new ItemsControl { FontSize = 13 };
         shareInner.Children.Add(_shareItems);
         var shareRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-        var addButton = new Button
-        {
-            Content = "➕ 添加文件…",
-            FontSize = 13,
-            Padding = new Thickness(12, 5, 12, 5),
-            Height = 34
-        };
+        var addButton = BuildButton("➕ 添加文件…");
         addButton.Click += (_, _) => AddFiles();
-        var clearButton = new Button
-        {
-            Content = "🗑 清空",
-            FontSize = 13,
-            Padding = new Thickness(12, 5, 12, 5),
-            Height = 34,
-            Margin = new Thickness(10, 0, 0, 0)
-        };
+        var clearButton = BuildButton("🗑 清空");
+        clearButton.Margin = new Thickness(10, 0, 0, 0);
         clearButton.Click += (_, _) => { Service.ClearSharedFiles(); RefreshShares(); };
         shareRow.Children.Add(addButton);
         shareRow.Children.Add(clearButton);
@@ -159,14 +171,15 @@ public class FileTransferTool : ITool
     private void RefreshServerStatus()
     {
         var running = RemoteControlTool.IsServerRunning;
-        _serverStatus!.Text = running
-            ? "● 服务运行中（手机打开控制页即可传输）"
-            : "● 服务未启动（传输服务与远程控制同端口，需先启动）";
-        _serverStatus.Foreground = new SolidColorBrush(running ? ThemeColors.Success : ThemeColors.Warning);
+        _statusDot!.Fill = new SolidColorBrush(running ? ThemeColors.Success : ThemeColors.Warning);
+        _statusTitle!.Text = running ? "服务运行中" : "服务未启动";
+        _statusCaption!.Text = running
+            ? "手机浏览器打开控制页即可双向传输文件"
+            : "传输服务与远程控制同端口，需先在远程控制页启动";
         _gotoRemoteButton!.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void RefreshDirectory() => _dirValue!.Text = "手机上传的文件保存到：" + Service.SaveDirectory;
+    private void RefreshDirectory() => _dirValue!.Text = Service.SaveDirectory;
 
     private void RefreshShares()
     {
@@ -174,43 +187,47 @@ public class FileTransferTool : ITool
         var files = Service.SharedFiles;
         if (files.Count == 0)
         {
-            _shareItems.Items.Add(new TextBlock
-            {
-                Text = "（暂无共享文件）",
-                FontSize = 13,
-                Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
-            });
+            _shareItems.Items.Add(BuildEmptyState("📤", "暂无共享文件，添加后手机端即可下载"));
             return;
         }
         foreach (var file in files)
         {
-            var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-            var remove = new Button
-            {
-                Content = "移除",
-                FontSize = 12,
-                Padding = new Thickness(8, 2, 8, 2),
-                Height = 26,
-                Margin = new Thickness(8, 0, 0, 0),
-                Tag = file.Id
-            };
+            // 行项卡片：文件名（超长省略 + 悬浮全路径）│ 大小 │ 移除（小按钮）
+            var row = new DockPanel();
+            var remove = BuildButton("移除", 26);
+            remove.FontSize = 12;
+            remove.Padding = new Thickness(8, 2, 8, 2);
+            remove.Margin = new Thickness(8, 0, 0, 0);
+            remove.Tag = file.Id;
+            remove.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(remove, Dock.Right); // 附加属性不能对象初始化器
             remove.Click += (s, _) =>
             {
                 if (s is Button { Tag: int id }) Service.RemoveSharedFile(id);
                 RefreshShares();
             };
-            var text = new TextBlock
+            var size = new TextBlock
             {
-                Text = $"📄 {file.Name} · {FormatSize(file.Size)}",
+                Text = FormatSize(file.Size),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(ThemeColors.TextSecondary),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+            DockPanel.SetDock(size, Dock.Right);
+            var name = new TextBlock
+            {
+                Text = "📄 " + file.Name,
                 FontSize = 13,
-                TextWrapping = TextWrapping.Wrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = file.FullPath,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new SolidColorBrush(ThemeColors.TextPrimary)
             };
             row.Children.Add(remove);
-            row.Children.Add(text);
-            _shareItems.Items.Add(row);
+            row.Children.Add(size);
+            row.Children.Add(name);
+            _shareItems.Items.Add(WrapRowCard(row));
         }
     }
 
@@ -220,22 +237,17 @@ public class FileTransferTool : ITool
         var records = Service.RecentRecords;
         if (records.Count == 0)
         {
-            _recordItems.Items.Add(new TextBlock
-            {
-                Text = "（暂无传输）",
-                FontSize = 13,
-                Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
-            });
+            _recordItems.Items.Add(BuildEmptyState("🔄", "暂无传输记录"));
             return;
         }
         foreach (var record in records)
             _recordItems.Items.Add(BuildRecordRow(record));
     }
 
-    /// <summary>传输记录行：方向图标 + 文件名/状态 + 进度条（进行中显示百分比）</summary>
+    /// <summary>传输记录行（卡片化）：方向 + 文件名 │ 状态；进行中显示自绘细进度条，失败显示原因</summary>
     private static UIElement BuildRecordRow(TransferProgress record)
     {
-        var container = new StackPanel { Margin = new Thickness(0, 3, 0, 3) };
+        var container = new StackPanel();
 
         var direction = record.Direction == TransferDirection.Upload ? "⬆️" : "⬇️";
         var (stateText, stateColor) = record.State switch
@@ -243,32 +255,105 @@ public class FileTransferTool : ITool
             TransferState.InProgress => record.Total > 0
                 ? ($"{record.Transferred * 100 / record.Total}%", ThemeColors.TextSecondary)
                 : ("传输中", ThemeColors.TextSecondary),
-            TransferState.Completed => ("✅ 完成", ThemeColors.Success),
-            _ => ($"❌ {record.Error ?? "失败"}", ThemeColors.Danger)
+            TransferState.Completed => ("完成", ThemeColors.Success),
+            _ => ("失败", ThemeColors.Danger)
         };
 
-        container.Children.Add(new TextBlock
+        var top = new DockPanel();
+        var stateEl = new TextBlock
         {
-            Text = $"{direction} {record.FileName} · {FormatSize(record.Total)} · {stateText}",
+            Text = stateText,
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(stateColor),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0)
+        };
+        DockPanel.SetDock(stateEl, Dock.Right);
+        var nameEl = new TextBlock
+        {
+            Text = $"{direction} {record.FileName} · {FormatSize(record.Total)}",
             FontSize = 13,
-            TextWrapping = TextWrapping.Wrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = record.FileName,
+            VerticalAlignment = VerticalAlignment.Center,
             Foreground = new SolidColorBrush(record.State == TransferState.InProgress
                 ? ThemeColors.TextPrimary
-                : stateColor)
-        });
+                : ThemeColors.TextSecondary)
+        };
+        top.Children.Add(stateEl);
+        top.Children.Add(nameEl);
+        container.Children.Add(top);
 
         if (record.State == TransferState.InProgress && record.Total > 0)
         {
-            container.Children.Add(new ProgressBar
+            container.Children.Add(BuildSlimBar((double)record.Transferred / record.Total));
+        }
+        else if (record.State == TransferState.Failed && !string.IsNullOrEmpty(record.Error))
+        {
+            container.Children.Add(new TextBlock
             {
-                Minimum = 0,
-                Maximum = record.Total,
-                Value = record.Transferred,
-                Height = 6,
-                Margin = new Thickness(0, 4, 0, 0)
+                Text = record.Error,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(ThemeColors.Danger),
+                Margin = new Thickness(0, 3, 0, 0)
             });
         }
-        return container;
+        return WrapRowCard(container);
+    }
+
+    /// <summary>自绘细进度条（原生 ProgressBar 深色主题下突兀）： sunken 轨道 + Accent 填充，星标列控宽</summary>
+    private static UIElement BuildSlimBar(double fraction)
+    {
+        var grid = new Grid { Height = 6, Margin = new Thickness(0, 6, 0, 2) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Clamp(fraction, 0.001, 0.999), GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Clamp(1 - fraction, 0.001, 0.999), GridUnitType.Star) });
+        var track = new Border
+        {
+            Background = ResBrush("BgDarkBrush", Color.FromRgb(0x1C, 0x1C, 0x1C)),
+            CornerRadius = new CornerRadius(3)
+        };
+        Grid.SetColumnSpan(track, 2);
+        var fill = new Border
+        {
+            Background = ResBrush("AccentBrush", Color.FromRgb(0x76, 0xB5, 0x80)),
+            CornerRadius = new CornerRadius(3)
+        };
+        grid.Children.Add(track);
+        grid.Children.Add(fill);
+        return grid;
+    }
+
+    /// <summary>行项卡片包装：BgCard 底 + 6px 圆角，清单/记录行共用层级语言</summary>
+    private static Border WrapRowCard(UIElement content) => new()
+    {
+        Background = ResBrush("BgCardBrush", Color.FromRgb(0x32, 0x32, 0x32)),
+        CornerRadius = new CornerRadius(6),
+        Padding = new Thickness(10, 7, 10, 7),
+        Margin = new Thickness(0, 3, 0, 3),
+        Child = content
+    };
+
+    /// <summary>空状态：居中图标 + 提示文字（清单/记录共用）</summary>
+    private static UIElement BuildEmptyState(string icon, string text)
+    {
+        var box = new StackPanel { Margin = new Thickness(0, 8, 0, 10) };
+        box.Children.Add(new TextBlock
+        {
+            Text = icon,
+            FontSize = 22,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+        box.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = new SolidColorBrush(ThemeColors.TextSecondary)
+        });
+        return box;
     }
 
     // ==================== 事件 ====================
@@ -344,6 +429,21 @@ public class FileTransferTool : ITool
         >= 1024 => $"{bytes / 1024.0:F1} KB",
         _ => $"{bytes} B"
     };
+
+    // ==================== 样式辅助 ====================
+
+    /// <summary>统一按钮构造（全局隐式 Accent 绿样式；尺寸与面板一致，2026-08-11 用户决策：不分级）</summary>
+    private static Button BuildButton(string content, double height = 34) => new()
+    {
+        Content = content,
+        FontSize = 13,
+        Padding = new Thickness(12, 5, 12, 5),
+        Height = height
+    };
+
+    /// <summary>取应用资源画刷（BgCardBrush/BgDarkBrush/AccentBrush），取不到回退同色硬编码</summary>
+    private static Brush ResBrush(string key, Color fallback)
+        => Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
 
     // ==================== 卡片模板（规范 4.2，与 RemoteControlTool 一致） ====================
 
