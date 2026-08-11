@@ -230,6 +230,61 @@ public class FileTransferTests : IDisposable
         Assert.Contains(items.EnumerateArray(), item => item.GetProperty("id").GetInt32() == entry!.Id);
     }
 
+    // ==================== Expect: 100-continue ====================
+
+    [Fact]
+    public async Task Upload_Expect100Continue_InterimThenFinal200()
+    {
+        // 部分手机浏览器/WebView 上传带 Expect: 100-continue：服务端必须先回 100 Continue 再收 body，
+        // 否则对端空等自身超时才发数据，极易撞上本端空闲超时导致上传假性失败（实测踩中）
+        var authResponse = await _client.PostAsync("/api/auth",
+            new StringContent($$"""{"token":"{{TestToken}}"}""", Encoding.UTF8, "application/json"));
+        var cookie = authResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0]; // rc_session=xxx
+
+        var data = new byte[128 * 1024];
+        Random.Shared.NextBytes(data);
+
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, _server.ActualPort);
+        await using var stream = tcp.GetStream();
+
+        var head = "POST /api/transfer/upload HTTP/1.1\r\n" +
+                   $"Host: 127.0.0.1:{_server.ActualPort}\r\n" +
+                   $"Cookie: {cookie}\r\n" +
+                   "X-Requested-With: RemoteControl\r\n" +
+                   $"X-File-Name: {Uri.EscapeDataString("expect.bin")}\r\n" +
+                   $"Content-Length: {data.Length}\r\n" +
+                   "Expect: 100-continue\r\n" +
+                   "\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(head));
+
+        // 只发头不发 body：应收到 100 Continue 临时响应
+        var interim = await ReadHeadersAsync(stream);
+        Assert.StartsWith("HTTP/1.1 100 Continue", interim);
+
+        // 收到 100 后再发 body：最终 200，且文件字节一致落盘
+        await stream.WriteAsync(data);
+        var final = await ReadHeadersAsync(stream);
+        Assert.StartsWith("HTTP/1.1 200", final);
+        Assert.Equal(data, await File.ReadAllBytesAsync(Path.Combine(_receiveDir, "expect.bin")));
+    }
+
+    /// <summary>读到 HTTP 头结束（\r\n\r\n）为止，返回已读文本</summary>
+    private static async Task<string> ReadHeadersAsync(NetworkStream stream)
+    {
+        var ms = new MemoryStream();
+        var buf = new byte[1024];
+        while (true)
+        {
+            var read = await stream.ReadAsync(buf);
+            if (read == 0) break;
+            ms.Write(buf, 0, read);
+            var text = Encoding.ASCII.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+            if (text.Contains("\r\n\r\n")) return text;
+        }
+        return Encoding.ASCII.GetString(ms.ToArray());
+    }
+
     // ==================== 非流式路由回归 ====================
 
     [Fact]

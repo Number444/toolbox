@@ -17,7 +17,12 @@
 
 - 传输层流式旁路：`IRemoteHttpServer.StreamingRoutes` 登记 `POST /api/transfer/upload` 后，
   `TcpHttpServer`/`HttpListenerServer` 对该路由不预读 body（豁免 1MB 限长/30s 整体超时），
-  裸流经 `RemoteHttpRequest.RawStream` 交业务层；每块读写 60s 空闲超时
+  裸流经 `RemoteHttpRequest.RawStream` 交业务层；60s 空闲超时
+- 网络读写**禁用 CancellationToken 逐块取消**（取消 socket 异步操作有 SAEA 异步回收竞态，
+  会抛 "socket operation is already in progress"，2026-08-11 实测修复）：
+  上传同步 `Read` + `ReadTimeout`（SO_RCVTIMEO），下载同步 `Write` + `WriteTimeout`（SO_SNDTIMEO）
+- `Expect: 100-continue` 支持：部分手机浏览器/WebView 上传先等确认才发 body，
+  `TcpHttpServer` 解析头后先回 `100 Continue`（HttpListener 由系统托管天然支持）
 - 下载经 `RemoteHttpResponse.BodyStream` 分块写出，`Content-Disposition: filename*=UTF-8''` 兼容中文名
 - 文件名净化：`Path.GetFileName` 剥离路径（防 `../../` 穿越）+ 非法字符替换 + 空名兜底 `unnamed`；磁盘剩余空间预检
 - 认证零新增：路由全部走 `RequireSession`，上传额外校验 `X-Requested-With`（CSRF）
@@ -26,7 +31,7 @@
 ## 测试覆盖
 
 - `FileTransferTests.cs`：净化（含路径穿越）/去重/上传下载回环字节一致（>1MB 验证流式旁路）/
-  重名编号/401/403/404/非流式路由 1MB 上限回归
+  重名编号/401/403/404/`Expect: 100-continue` 临时响应/非流式路由 1MB 上限回归
 
 ## 依赖（公共共享类）
 

@@ -157,6 +157,10 @@ public sealed class TcpHttpServer : IRemoteHttpServer
                 headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
             }
 
+            // Expect: 100-continue：部分手机浏览器/WebView 上传时先等确认才发 body，
+            // 不回 100 会让对端空等到自身超时才发数据（极易撞上本端空闲超时，上传假性失败）
+            await WriteContinueIfExpectedAsync(stream, headers, ct);
+
             // 流式路由（大文件上传）：不预读 body、不受 MaxBodyBytes 约束，裸流交处理器
             if (_streamingRoutes.Contains(method + " " + path))
             {
@@ -228,6 +232,16 @@ public sealed class TcpHttpServer : IRemoteHttpServer
         }
     }
 
+    /// <summary>客户端声明 Expect: 100-continue 时先回 100 Continue，通知其开始发送 body</summary>
+    private static async Task WriteContinueIfExpectedAsync(NetworkStream stream, Dictionary<string, string> headers, CancellationToken ct)
+    {
+        if (headers.TryGetValue("Expect", out var expect) &&
+            expect.Contains("100-continue", StringComparison.OrdinalIgnoreCase))
+        {
+            await stream.WriteAsync("HTTP/1.1 100 Continue\r\n\r\n"u8.ToArray(), ct);
+        }
+    }
+
     /// <summary>请求行/头行超过限长（内部信号，映射为 413 响应）</summary>
     private sealed class TooLargeException : Exception { }
 
@@ -272,7 +286,10 @@ public sealed class TcpHttpServer : IRemoteHttpServer
 
         if (response.BodyStream != null)
         {
-            // 流式响应（大文件下载）：分块拷贝，豁免 30s 整体超时，每块读写 60s 空闲超时
+            // 流式响应（大文件下载）：分块拷贝，豁免 30s 整体超时。
+            // 网络写用同步 Write + SO_SNDTIMEO，不用 CancellationToken 逐块取消——
+            // 取消 socket 异步操作存在 SAEA 异步回收竞态（见 FileTransferService.ReceiveUpload 注释）
+            if (stream.CanTimeout) stream.WriteTimeout = (int)StreamIdleTimeout.TotalMilliseconds;
             try
             {
                 var buffer = new byte[StreamChunkBytes];
@@ -282,8 +299,7 @@ public sealed class TcpHttpServer : IRemoteHttpServer
                     using (var readCts = new CancellationTokenSource(StreamIdleTimeout))
                         read = await response.BodyStream.ReadAsync(buffer.AsMemory(0, buffer.Length), readCts.Token);
                     if (read == 0) break;
-                    using (var writeCts = new CancellationTokenSource(StreamIdleTimeout))
-                        await stream.WriteAsync(buffer.AsMemory(0, read), writeCts.Token);
+                    stream.Write(buffer, 0, read);
                 }
             }
             finally

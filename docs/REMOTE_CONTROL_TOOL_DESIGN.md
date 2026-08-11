@@ -545,3 +545,13 @@ GET /api/status
   ⑤ 新增 FileTransferTool 面板（🌐 网络分类）：服务状态探测（未启动时 ToolNavigation 引导至远程控制页）、
      接收目录（OpenFolderDialog/资源管理器打开）、待发送清单增删、传输记录实时进度
      （Loaded/Unloaded 挂摘事件订阅防泄漏）；服务生命周期仍归远程控制页管理
+- 2026-08-11（传输稳定性修复：手机上传 SAEA 竞态，测试 181/181）：
+  ① **禁用 CancellationToken 逐块取消网络读写**——.NET 取消 socket 异步操作时底层
+     SocketAsyncEventArgs 异步回收，取消与数据到达竞争时下一次 ReadAsync 抛
+     "An asynchronous socket operation is already in progress using this SocketAsyncEventArgs instance"
+     （dotnet/runtime#107209；手机上传视频实测踩中）。上传改同步 Read + ReadTimeout（SO_RCVTIMEO），
+     下载改同步 Write + WriteTimeout（SO_SNDTIMEO）——内核 setsockopt 超时无此竞态，
+     且传输本就独占连接线程，同步无损失；空闲超时仍 60s，超时信息汉化为"传输空闲超时"
+  ② **Expect: 100-continue 支持**：部分手机浏览器/WebView 上传先等服务端确认才发 body，
+     不回 100 会对端空等至自身超时才发数据（恰好撞上 60s 空闲超时是本次竞态的触发条件）；
+     TcpHttpServer 解析完请求头先回 "HTTP/1.1 100 Continue"（HttpListener 由系统托管天然支持）

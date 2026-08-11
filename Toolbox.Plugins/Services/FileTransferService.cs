@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net.Sockets;
 using Toolbox.Core.Services;
 
 namespace Toolbox.Plugins.Services;
@@ -164,14 +165,26 @@ public sealed class FileTransferService
             var buffer = new byte[ChunkBytes];
             long remaining = length;
             var lastReport = DateTime.MinValue;
+
+            // 同步读 + SO_RCVTIMEO，不用 CancellationToken 逐块取消网络读：
+            // .NET 取消 socket 异步操作时底层 SAEA 异步回收，取消与数据到达竞争时
+            // 下一次 ReadAsync 会抛 "socket operation is already in progress"（手机上传实测踩中）；
+            // 同步读超时走 setsockopt，无此竞态（本方法本就独占连接线程，同步不损失什么）
+            if (input.CanTimeout) input.ReadTimeout = (int)IdleTimeout.TotalMilliseconds;
+
             using (var file = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, ChunkBytes))
             {
                 while (remaining > 0)
                 {
                     int read;
-                    using (var cts = new CancellationTokenSource(IdleTimeout))
-                        read = input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), cts.Token)
-                                    .GetAwaiter().GetResult();
+                    try
+                    {
+                        read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                    }
+                    catch (IOException ex) when (ex.InnerException is SocketException se && se.SocketErrorCode == SocketError.TimedOut)
+                    {
+                        throw new TimeoutException($"传输空闲超时（{(int)IdleTimeout.TotalSeconds}s 无数据）", ex);
+                    }
                     if (read == 0) throw new EndOfStreamException("对端提前断开");
                     file.Write(buffer, 0, read);
                     remaining -= read;
