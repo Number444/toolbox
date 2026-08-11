@@ -164,7 +164,9 @@ public sealed class AppSettings : INotifyPropertyChanged
             using var key = Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
             if (key == null) return;
-            if (key.GetValue("Toolbox") is not string current) return; // 未开启自启
+            // 读写必须用同一值名（AppPaths.DataFolderName）：曾硬编码 "Toolbox" 导致
+            // Debug 版读到正式版的自启值 → 用自己的值名误建 Debug 自启（2026-08-11 修复）
+            if (key.GetValue(AppPaths.DataFolderName) is not string current) return; // 未开启自启
 
             var exePath = Environment.ProcessPath;
             if (string.IsNullOrEmpty(exePath)) return;
