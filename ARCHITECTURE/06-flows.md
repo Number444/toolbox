@@ -129,6 +129,18 @@ MusicFloatWindowManager (单例)
 │   ├── 自动屏幕边界吸附
 │   └── 点击外部自动关闭
 │
+├── TaskbarMusicWindow       任务栏嵌入宿主（v1.8.1，SetParent 进 Shell_TrayWnd）
+│   ├── TaskbarMusicWidget    控件内容（封面/歌名歌手跑马灯/播放态角标，纯显示）
+│   ├── 左档贴左缘 +8 DIP / 右档贴托盘左侧；拖动 8px 阈值 + 就近吸附
+│   ├── TaskbarThemeHelper    任务栏明暗主题探测配色
+│   └── 空闲自动隐藏；点击 → 弹卡；WidgetMoved → 弹卡重锚定
+│
+├── TaskbarMediaPopupWindow  弹出媒体卡片（v1.8.1，Mica + MediaTransportButtonStyle 播放控制）
+│   ├── 动画：FluentFlyout 路径——预置最终位置下方 20px → Window.Top/Opacity 直接动画
+│   │   （300ms CubicEase EaseOut，内容模糊 8→0 以 450ms 更缓收尾；收拢 180ms EaseIn）
+│   ├── 点击外部/Esc 关闭（Activate + Deactivated 链路，400ms 重开防抖）
+│   └── 踩坑留档见 tools/netease-music-tool.md「弹出媒体卡片动画」
+│
 └── 操作：Show / Hide / Close / ToggleBlur / SetSizeMode / SetWindowLocked
          TogglePlayPause / SkipNext / SkipPrevious / ResetPosition / SetClickThrough
          窗口创建即实例化，切换背景类型或尺寸时替换窗口（非原地切换）

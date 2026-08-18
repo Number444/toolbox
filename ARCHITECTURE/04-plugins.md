@@ -36,12 +36,13 @@
 | EngineDownloader.cs | OCR 引擎/模型下载、校验与解压（多下载源 + 重试 + 进度节流） |
 | ImageFileHelper.cs | 图片文件校验与格式判断 |
 | ClipboardHelper.cs | 剪贴板写入辅助：专用 STA 线程执行（剪贴板被占用时 WPF 内部重试可阻塞 UI 数百 ms，UI 线程直调会"卡一下"），结果经 Dispatcher 回传；NetworkInfoTool 已接入，其余工具复制可复用 |
+| TaskbarThemeHelper.cs | 任务栏主题探测（读 SystemUsesLightTheme）：为任务栏嵌入控件提供文字/悬停/描边配色 |
 
 ## 共享 Services/
 
 | 文件 | 职责 |
 |------|------|
-| AudioflowSettings.cs | 悬浮窗独立设置（audioflow.json）：毛玻璃/锁定/贴边/游戏模式/播放按钮/窗口位置 |
+| AudioflowSettings.cs | 悬浮窗独立设置（audioflow.json）：毛玻璃/锁定/贴边/游戏模式/播放按钮/窗口位置/任务栏控件 |
 | SoftwareUninstallService.cs | 已安装软件扫描 + 卸载执行（注册表 + 图标提取 + UAC 提权） |
 
 ## 共享 Controls/
@@ -50,6 +51,7 @@
 |------|------|
 | MusicContentControl.xaml(.cs) | 悬浮窗共享内容控件（封面/歌名/大小模式/跑马灯/切歌动画/悬停播放按钮） |
 | DockTriggerBar.xaml(.cs) | 贴边触发条控件（梯形圆角 + 方向箭头） |
+| TaskbarMusicWidget.xaml(.cs) | 任务栏嵌入式音乐控件（封面/歌名歌手双行跑马灯/播放态角标，纯显示，播放控制在弹出卡片） |
 
 ## 对话框
 

@@ -9,7 +9,7 @@
 | App.xaml | 全局深色主题 + 所有控件样式和模板（含 Button/ToggleButton CornerRadius=6、ToolTip 深色样式 + 150ms 淡入） |
 | App.xaml.cs | 单实例互斥 + 三层全局异常捕获 + crash.log（2MB 轮转存档） |
 | MainWindow.xaml | 完整的主窗口布局（含 HaloLayer Canvas + EdgeGlowLayer 叠加层） |
-| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠（展开时子项 25ms 间隔错落淡入）+ 侧栏按压反馈（导航项/分组头 0.96 按压缩放 + 回弹，`EnsureMutableScale` 防冻结实例）+ 设置层进出过渡（淡入上滑 + 0.96↔1 缩放，设置页点工具时与切换退场**串行对齐**：退场期间下层折叠、`ExitCompleted` 后 150ms 快速退场）+ 工具切换内容区回顶 + 鼠标光晕 + 边缘发光集成（光晕与 RenderTransform 动画同步：`IsAnyGlowTrackedAnimationActive` 闸门检测 + 活跃期逐帧 Refresh，见 07-ui-system「重绘触发与动画同步」）+ 切回前台动画（`_wasBackground` 三处置位 + `Activated` 触发；`MinimizePreClearHook` SC_MINIMIZE 清场帧拦截消除还原首帧闪烁，见 07-ui-system） |
+| MainWindow.xaml.cs | Acrylic 背景（经 Core 的 DwmHelper 实现，Win10 降级）+ 半透明背景 + 系统托盘 + 导航高亮动画 + 分组展开折叠（展开时子项 25ms 间隔错落淡入）+ 侧栏按压反馈（导航项/分组头 0.96 按压缩放 + 回弹，`EnsureMutableScale` 防冻结实例）+ 设置层进出过渡（淡入上滑 + 0.96↔1 缩放，设置页点工具时与切换退场**串行对齐**：退场期间下层折叠、`ExitCompleted` 后 150ms 快速退场）+ 工具切换内容区回顶 + 鼠标光晕 + 边缘发光集成（光晕与 RenderTransform 动画同步：`IsAnyGlowTrackedAnimationActive` 闸门检测 + 活跃期逐帧 Refresh，见 07-ui-system「重绘触发与动画同步」）+ 切回前台动画（`_wasBackground` 三处置位 + `Activated` 触发；`MinimizePreClearHook` SC_MINIMIZE 清场帧拦截消除还原首帧闪烁，见 07-ui-system）+ 退出清理（v1.8.1：`OnClosed` 兜底关闭任务栏媒体卡片窗口 + `_isClosed` 守卫 `RestoreFromTray`，修 X 关闭后台驻留时卡片残留导致的进程不退/重启唤起崩溃） |
 | AssemblyInfo.cs | 程序集信息 |
 | Toolbox.ico | 应用图标 |
 

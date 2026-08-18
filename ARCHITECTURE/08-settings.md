@@ -28,6 +28,12 @@
 | `ShowPlaybackControls` | `bool` | `true` | 悬停封面显示播放控制按钮 |
 | `FloatWindowLeft` | `double` | `NaN` | 窗口 X 坐标（NaN=默认位置） |
 | `FloatWindowTop` | `double` | `NaN` | 窗口 Y 坐标（NaN=默认位置） |
+| `TaskbarWidgetEnabled` | `bool` | `false` | 任务栏嵌入式音乐控件开关（v1.8.1 新增） |
+| `TaskbarWidgetPosition` | `int` | `0` | 控件停靠位置（0=左侧 / 1=右侧，右侧紧邻系统托盘） |
+| `TaskbarWidgetHideWhenIdle` | `bool` | `true` | 无播放时自动隐藏控件 |
+| `TaskbarWidgetLocked` | `bool` | `false` | 锁定控件禁止拖动 |
+
+> v1.8.1 移除 `TaskbarWidgetControlsEnabled`（控件内嵌播放按钮设置）：任务栏控件改为纯显示，播放控制统一收敛到弹出媒体卡片。旧 JSON 字段被反序列化器自动忽略。
 
 ## 持久化机制（JsonSettingsFile）
 

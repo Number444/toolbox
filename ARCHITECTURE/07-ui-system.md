@@ -87,6 +87,7 @@ InitHalo():
 |----------|------|
 | （隐式 `Button`） | Accent 绿主按钮：hover/press 为白 10%/黑 12% 叠层 90~120ms 淡变（保留各按钮自身色调，红按钮不再 hover 变绿）+ 0.97 按压缩放 |
 | `StandardButtonStyle` | 次级按钮（BgSurface 灰底 + 1px BorderSubtle 描边）：导航/取消等非主操作用，hover 白叠层减半档 6%，其余同上 |
+| `MediaTransportButtonStyle` | 媒体播放控制按钮（34×34 透明圆形，任务栏弹出媒体卡片用）：严格复刻全局叠层法参数（hover 白 0.10 90ms 进/120ms 出、press 黑 0.12 + 缩放 0.97、禁用 Opacity 0.5），图标走 Segoe Fluent Icons 字形 |
 | `WindowButtonStyle` | 46x38 透明→#3A3A3A 标题栏按钮，内 Border CornerRadius=0,0,6,6（异径圆角） |
 | `CloseButtonStyle` | 继承+悬停#E81123 关闭按钮 |
 | `ToggleSwitchStyle` | Win11 极简滑块开关（42x22 轨道 + 18x18 滑块 + 0.2s 滑动动画，轨道颜色同步渐变 #45475A↔#76B580） |
