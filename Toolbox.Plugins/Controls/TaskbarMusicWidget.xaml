@@ -1,0 +1,115 @@
+<UserControl x:Class="Toolbox.Plugins.Controls.TaskbarMusicWidget"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="40"
+             TextOptions.TextRenderingMode="ClearType"
+             TextOptions.TextFormattingMode="Ideal">
+
+    <!--
+        任务栏迷你媒体控件（纯展示，无播放按钮——操作集中在弹出卡片）：
+        - 平时全透明，与任务栏融为一体；悬停时显现 15% 圆角选中框（Win11 任务栏按钮语言）
+        - 固定宽度由宿主窗口控制（210px），切歌不跳宽
+        - 封面右下角带 14px 播放状态角标（▶ 播放中 / ⏸ 已暂停）
+        - 单击/拖拽/右键由宿主窗口统一处理（鼠标事件冒泡），控件层不拦截
+    -->
+    <Border x:Name="MainBorder"
+            CornerRadius="6"
+            ClipToBounds="True"
+            MouseEnter="MainBorder_MouseEnter"
+            MouseLeave="MainBorder_MouseLeave">
+
+        <Grid>
+            <!-- 封面缩略图 32×32（圆角 6 + 1px 淡描边，防止与任务栏背景糊在一起） -->
+            <Border x:Name="SongImageBorder"
+                    Width="32"
+                    Height="32"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="#1FFFFFFF"
+                    ClipToBounds="True"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Margin="8,0,0,0"
+                    Panel.ZIndex="2">
+                <Grid>
+                    <!-- 无封面时的占位图标 -->
+                    <Path x:Name="SongImagePlaceholder"
+                          Data="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"
+                          Fill="#888888"
+                          Stretch="Uniform"
+                          Width="17"
+                          Height="17"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center" />
+                </Grid>
+                <Border.Background>
+                    <ImageBrush x:Name="SongImageBrush" Stretch="UniformToFill" />
+                </Border.Background>
+            </Border>
+
+            <!-- 播放状态角标（叠在封面右下角，有歌曲时常驻） -->
+            <Border x:Name="PlayStateBadge"
+                    Width="14"
+                    Height="14"
+                    CornerRadius="7"
+                    Background="#B3000000"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Margin="29,25,0,0"
+                    Panel.ZIndex="3"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="PlayStateBadgeGlyph"
+                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                           FontSize="8"
+                           Foreground="White"
+                           Text="&#xE768;"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <!-- 歌曲信息（按钮已移除，文字区扩到全宽，长歌名基本免滚动） -->
+            <Grid Margin="48,4,10,4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 歌名（超长时自动滚动） -->
+                <Canvas x:Name="SongTitleContainer"
+                        Grid.Row="0"
+                        Height="17"
+                        ClipToBounds="True">
+                    <TextBlock x:Name="SongTitle"
+                               Text=""
+                               FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                               FontSize="12.5"
+                               FontWeight="SemiBold"
+                               Foreground="White">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="TitleTranslate" X="0" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </Canvas>
+
+                <!-- 歌手 -->
+                <Canvas x:Name="SongArtistContainer"
+                        Grid.Row="1"
+                        Height="14"
+                        ClipToBounds="True"
+                        Margin="0,1,0,0">
+                    <TextBlock x:Name="SongArtist"
+                               Text=""
+                               FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                               FontSize="10"
+                               FontWeight="Normal"
+                               Opacity="0.55"
+                               Foreground="White">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="ArtistTranslate" X="0" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </Canvas>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

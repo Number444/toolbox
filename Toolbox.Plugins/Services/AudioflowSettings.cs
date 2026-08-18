@@ -129,6 +129,70 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         }
     }
 
+    private bool _taskbarWidgetEnabled;
+    /// <summary>
+    /// 任务栏嵌入播放器控件开关
+    /// </summary>
+    public bool TaskbarWidgetEnabled
+    {
+        get => _taskbarWidgetEnabled;
+        set
+        {
+            if (_taskbarWidgetEnabled == value) return;
+            _taskbarWidgetEnabled = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private int _taskbarWidgetPosition;
+    /// <summary>
+    /// 任务栏控件位置：0=左侧（任务栏左端），1=右侧（紧邻系统托盘）
+    /// </summary>
+    public int TaskbarWidgetPosition
+    {
+        get => _taskbarWidgetPosition;
+        set
+        {
+            if (_taskbarWidgetPosition == value) return;
+            _taskbarWidgetPosition = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private bool _taskbarWidgetHideWhenIdle = true;
+    /// <summary>
+    /// 无播放时自动隐藏任务栏控件（播放恢复时自动出现）
+    /// </summary>
+    public bool TaskbarWidgetHideWhenIdle
+    {
+        get => _taskbarWidgetHideWhenIdle;
+        set
+        {
+            if (_taskbarWidgetHideWhenIdle == value) return;
+            _taskbarWidgetHideWhenIdle = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
+    private bool _taskbarWidgetLocked;
+    /// <summary>
+    /// 锁定任务栏控件位置（禁止拖拽换位）
+    /// </summary>
+    public bool TaskbarWidgetLocked
+    {
+        get => _taskbarWidgetLocked;
+        set
+        {
+            if (_taskbarWidgetLocked == value) return;
+            _taskbarWidgetLocked = value;
+            OnPropertyChanged();
+            Save();
+        }
+    }
+
     public AudioflowSettings() : this(AppPaths.DataDir)
     { }
 
@@ -170,6 +234,18 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             _floatWindowTop = data.FloatWindowTop;
             OnPropertyChanged(nameof(FloatWindowTop));
         }
+
+        _taskbarWidgetEnabled = data.TaskbarWidgetEnabled;
+        OnPropertyChanged(nameof(TaskbarWidgetEnabled));
+
+        _taskbarWidgetPosition = data.TaskbarWidgetPosition;
+        OnPropertyChanged(nameof(TaskbarWidgetPosition));
+
+        _taskbarWidgetHideWhenIdle = data.TaskbarWidgetHideWhenIdle;
+        OnPropertyChanged(nameof(TaskbarWidgetHideWhenIdle));
+
+        _taskbarWidgetLocked = data.TaskbarWidgetLocked;
+        OnPropertyChanged(nameof(TaskbarWidgetLocked));
     }
 
     public void Save()
@@ -182,7 +258,11 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
             ClickThroughEnabled = _clickThroughEnabled,
             ShowPlaybackControls = _showPlaybackControls,
             FloatWindowLeft = _floatWindowLeft,
-            FloatWindowTop = _floatWindowTop
+            FloatWindowTop = _floatWindowTop,
+            TaskbarWidgetEnabled = _taskbarWidgetEnabled,
+            TaskbarWidgetPosition = _taskbarWidgetPosition,
+            TaskbarWidgetHideWhenIdle = _taskbarWidgetHideWhenIdle,
+            TaskbarWidgetLocked = _taskbarWidgetLocked
         };
         JsonSettingsFile.Save(SettingsPath, data);
     }
@@ -201,5 +281,9 @@ public sealed class AudioflowSettings : INotifyPropertyChanged
         public bool ShowPlaybackControls { get; set; } = true;
         public double FloatWindowLeft { get; set; } = double.NaN;
         public double FloatWindowTop { get; set; } = double.NaN;
+        public bool TaskbarWidgetEnabled { get; set; }
+        public int TaskbarWidgetPosition { get; set; }
+        public bool TaskbarWidgetHideWhenIdle { get; set; } = true;
+        public bool TaskbarWidgetLocked { get; set; }
     }
 }

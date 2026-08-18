@@ -1,7 +1,7 @@
 [Setup]
 AppId={{B8A3C8E2-4A5D-4F8E-9B2C-1D3E5F7A8B9C}}
 AppName=Toolbox
-AppVersion=1.8.0
+AppVersion=1.8.1
 AppPublisher=Number444
 DefaultDirName={autopf}\Toolbox
 DefaultGroupName=Toolbox

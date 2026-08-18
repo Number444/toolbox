@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Media;
 using Toolbox.Core.Models;
 using Toolbox.Plugins.Controls;
 using Toolbox.Plugins.Services;
@@ -35,6 +36,13 @@ public class MusicFloatWindowManager : IMusicFloatController
     private bool _blurEnabled = true;
     private FloatSizeMode _sizeMode = FloatSizeMode.Large;
     private bool _isLocked;
+
+    // ── 任务栏嵌入模式（与桌面悬浮窗独立，可同时存在）──
+    private TaskbarMusicWindow? _taskbarWindow;
+    private bool _taskbarVisible;
+    private TaskbarMediaPopupWindow? _mediaPopup;
+    // 卡片关闭时刻：用于抑制"点迷你控件想关卡片，但卡片已因失焦关闭，同一击又把卡片打开"的竞态
+    private DateTime _lastPopupClosedUtc = DateTime.MinValue;
 
     /// <summary>当前活跃窗口是否可见。</summary>
     public bool IsVisible => _isVisible && _activeWindow != null;
@@ -145,6 +153,8 @@ public class MusicFloatWindowManager : IMusicFloatController
     public void Close()
     {
         SaveWindowPosition();
+        // 关闭任务栏控件（不动持久化设置：退出后重启仍按用户设置恢复）
+        CloseTaskbarWindow();
         if (_activeWindow != null)
             _activeWindow.LocationChanged -= OnWindowMoved;
         _dockService.Detach();
@@ -313,6 +323,239 @@ public class MusicFloatWindowManager : IMusicFloatController
         {
             _activeWindow.Left = left;
             _activeWindow.Top = top;
+        }
+    }
+
+    // ── 任务栏嵌入模式 ──
+
+    /// <summary>任务栏嵌入控件当前是否可见。</summary>
+    public bool IsTaskbarWidgetVisible => _taskbarVisible;
+
+    /// <summary>
+    /// 显示任务栏嵌入播放器控件。与桌面悬浮窗独立，可同时存在。
+    /// 由设置面板绑定 / 启动恢复经 TaskbarWidgetEnabled 属性驱动，入口处幂等。
+    /// </summary>
+    public void ShowTaskbarWidget()
+    {
+        TaskbarLog($"ShowTaskbarWidget 被调用 (listener.IsListening={_listener.IsListening}, 窗口已存在={_taskbarWindow != null})");
+
+        if (!_listener.IsListening)
+            _ = StartListenerSafeAsync();
+
+        if (_taskbarWindow == null)
+        {
+            _taskbarWindow = new TaskbarMusicWindow();
+            WireTaskbarPlayback(_taskbarWindow);
+        }
+
+        if (!_taskbarVisible)
+        {
+            _taskbarWindow.Show();
+            _taskbarVisible = true;
+        }
+        else
+        {
+            // 已显示（如设置反复触发）：仅重新定位
+            _taskbarWindow.Reposition();
+        }
+
+        // 注入当前歌曲信息（必须在 Show 之后：控件 IsLoaded 前 UpdateSongInfo 会被丢弃）。
+        // 与悬浮窗同款条件：空快照也注入，显示"未在播放"
+        if (_cachedInfo.Title != null || _cachedInfo.Artist != null)
+            _taskbarWindow.UpdateSongInfo(_cachedInfo);
+
+        // 初始即应用"无播放自动隐藏"（等 SMTC 事件前不闪烁"未在播放"）
+        ApplyIdleVisibility(_cachedInfo);
+
+        // 与设置保持一致（setter 短路，不会递归）
+        AudioflowSettings.Instance.TaskbarWidgetEnabled = true;
+    }
+
+    /// <summary>按当前播放信息应用"无播放自动隐藏"（迷你控件 + 卡片）。</summary>
+    private void ApplyIdleVisibility(NowPlayingInfo info)
+    {
+        if (_taskbarWindow == null || !_taskbarVisible) return;
+
+        bool idle = !info.HasSong
+            || info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped;
+
+        if (AudioflowSettings.Instance.TaskbarWidgetHideWhenIdle)
+        {
+            _taskbarWindow.SetWidgetVisible(!idle);
+            if (idle) CloseMediaPopup();
+        }
+        else
+        {
+            _taskbarWindow.SetWidgetVisible(true);
+        }
+    }
+
+    /// <summary>
+    /// 隐藏任务栏嵌入播放器控件。
+    /// </summary>
+    public void HideTaskbarWidget()
+    {
+        CloseTaskbarWindow();
+
+        // 与设置保持一致（setter 短路，不会递归）
+        AudioflowSettings.Instance.TaskbarWidgetEnabled = false;
+    }
+
+    /// <summary>仅销毁任务栏窗口实例，不动持久化设置（退出清理路径用，避免清掉用户设置）。</summary>
+    private void CloseTaskbarWindow()
+    {
+        CloseMediaPopup();
+        if (_taskbarWindow != null)
+        {
+            _taskbarWindow.DetachFromTaskbar();
+            _taskbarWindow.Close();
+            _taskbarWindow = null;
+            TaskbarLog("任务栏窗口已销毁");
+        }
+        _taskbarVisible = false;
+    }
+
+    /// <summary>关闭媒体卡片（幂等）。</summary>
+    private void CloseMediaPopup()
+    {
+        if (_mediaPopup is { IsVisible: true })
+        {
+            _mediaPopup.AnimatedClose();
+        }
+    }
+
+    /// <summary>任务栏控件诊断日志（与 TaskbarMusicWindow 同文件）。</summary>
+    private static void TaskbarLog(string message)
+    {
+        try
+        {
+            var logPath = System.IO.Path.Combine(
+                Toolbox.Core.Services.AppPaths.DataDir, "taskbar_widget.log");
+            System.IO.File.AppendAllText(logPath,
+                $"{DateTime.Now:HH:mm:ss.fff} [MusicFloatWindowManager] {message}{Environment.NewLine}");
+        }
+        catch { /* 日志失败不影响主流程 */ }
+    }
+
+    /// <summary>切换任务栏嵌入播放器控件的显示/隐藏。</summary>
+    public void ToggleTaskbarWidget()
+    {
+        if (_taskbarVisible)
+            HideTaskbarWidget();
+        else
+            ShowTaskbarWidget();
+    }
+
+    /// <summary>绑定任务栏控件交互（单击弹卡片、拖拽换位后重锚卡片）。</summary>
+    private void WireTaskbarPlayback(TaskbarMusicWindow window)
+    {
+        // 单击 → 弹出/收起媒体卡片
+        window.WidgetClicked += ToggleMediaPopup;
+
+        // 拖拽换位完成 → 重新锚定卡片
+        window.WidgetMoved += () =>
+        {
+            if (_mediaPopup is { IsVisible: true })
+            {
+                _mediaPopup.Dispatcher.BeginInvoke(new Action(() =>
+                    _mediaPopup.AnchorTo(window.GetWidgetScreenBounds())));
+            }
+        };
+    }
+
+    // ── 媒体卡片（弹出窗口）──
+
+    /// <summary>切换媒体卡片的弹出/收起。</summary>
+    private void ToggleMediaPopup()
+    {
+        if (_mediaPopup is { IsVisible: true })
+        {
+            _mediaPopup.AnimatedClose();
+            return;
+        }
+
+        if (_taskbarWindow == null || !_taskbarVisible) return;
+
+        // 卡片刚因"点击外部（含迷你控件）"失焦关闭时，同一击的 MouseUp 会冒泡成 WidgetClicked，
+        // 此时若立即重开就违背用户"点控件收起"的意图 → 400ms 内忽略重开
+        if ((DateTime.UtcNow - _lastPopupClosedUtc).TotalMilliseconds < 400) return;
+
+        if (_mediaPopup == null)
+        {
+            _mediaPopup = new TaskbarMediaPopupWindow();
+            _mediaPopup.PopupClosed += () => _lastPopupClosedUtc = DateTime.UtcNow;
+            _mediaPopup.OnSkipPrevious += async () =>
+            {
+                try
+                {
+                    var session = _listener.CurrentSession;
+                    if (session != null) await session.TrySkipPreviousAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MusicFloatWindowManager] 卡片上一首失败: {ex.Message}");
+                }
+            };
+            _mediaPopup.OnTogglePlayPause += async () =>
+            {
+                try
+                {
+                    var session = _listener.CurrentSession;
+                    if (session != null) await session.TryTogglePlayPauseAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MusicFloatWindowManager] 卡片播放/暂停失败: {ex.Message}");
+                }
+            };
+            _mediaPopup.OnSkipNext += async () =>
+            {
+                try
+                {
+                    var session = _listener.CurrentSession;
+                    if (session != null) await session.TrySkipNextAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[MusicFloatWindowManager] 卡片下一首失败: {ex.Message}");
+                }
+            };
+        }
+
+        _mediaPopup.UpdateSongInfo(_cachedInfo);
+        // DPI 从任务栏控件窗口取（它已显示、有句柄）：弹窗 Show 前即可完成预锚定，首帧就在动画起点
+        _mediaPopup.Open(_taskbarWindow.GetWidgetScreenBounds(),
+            System.Windows.Media.VisualTreeHelper.GetDpi(_taskbarWindow).PixelsPerDip);
+    }
+
+    /// <summary>
+    /// 同步更新任务栏控件与媒体卡片上的歌曲信息（SMTC 事件后台线程调用，内部 Dispatch 到 UI 线程）。
+    /// 同时处理"无播放自动隐藏"：无歌或 Stopped 时隐藏迷你控件并收起卡片。
+    /// </summary>
+    private void UpdateTaskbarWidget(NowPlayingInfo info)
+    {
+        if (_taskbarWindow == null || !_taskbarVisible) return;
+        try
+        {
+            _taskbarWindow.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_taskbarWindow == null) return;
+
+                _taskbarWindow.UpdateSongInfo(info);
+
+                // 媒体卡片同步
+                if (_mediaPopup is { IsVisible: true })
+                {
+                    _mediaPopup.UpdateSongInfo(info);
+                }
+
+                // 无播放自动隐藏
+                ApplyIdleVisibility(info);
+            }));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MusicFloatWindowManager] 任务栏控件更新异常: {ex.Message}");
         }
     }
 
@@ -506,6 +749,29 @@ public class MusicFloatWindowManager : IMusicFloatController
                     GetTriggerBar(_activeWindow), OnDragMoveCompleted);
             }
         }
+        else if (e.PropertyName == nameof(AudioflowSettings.TaskbarWidgetEnabled))
+        {
+            // 设置面板 / 启动恢复统一入口（属性 setter 短路，无递归）
+            if (AudioflowSettings.Instance.TaskbarWidgetEnabled)
+                ShowTaskbarWidget();
+            else
+                HideTaskbarWidget();
+        }
+        else if (e.PropertyName == nameof(AudioflowSettings.TaskbarWidgetPosition))
+        {
+            // 位置切换：重新定位（父窗口恒为 Shell_TrayWnd，无需重新嵌入）+ 卡片重锚定
+            if (_taskbarWindow != null && _taskbarVisible)
+            {
+                _taskbarWindow.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _taskbarWindow.Reposition();
+                    if (_mediaPopup is { IsVisible: true })
+                    {
+                        _mediaPopup.AnchorTo(_taskbarWindow.GetWidgetScreenBounds());
+                    }
+                }));
+            }
+        }
     }
 
     private static void SetClickThrough(Window? window, bool enabled)
@@ -521,6 +787,10 @@ public class MusicFloatWindowManager : IMusicFloatController
     private void OnNowPlayingChanged(object? sender, NowPlayingInfo info)
     {
         _cachedInfo = info;
+
+        // 同步任务栏控件（必须在提前 return 之前；内部自判窗口存在性）
+        UpdateTaskbarWidget(info);
+
         if (_activeWindow == null || !_isVisible) return;
         try
         {

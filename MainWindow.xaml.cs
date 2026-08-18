@@ -283,6 +283,15 @@ public partial class MainWindow : Window
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
+        // 启动时自动恢复任务栏嵌入控件（与悬浮窗独立开关；设置已在 App.OnStartup 加载）
+        if (AudioflowSettings.Instance.TaskbarWidgetEnabled)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                MusicFloatControllerHost.Current?.ShowTaskbarWidget();
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
         // 静默模式：托盘是唯一入口，必须创建成功；失败回退显示主窗口（避免应用不可达）
         if (StartSilent)
         {
@@ -309,6 +318,10 @@ public partial class MainWindow : Window
     {
         // 退出过程中收到唤起信号（托盘 Exit 后立刻双击 exe）→ 忽略，避免 Show 关闭中的窗口
         if (_isShuttingDown) return;
+
+        // 防御：窗口已被 Close（进程因其他窗口未关而残留存活）时绝不再 Show——
+        // VerifyCanShow 会抛 InvalidOperationException 把进程炸掉（2026-08 任务栏控件残留曾复现）
+        if (_isClosed) return;
 
         // SystemTrayHelper 回调可能在非 UI 线程（命名事件等待线程）——切回 UI 线程
         if (!Dispatcher.CheckAccess())
@@ -1386,6 +1399,29 @@ public partial class MainWindow : Window
         }
 
         Application.Current.Shutdown();
+    }
+
+    /// <summary>主窗口已被 Close（进程可能因其他窗口存活而未退出），RestoreFromTray 据此防御。</summary>
+    private bool _isClosed;
+
+    /// <summary>
+    /// 主窗口销毁时无条件关闭任务栏控件/悬浮窗（含媒体卡片）。
+    /// X 关闭路径（MinimizeOnClose 关闭时）不走 Shutdown()，若不在这里清理：
+    /// 任务栏控件作为独立 Window 仍开着 → OnLastWindowClose 不触发 → 进程残留、控件留在任务栏，
+    /// 重启 exe 时单实例唤起对已关闭主窗口 Show → 崩溃。此处清理后最后一个窗口关闭，进程正常退出。
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        _isClosed = true;
+        try
+        {
+            MusicFloatControllerHost.Current?.Close();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] 主窗口关闭时清理悬浮窗失败: {ex.Message}");
+        }
+        base.OnClosed(e);
     }
 
     // --- 标题栏按钮事件 ---

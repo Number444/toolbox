@@ -240,6 +240,94 @@ public class NeteaseMusicTool : ITool
             });
         settingsPanel.Children.Add(cbPlaybackControls);
 
+        // ===== 任务栏嵌入设置 =====
+        settingsPanel.Children.Add(new Separator { Margin = new Thickness(0, 4, 0, 4) });
+
+        var taskbarTitle = new TextBlock
+        {
+            Text = "任务栏嵌入",
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = FindResourceBrush("TextPrimaryBrush", Brushes.White),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        settingsPanel.Children.Add(taskbarTitle);
+
+        // 复选框：任务栏嵌入播放器控件（开关由 Manager 经 PropertyChanged 统一响应）
+        var cbTaskbar = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "嵌入任务栏显示播放器控件",
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        cbTaskbar.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("TaskbarWidgetEnabled")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        settingsPanel.Children.Add(cbTaskbar);
+
+        // 位置选择：左侧（任务栏左端）/ 右侧（系统托盘旁）
+        var positionRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 2, 0, 0)
+        };
+        positionRow.Children.Add(new TextBlock
+        {
+            Text = "位置",
+            FontSize = 13,
+            Foreground = FindResourceBrush("TextSecondaryBrush", Brushes.Gray),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        });
+        var cbPosition = new ComboBox
+        {
+            Width = 130,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        cbPosition.Items.Add("左侧（任务栏左端）");
+        cbPosition.Items.Add("右侧（系统托盘旁）");
+        cbPosition.SetBinding(Selector.SelectedIndexProperty,
+            new System.Windows.Data.Binding("TaskbarWidgetPosition")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        positionRow.Children.Add(cbPosition);
+        settingsPanel.Children.Add(positionRow);
+
+        // 复选框：无播放时自动隐藏
+        var cbHideWhenIdle = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "无播放时自动隐藏",
+            Margin = new Thickness(0, 6, 0, 0)
+        };
+        cbHideWhenIdle.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("TaskbarWidgetHideWhenIdle")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        settingsPanel.Children.Add(cbHideWhenIdle);
+
+        // 复选框：锁定位置（禁止拖拽）
+        var cbLocked = new CheckBox
+        {
+            Style = FindResourceStyle("ClassicCheckBoxStyle"),
+            Content = "锁定位置（禁止拖拽）",
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        cbLocked.SetBinding(ToggleButton.IsCheckedProperty,
+            new System.Windows.Data.Binding("TaskbarWidgetLocked")
+            {
+                Source = AudioflowSettings.Instance,
+                Mode = System.Windows.Data.BindingMode.TwoWay
+            });
+        settingsPanel.Children.Add(cbLocked);
+
         settingsBorder.Child = settingsPanel;
 
         root.Children.Add(settingsBorder);

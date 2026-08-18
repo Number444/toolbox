@@ -598,7 +598,7 @@
                            Foreground="{StaticResource TextSecondaryBrush}"
                            VerticalAlignment="Center"
                            Margin="16,0,0,0">
-                    v1.8.0
+                    v1.8.1
                 </TextBlock>
             </StackPanel>
         </Border>

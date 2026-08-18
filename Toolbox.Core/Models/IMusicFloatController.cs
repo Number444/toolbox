@@ -32,4 +32,13 @@ public interface IMusicFloatController
 
     /// <summary>复位窗口位置</summary>
     void ResetPosition();
+
+    /// <summary>任务栏嵌入控件当前是否可见（与桌面悬浮窗独立）</summary>
+    bool IsTaskbarWidgetVisible { get; }
+
+    /// <summary>显示任务栏嵌入播放器控件（与桌面悬浮窗独立，可同时存在）</summary>
+    void ShowTaskbarWidget();
+
+    /// <summary>隐藏任务栏嵌入播放器控件</summary>
+    void HideTaskbarWidget();
 }

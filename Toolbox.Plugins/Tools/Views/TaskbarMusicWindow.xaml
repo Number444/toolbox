@@ -1,0 +1,23 @@
+<Window x:Class="Toolbox.Tools.Views.TaskbarMusicWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Toolbox.Plugins.Controls"
+        Title="Toolbox Taskbar Music"
+        Width="240"
+        Height="40"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        Topmost="False">
+
+    <!--
+        分层窗口（AllowsTransparency）：与 TransparentMusicWindow 同款方案。
+        任务栏小控件不需要 DWM Acrylic，分层窗口才能让背景真正透明，
+        否则非分层窗口的透明像素会被合成成黑色矩形。
+        实际尺寸/位置由代码在嵌入任务栏时按 DPI 计算设置。
+    -->
+    <controls:TaskbarMusicWidget x:Name="MusicWidget" />
+</Window>

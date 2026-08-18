@@ -1,0 +1,165 @@
+<Window x:Class="Toolbox.Tools.Views.TaskbarMediaPopupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Toolbox 媒体卡片"
+        Width="340"
+        Height="120"
+        WindowStyle="None"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual">
+
+    <!--
+        弹出媒体卡片：DWM Mica 材质（采样壁纸的静态模糊，比 Acrylic 稳定；非分层窗口 + WindowChrome，
+        边框交给 DWM 原生绘制，不加自定义描边——否则与 DWM 边框叠成"双层边缘"）。
+        注意：严禁做窗口级 Opacity 动画（Window.Opacity<1 会把窗口切成 WS_EX_LAYERED，
+        DWM 系统背板随之失效 → 毛玻璃变死板实色）。淡入淡出只对内容层 ContentRoot 做。
+        布局：左封面 88×88（投影）｜右侧歌名/歌手整体垂直居中、播放按钮行置底右对齐。
+        按钮图标使用 Segoe Fluent Icons 字形（E768/E769/E76B/E76C）。
+        打开动画（FluentFlyout 同款路径）：Show 前窗口预置于最终位置下方 20px，
+        直接动画 Window.Top 上移 20px + Window.Opacity 0→1（300ms CubicEase EaseOut），
+        内容层模糊 8→0 以 450ms 更缓收尾；收拢 180ms EaseIn 镜像。
+        锚定与显隐由代码控制（AnchorTo/Open/Close）。
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="0"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      NonClientFrameEdges="None"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Grid x:Name="ContentRoot">
+
+        <!-- 毛玻璃失败降级遮罩（满铺，圆角 8 对齐 DWM Round） -->
+        <Border x:Name="OpacityOverlay"
+                Background="#E61A1A1A"
+                CornerRadius="8"
+                Visibility="Collapsed" />
+
+        <!-- Acrylic 色调层（满铺） -->
+        <Border x:Name="AcrylicTintOverlay"
+                Background="#01FFFFFF"
+                CornerRadius="8"
+                IsHitTestVisible="False"
+                Visibility="Visible" />
+
+        <!-- 内容区固定 100px 高、底部对齐；模糊渐显挂在这一层（比整卡渐显慢半拍收尾） -->
+        <Grid x:Name="ContentBody"
+              Height="100"
+              VerticalAlignment="Bottom"
+              Margin="16,0,16,10">
+            <Grid.Effect>
+                <BlurEffect x:Name="ContentBlur" Radius="0" />
+            </Grid.Effect>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="88" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 封面 88×88（柔和投影，Win11 浮层质感） -->
+            <Border x:Name="PopupImageBorder"
+                    Grid.Column="0"
+                    Width="88"
+                    Height="88"
+                    CornerRadius="8"
+                    ClipToBounds="True"
+                    VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="12"
+                                      ShadowDepth="3"
+                                      Direction="270"
+                                      Opacity="0.3"
+                                      Color="Black" />
+                </Border.Effect>
+                <Grid>
+                    <Path x:Name="PopupImagePlaceholder"
+                          Data="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"
+                          Fill="#888888"
+                          Stretch="Uniform"
+                          Width="36"
+                          Height="36"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center" />
+                </Grid>
+                <Border.Background>
+                    <ImageBrush x:Name="PopupImageBrush" Stretch="UniformToFill" />
+                </Border.Background>
+            </Border>
+
+            <!-- 信息区：歌名/歌手整体垂直居中（与封面视觉轴对齐），按钮行置底右对齐 -->
+            <Grid Grid.Column="1" Margin="16,0,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 歌名 + 歌手（作为一个整体居中） -->
+                <StackPanel Grid.Row="0" VerticalAlignment="Center">
+                    <TextBlock x:Name="PopupTitle"
+                               FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="White"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="200" />
+                    <TextBlock x:Name="PopupArtist"
+                               FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                               FontSize="12"
+                               Opacity="0.6"
+                               Foreground="White"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="200"
+                               Margin="0,3,0,0" />
+                </StackPanel>
+
+                <!-- 播放控制按钮行（公共样式 MediaTransportButtonStyle：叠层法 hover/press + 缩放 0.97） -->
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom">
+
+                    <!-- 上一首（Segoe Fluent Icons U+E76B） -->
+                    <Button x:Name="PopupBtnPrev"
+                            Style="{StaticResource MediaTransportButtonStyle}"
+                            Margin="0,0,4,0">
+                        <TextBlock x:Name="PopupPrevIcon"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontSize="13"
+                                   Text="&#xE76B;" />
+                    </Button>
+
+                    <!-- 播放/暂停 -->
+                    <Button x:Name="PopupBtnPlayPause"
+                            Style="{StaticResource MediaTransportButtonStyle}"
+                            Margin="0,0,4,0">
+                        <Grid>
+                            <TextBlock x:Name="PopupPlayIcon"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="15"
+                                       Text="&#xE768;"
+                                       Visibility="Collapsed" />
+                            <TextBlock x:Name="PopupPauseIcon"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       Text="&#xE769;" />
+                        </Grid>
+                    </Button>
+
+                    <!-- 下一首（Segoe Fluent Icons U+E76C） -->
+                    <Button x:Name="PopupBtnNext"
+                            Style="{StaticResource MediaTransportButtonStyle}">
+                        <TextBlock x:Name="PopupNextIcon"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontSize="13"
+                                   Text="&#xE76C;" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
