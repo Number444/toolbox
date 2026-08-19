@@ -136,8 +136,16 @@
             </Grid>
         </Border>
 
-        <!-- ▸ 主体内容区 -->
+        <!-- ▸ 主体内容区：ContentSharpLayer = 入场淡入容器（Opacity 代码驱动）+ 对焦模糊载体
+             （初版方案：直接 BlurEffect 半径动画——VisualBrush 覆盖层镜像在滑动中的内容上
+             会产生残影，2026-08-19 弃用回退；接受半径整数量化的有限跳档，实测观感可接受。
+             完成后代码置 null 摘除 Effect） -->
         <Grid Grid.Row="1">
+            <Grid x:Name="ContentSharpLayer" Opacity="0">
+                <Grid.Effect>
+                    <BlurEffect x:Name="ContentBlur" Radius="0"/>
+                </Grid.Effect>
+                <Grid x:Name="ContentRoot">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220"/>   <!-- 左侧导航栏 -->
                 <ColumnDefinition Width="1"/>     <!-- 分隔线 -->
@@ -577,6 +585,8 @@
                 </Grid>
             </Border>
         </Grid>
+            </Grid>
+        </Grid>
 
         <!-- ▸ 状态栏（Acrylic 毛玻璃透入） -->
         <Border Grid.Row="2"
@@ -598,7 +608,7 @@
                            Foreground="{StaticResource TextSecondaryBrush}"
                            VerticalAlignment="Center"
                            Margin="16,0,0,0">
-                    v1.8.1
+                    v1.8.2
                 </TextBlock>
             </StackPanel>
         </Border>
@@ -641,42 +651,65 @@
                                Grid.RowSpan="3"
                                IsHitTestVisible="False"/>
 
-        <!-- ▸ 启动遮罩（测试）：纯黑——与 DWM 首帧空窗帧同色，无缝衔接（灰遮罩会暴露黑→灰跳变）；
-             两段式入场（代码驱动）：① 文字居中淡入 → ② 图标从文字后（右）从右往左滑入 + 文字右移让位；
-             停留 2s 后整体淡出（OnWindowLoaded；静默启动首次托盘唤起同样生效） -->
+        <!-- ▸ 启动遮罩：纯黑——与 DWM 首帧空窗帧同色，无缝衔接（灰遮罩会暴露黑→灰跳变），
+             停留时长盖住 WPF 启动初期无法绘制的黑屏期（功能需求，勿缩短）；
+             两段式入场（代码驱动）：① 文字虚焦聚焦+弹入 → ② 图标虚焦从文字背后滑入 + 文字右移让位；
+             停留后整体淡出，同时下层内容区滑入+对焦（OnWindowLoaded；静默启动首次托盘唤起同样生效） -->
         <Border x:Name="StartupMask"
                 Grid.RowSpan="3"
                 Background="#FF000000"
                 IsHitTestVisible="False">
             <Grid>
-                <!-- 图标声明在前（下层）：阶段 2 与文字重叠出发时在文字"背后"（从背后滑出）；
-                     阶段 1 完全透明；阶段 2 淡入并从文字背后向左滑入文字左侧 -->
-                <Image x:Name="MaskIcon"
-                       Source="/Assets/toolbox_icon.png"
-                       Width="32" Height="32"
-                       Stretch="Uniform"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       Margin="0,12,0,0"
-                       Opacity="0">
-                    <Image.RenderTransform>
+                <!-- 图标组（下层，阶段 2 从文字背后滑出）。三层交叉淡化结构：
+                     变换在组容器上（镜像随动，无需绑定）；Fader 整体淡入沿用原 EaseIn 渐亮节奏；
+                     Sharp 清晰层淡入（双重衰减 → 清晰边缘晚到）；Veil 模糊镜像淡出。
+                     Veil 镜像 MaskIcon 本体（恒不透明）——镜像会继承本源透明度，
+                     若镜像参与淡入的元素，模糊层被拖暗、清晰层从底下透出 → 只见光晕不见虚焦
+                     （2026-08-19 审查修复） -->
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,12,0,0">
+                    <Grid.RenderTransform>
                         <TranslateTransform x:Name="MaskIconTransform" X="0"/>
-                    </Image.RenderTransform>
-                </Image>
-                <!-- 文字：阶段 1 从下往上弹入（Y 位移 + 淡入）；阶段 2 右移让位（X 0→+ShiftX） -->
-                <TextBlock x:Name="MaskTitle"
-                           Text="Toolbox"
-                           FontSize="34"
-                           FontWeight="SemiBold"
-                           Foreground="#F0F0F0"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Margin="0,4,0,0"
-                           Opacity="0">
-                    <TextBlock.RenderTransform>
+                    </Grid.RenderTransform>
+                    <Grid x:Name="MaskIconFader" Opacity="0">
+                        <Grid x:Name="MaskIconSharp" Opacity="0">
+                            <Image x:Name="MaskIcon"
+                                   Source="/Assets/toolbox_icon.png"
+                                   Width="32" Height="32"
+                                   Stretch="Uniform"/>
+                        </Grid>
+                        <Rectangle x:Name="MaskIconFocusVeil" IsHitTestVisible="False">
+                            <Rectangle.Fill>
+                                <VisualBrush Visual="{Binding ElementName=MaskIcon}" Stretch="None"/>
+                            </Rectangle.Fill>
+                            <Rectangle.Effect>
+                                <BlurEffect Radius="6"/>
+                            </Rectangle.Effect>
+                        </Rectangle>
+                    </Grid>
+                </Grid>
+                <!-- 文字组：结构同图标组（阶段 1 弹入+淡入；阶段 2 右移让位） -->
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0">
+                    <Grid.RenderTransform>
                         <TranslateTransform x:Name="MaskTitleTransform" X="0"/>
-                    </TextBlock.RenderTransform>
-                </TextBlock>
+                    </Grid.RenderTransform>
+                    <Grid x:Name="MaskTitleFader" Opacity="0">
+                        <Grid x:Name="MaskTitleSharp" Opacity="0">
+                            <TextBlock x:Name="MaskTitle"
+                                       Text="Toolbox"
+                                       FontSize="34"
+                                       FontWeight="SemiBold"
+                                       Foreground="#F0F0F0"/>
+                        </Grid>
+                        <Rectangle x:Name="MaskTitleFocusVeil" IsHitTestVisible="False">
+                            <Rectangle.Fill>
+                                <VisualBrush Visual="{Binding ElementName=MaskTitle}" Stretch="None"/>
+                            </Rectangle.Fill>
+                            <Rectangle.Effect>
+                                <BlurEffect Radius="8"/>
+                            </Rectangle.Effect>
+                        </Rectangle>
+                    </Grid>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using Toolbox.Helpers;
 using Toolbox.Core.Helpers;
@@ -40,6 +41,17 @@ public partial class MainWindow : Window
     private const int ReturnLeftMoveMs = 500;     // 左栏位移时长
     private const int ReturnRightMoveMs = 540;    // 右侧位移时长（幅度较小但缓落更长）
     private const int ReturnRightDelayMs = 60;    // 右侧微错峰（0 = 完全同步）
+
+    // ── 启动遮罩 / 冷启动入场调参区（2026-08-19 模糊渐变 + 淡出×入场编排）──
+    // 品牌区（文字/图标）对焦走 VisualBrush 覆盖层 Opacity 淡出——半径被 WPF 量化到整数档
+    // 不可动画，模糊强度（文字 8/图标 6）以固定 Radius 写在 XAML 侧；
+    // 内容区走初版直接半径动画（覆盖层镜像在滑动内容上产生残影，已回退——接受整数量化的
+    // 有限跳档，Four 实测观感可接受）
+    private const int MaskFadeStartMs = 2800;        // 遮罩淡出起点（品牌动画 2.3s 完成后停留 0.5s）
+    private const int MaskFadeMs = 500;              // 遮罩淡出时长
+    private const double ContentBlurRadius = 6;      // 内容对焦模糊起点半径
+    private const int ContentBlurMs = 650;           // 内容对焦时长（初版参数）
+    private const int ContentEntranceDelayMs = 120;    // 内容入场相对遮罩淡出起点的延迟
 
     public MainWindow()
     {
@@ -201,26 +213,50 @@ public partial class MainWindow : Window
         // 后台服务（悬浮窗自启；静默启动由 App.OnStartup 直接调用，此处幂等防重入）
         InitializeBackgroundServices();
 
-        // 启动遮罩两段式入场：① 文字从下往上弹入（1s）→ ② 图标从文字背后（完全透明）向左滑入文字左侧
-        // + 文字右移让位。最终图标左、文字右并排居中。动画显式 From（项目惯例：防 HoldEnd 锁值导致重播失效）
-        var ease = EaseOut();
+        // 启动遮罩两段式入场：① 文字虚焦聚焦 + 从下往上弹入（1.3s）→ ② 图标从文字背后
+        // （完全透明 + 虚焦）向左滑入文字左侧 + 文字右移让位。最终图标左、文字右并排居中。
+        // 动画显式 From（项目惯例：防 HoldEnd 锁值导致重播失效）。
+        // 位移全线 KeySpline(0.16,1→0.3,1) emphasized 曲线（2026-08-19 与切回动画统一设计语言：
+        // 起步干脆、收尾长柔——替代 CubicEase EaseOut 尾段均匀偏硬）
+        var spline = new KeySpline(0.16, 1, 0.3, 1);
+        // 对焦覆盖层淡出曲线 CubicEase EaseIn（2026-08-19 调参）：淡入是 EaseIn（前暗后亮），
+        // 覆盖层若 EaseOut 会在元素亮起前就散完（实测不可见）；EaseIn 让模糊扛着不散、
+        // 元素最亮时才是对焦瞬间——"亮起 → 落定 → 对上焦"三段可辨。
+        // 注：对焦不再动画 BlurEffect.Radius（WPF 半径量化到整数档，逐档渲染实测跳变），
+        // 改为 VisualBrush 模糊镜像覆盖层做 Opacity 淡出——Opacity 连续，曲线才真正生效
+        var focusEase = new CubicEase { EasingMode = EasingMode.EaseIn };
         const double MaskTitleShiftX = 22;       // 文字右移量 = (图标宽 32 + 间距 12) / 2，保证组合居中
         const double MaskTitleRiseFrom = 40;     // 文字弹入起点（下方 40px）
         const double MaskTitleFadeMs = 1300;     // 文字淡入时长（渐渐淡入：EaseIn 缓慢亮起，与弹入同步完成）
         const double MaskPhase1Ms = 1300;        // 阶段 1 时长（文字从下往上弹入，放缓至 1.3s）
+        const double MaskTitleFocusMs = 1500;    // 文字对焦时长（比弹入多 200ms：落定后才对上焦）
         const double MaskIconMoveMs = 1000;      // 阶段 2 位移时长（图标滑入 + 文字右移，1.3s→2.3s）
         const double MaskIconFadeMs = 700;       // 图标淡入时长（略短于位移：到位前渐显，EaseIn 前期隐没）
+        const double MaskIconFocusMs = 1200;     // 图标对焦时长（比滑入多 200ms，2.5s 完成，仍在停留期内）
         const double MaskIconTravelX = 48;       // 图标位移距离 = 1.5 × 图标宽 32（用户调参：距离过长会显得显现太早/太急）
 
-        // 阶段 1：文字从下往上滑入——位移先快后慢（CubicEase EaseOut）；淡入渐渐（EaseIn 缓慢亮起，
-        // 与弹入同步完成）。⚠️ 淡入不可用 EaseOut 前段飙升（实测 2026-08-11）：启动首帧前的纯黑
-        // 是 DWM 缓存帧，WPF 前几帧不渲染，EaseOut 淡入跳帧后直接以"够亮"状态上屏，淡入过程不可见；
-        // EaseIn 前段本就暗，跳帧无感
-        MaskTitle.BeginAnimation(UIElement.OpacityProperty,
+        // 阶段 1：文字虚焦聚焦 + 从下往上滑入。⚠️ 淡入不可用 EaseOut 前段飙升（实测 2026-08-11）：
+        // 启动首帧前的纯黑是 DWM 缓存帧，WPF 前几帧不渲染，EaseOut 淡入跳帧后直接以"够亮"状态上屏，
+        // 淡入过程不可见；EaseIn 前段本就暗，跳帧无感。
+        // 交叉淡化三层（2026-08-19 审查修复）：Fader 整体淡入（沿用原 EaseIn 渐亮节奏）；
+        // Sharp 清晰层同曲线淡入（与 Fader 双重衰减 → 清晰边缘晚到，前期画面由模糊层主导）；
+        // Veil 模糊镜像淡出（镜像 MaskTitle 本体，恒不透明——否则镜像被淡入拖暗、
+        // 清晰层从模糊层下透出，只见光晕不见虚焦）
+        MaskTitleFader.BeginAnimation(UIElement.OpacityProperty,
             new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskTitleFadeMs)) { EasingFunction = EaseIn() });
-        MaskTitleTransform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(MaskTitleRiseFrom, 0, TimeSpan.FromMilliseconds(MaskPhase1Ms))
-            { EasingFunction = ease });
+        MaskTitleSharp.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskTitleFadeMs)) { EasingFunction = EaseIn() });
+        var titleRise = new DoubleAnimationUsingKeyFrames
+        { Duration = TimeSpan.FromMilliseconds(MaskPhase1Ms) };
+        titleRise.KeyFrames.Add(new SplineDoubleKeyFrame(MaskTitleRiseFrom, KeyTime.FromPercent(0)));
+        titleRise.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
+        MaskTitleTransform.BeginAnimation(TranslateTransform.YProperty, titleRise);
+        // 模糊聚焦：文字镜像覆盖层 Opacity 淡出，比弹入多 200ms——落定后才对上焦；
+        // 完成后 Collapse 覆盖层（VisualBrush 实时镜像的双份渲染只存在于入场期间）
+        var titleFocus = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(MaskTitleFocusMs))
+        { EasingFunction = focusEase };
+        titleFocus.Completed += (_, _) => MaskTitleFocusVeil.Visibility = Visibility.Collapsed;
+        MaskTitleFocusVeil.BeginAnimation(UIElement.OpacityProperty, titleFocus);
 
         // 阶段 2：图标从文字背后淡入并向左滑入文字左侧，文字同步右移让位。
         // 终点动态取文字左缘外侧（+MaskTitleShiftX 修正基准：图标中心 = 窗口中心 + 文字右移量
@@ -234,23 +270,53 @@ public partial class MainWindow : Window
         // （动画 From 与其一致），消除"动画前位置 0 → 动画起点 -18"的跳变（错位感来源之一）
         MaskIconTransform.X = iconTargetX + MaskIconTravelX;
         // 淡入 EaseIn + 位移 EaseOut 反向曲线组合：位移前期快（图标快速离开文字背后）、
-        // 淡入前期隐（到位前几乎不可见），到位（位移 EaseOut 后段减速）时才渐渐透出
-        MaskIcon.BeginAnimation(UIElement.OpacityProperty,
+        // 淡入前期隐（到位前几乎不可见），到位（位移 EaseOut 后段减速）时才渐渐透出。
+        // 交叉淡化三层同文字（Fader 整体淡入 / Sharp 清晰层晚到 / Veil 镜像本体恒不透明）
+        MaskIconFader.BeginAnimation(UIElement.OpacityProperty,
             new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskIconFadeMs))
             { EasingFunction = EaseIn(), BeginTime = phase2 });
-        MaskIconTransform.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(iconTargetX + MaskIconTravelX, iconTargetX, TimeSpan.FromMilliseconds(MaskIconMoveMs))
-            { EasingFunction = ease, BeginTime = phase2 });
-        MaskTitleTransform.BeginAnimation(TranslateTransform.XProperty,
-            new DoubleAnimation(0, MaskTitleShiftX, TimeSpan.FromMilliseconds(MaskIconMoveMs))
-            { EasingFunction = ease, BeginTime = phase2 });
+        MaskIconSharp.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MaskIconFadeMs))
+            { EasingFunction = EaseIn(), BeginTime = phase2 });
+        var iconSlide = new DoubleAnimationUsingKeyFrames
+        { Duration = TimeSpan.FromMilliseconds(MaskIconMoveMs), BeginTime = phase2 };
+        iconSlide.KeyFrames.Add(new SplineDoubleKeyFrame(iconTargetX + MaskIconTravelX, KeyTime.FromPercent(0)));
+        iconSlide.KeyFrames.Add(new SplineDoubleKeyFrame(iconTargetX, KeyTime.FromPercent(1)) { KeySpline = spline });
+        MaskIconTransform.BeginAnimation(TranslateTransform.XProperty, iconSlide);
+        var titleShift = new DoubleAnimationUsingKeyFrames
+        { Duration = TimeSpan.FromMilliseconds(MaskIconMoveMs), BeginTime = phase2 };
+        titleShift.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        titleShift.KeyFrames.Add(new SplineDoubleKeyFrame(MaskTitleShiftX, KeyTime.FromPercent(1)) { KeySpline = spline });
+        MaskTitleTransform.BeginAnimation(TranslateTransform.XProperty, titleShift);
+        // 图标虚焦聚焦：镜像覆盖层 Opacity 淡出，比滑入多 200ms——滑到位后再对上焦
+        var iconFocus = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(MaskIconFocusMs))
+        { EasingFunction = focusEase, BeginTime = phase2 };
+        iconFocus.Completed += (_, _) => MaskIconFocusVeil.Visibility = Visibility.Collapsed;
+        MaskIconFocusVeil.BeginAnimation(UIElement.OpacityProperty, iconFocus);
 
-        // 启动遮罩（测试）：纯黑停留 2.8s，再 500ms 淡出。黑色与 DWM 首帧空窗帧同色（无缝），
-        // Acrylic 已在幕后就绪（延迟方案），淡出时毛玻璃透出
-        var maskFade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(500))
+        // 冷启动内容入场编排（2026-08-19）：起点状态在遮罩仍纯黑时就位（复用 SetReturnStartState，
+        // 与切回动画同源同值），遮罩淡出 +ContentEntranceDelayMs 后开播——动作前段隔半透黑幕
+        // 隐约可见、后段清晰呈现（"浮出"感），同时内容区虚焦→对焦。消除"片头播完硬切静态界面"。
+        _wasBackground = false;   // 静默启动首次唤起带着 true（Activated 会触发 PlayReturnAnimations），
+                                  // 冷启动由本路径统一编排，防两套入场叠加互踩
+        SetReturnStartState();
+        // 内容区对焦（初版直接半径动画，2026-08-19 覆盖层残影回退）：起点值先写本地值
+        // （与动画 From 一致，无跳变），随入场同步 6→0——黑幕揭开 + 左右栏滑入 + 对焦三合一；
+        // 完成后摘除 Effect（不留常驻离屏渲染开销/文字发虚）
+        ContentBlur.Radius = ContentBlurRadius;
+        var entranceStart = TimeSpan.FromMilliseconds(MaskFadeStartMs + ContentEntranceDelayMs);
+        PlayContentEntrance(entranceStart);
+        var contentFocus = new DoubleAnimation(ContentBlurRadius, 0, TimeSpan.FromMilliseconds(ContentBlurMs))
+        { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }, BeginTime = entranceStart };
+        contentFocus.Completed += (_, _) => ContentSharpLayer.Effect = null;
+        ContentBlur.BeginAnimation(BlurEffect.RadiusProperty, contentFocus);
+
+        // 启动遮罩：纯黑停留至 MaskFadeStartMs（盖住 WPF 启动初期无法绘制的黑屏期），再淡出。
+        // 黑色与 DWM 首帧空窗帧同色（无缝），Acrylic 已在幕后就绪（延迟方案），淡出时毛玻璃透出
+        var maskFade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(MaskFadeMs))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-            BeginTime = TimeSpan.FromMilliseconds(2800)   // 动画完成（2.3s）后停留 0.5s 再淡出
+            BeginTime = TimeSpan.FromMilliseconds(MaskFadeStartMs)
         };
         maskFade.Completed += (_, _) => StartupMask.Visibility = Visibility.Collapsed;
         StartupMask.BeginAnimation(UIElement.OpacityProperty, maskFade);
@@ -348,15 +414,16 @@ public partial class MainWindow : Window
     /// </summary>
     private void SetReturnStartState()
     {
-        NavPane.BeginAnimation(UIElement.OpacityProperty, null);
+        // 淡入统一走 ContentSharpLayer 容器（2026-08-19 起左右栏不再各自淡入；
+        // 该容器同时是冷启动对焦模糊 ContentBlur 的载体）
+        ContentSharpLayer.BeginAnimation(UIElement.OpacityProperty, null);
+        ContentSharpLayer.Opacity = 0;
+
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, null);
         NavPaneTransform.X = ReturnLeftFrom;
-        NavPane.Opacity = 0;
 
-        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty, null);
         ContentPaneTransform.BeginAnimation(TranslateTransform.YProperty, null);
         ContentPaneTransform.Y = ReturnRightFrom;
-        ContentScrollViewer.Opacity = 0;
     }
 
     // ---- 最小化"清场帧"拦截（修复还原首帧闪烁）----
@@ -422,8 +489,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 从后台切回前台动画：左侧工具栏从左向右滑入淡入；右侧工具页仿左侧的完整动画形式
-    /// （淡入 + 大幅滑入），方向从下到上（Y 100→0）。纯 RenderTransform/Opacity，无布局抖动。
+    /// 从后台切回前台动画：立即开播（baseTime = Zero）的内容入场编排。
+    /// </summary>
+    private void PlayReturnAnimations() => PlayContentEntrance(TimeSpan.Zero);
+
+    /// <summary>
+    /// 内容入场编排（切回前台与冷启动共用）：左侧工具栏从左向右滑入淡入；右侧工具页仿左侧的
+    /// 完整动画形式（淡入 + 大幅滑入），方向从下到上（Y 100→0）。纯 RenderTransform/Opacity，无布局抖动。
+    /// baseTime 为整条时间轴的起点偏移（切回 = Zero 立即开播；冷启动 = 遮罩淡出 +120ms，
+    /// 动作前段隔半透黑幕隐约可见、后段清晰呈现）。
     /// 显式 From——常态值是 1/0，无 From 则动画原地不动（ComboBox 弹层同款教训）。
     /// 2026-08-10 精调（现代动效三原则）：
     /// ① 曲线 KeySpline(0.16,1 → 0.3,1) = CSS cubic-bezier(.16,1,.3,1)（Apple/Fluent emphasized），
@@ -431,25 +505,23 @@ public partial class MainWindow : Window
     /// ② 不透明度先于位移完成（≈55% 时长）：淡入早落定、运动继续缓落；
     /// ③ 右侧 60ms 微错峰（润色级，非 200ms 大错峰——后者实测不理想已回退过）。
     /// </summary>
-    private void PlayReturnAnimations()
+    private void PlayContentEntrance(TimeSpan baseTime)
     {
         var spline = new KeySpline(0.16, 1, 0.3, 1);
         var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
-        // 左侧：淡入先于位移完成（280/500ms），位移 KeySpline emphasized 曲线
-        NavPane.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs)) { EasingFunction = fadeEase });
+        // 整体淡入走 ContentSharpLayer 容器（先于位移完成，280/500ms），位移 KeySpline emphasized 曲线
+        ContentSharpLayer.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs))
+            { EasingFunction = fadeEase, BeginTime = baseTime });
         var leftMove = new DoubleAnimationUsingKeyFrames
-        { Duration = TimeSpan.FromMilliseconds(ReturnLeftMoveMs) };
+        { Duration = TimeSpan.FromMilliseconds(ReturnLeftMoveMs), BeginTime = baseTime };
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnLeftFrom, KeyTime.FromPercent(0)));
         leftMove.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromPercent(1)) { KeySpline = spline });
         NavPaneTransform.BeginAnimation(TranslateTransform.XProperty, leftMove);
 
-        // 右侧：微错峰后淡入 + 位移，缓落更长
-        var rightDelay = TimeSpan.FromMilliseconds(ReturnRightDelayMs);
-        ContentScrollViewer.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ReturnFadeMs + 20))
-            { EasingFunction = fadeEase, BeginTime = rightDelay });
+        // 右侧：微错峰后位移，缓落更长（淡入已统一在容器层，不再单独错峰）
+        var rightDelay = baseTime + TimeSpan.FromMilliseconds(ReturnRightDelayMs);
         var rightMove = new DoubleAnimationUsingKeyFrames
         { Duration = TimeSpan.FromMilliseconds(ReturnRightMoveMs), BeginTime = rightDelay };
         rightMove.KeyFrames.Add(new SplineDoubleKeyFrame(ReturnRightFrom, KeyTime.FromPercent(0)));

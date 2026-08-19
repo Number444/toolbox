@@ -1,6 +1,6 @@
 # changelog-2026-08-19
 
-> 当日工作日志：任务栏嵌入式音乐控件（新功能）+ v1.8.1 发布。
+> 当日工作日志：任务栏嵌入式音乐控件（新功能）+ v1.8.1 发布 + 启动动画质感优化。
 
 ## 1. 任务栏嵌入式音乐控件（TaskbarMusicWidget）
 
@@ -30,3 +30,80 @@
 
 - 版本号 v1.8.0 → **v1.8.1**（`setup/ToolboxSetup.iss` + 底部状态栏）
 - 产物 `setup/Toolbox_Setup.exe`（Release 自包含单文件，ISCC LZMA2）；已 push 云端（b2104f6）
+
+## 6. 启动动画质感优化（方向文件：`docs/待删除/启动动画优化方向-2026-08-19.md`，已执行归档）
+
+**约束**：时序骨架（1.3s 弹入 / 1.0s 图标 / 0.5s 停留 / 0.5s 淡出，共 3.3s）不动——
+黑遮罩停留是盖住 WPF 启动初期无法绘制黑屏期的功能需求（Four 确认）。只改质感：
+
+- **曲线统一**：品牌阶段全部位移（文字弹入/图标滑入/文字让位）从 CubicEase EaseOut
+  换为 `KeySpline(0.16,1→0.3,1)` emphasized（改用 DoubleAnimationUsingKeyFrames 承载），
+  与 8-10 切回动画设计语言统一；文字/图标淡入保留 EaseIn（跳帧期实测结论不动）
+- **模糊渐变（BlurEffect.Radius 动画）**：文字 6→0（阶段 1 同步）、图标 5→0（阶段 2 同步）、
+  内容区 6→0（揭示时 650ms）——"从虚焦到聚焦"；QuadraticEase EaseOut 对焦曲线；
+  **完成后 Effect 一律置 null 摘除**（不留常驻离屏渲染开销/文字发虚）。
+  XAML 侧 ContentRoot（主体内容区 Grid）/ MaskTitle / MaskIcon 各挂 Radius=0 实例，起点值全在代码调参区
+  （⚠️ 此半径动画方案已被第 7 节 VisualBrush 覆盖层方案替代——Radius 整数量化跳档）
+- **淡出 × 入场编排**：遮罩仍纯黑时 `SetReturnStartState()` 藏好左右栏起点 →
+  淡出 +120ms 后 `PlayContentEntrance(entranceStart)` 开播（抽出共用方法，切回动画 = baseTime Zero
+  同源调用）——动作前段隔半透黑幕隐约可见、后段清晰（"浮出"感），消除硬切静态界面
+- **顺手修复**：静默启动首次托盘唤起时 `_wasBackground=true` 会让 Activated 触发
+  PlayReturnAnimations 与冷启动入场叠加互踩 → OnWindowLoaded 编排前置 false
+- 新增调参常量：MaskFadeStartMs/MaskFadeMs/EntranceTitleBlurRadius/EntranceIconBlurRadius/
+  ContentBlurRadius/ContentBlurMs/ContentEntranceDelayMs
+- 改动文件：`MainWindow.xaml`（3 个 BlurEffect + ContentRoot 命名）、`MainWindow.xaml.cs`；编译 0 错误
+- **调参（同日，Four 反馈模糊不可见）**：根因 = 淡入 EaseIn（前暗后亮）× 模糊 EaseOut（前快散完）
+  曲线错开——元素亮起时模糊已散完。对焦曲线改 **CubicEase EaseIn**（扛着不散、最亮时对焦），
+  半径 6/5/6 → 8/6/7，对焦时长比落定位移多 200ms（"亮起→落定→对上焦"三段可辨），
+  文字 1500ms / 图标 1200ms / 内容 900ms
+
+## 7. 模糊对焦跳档排查与修复（BlurEffect 整数量化）
+
+- **现象**（Four 反馈）：模糊渐显曲线不稳，可见明显"切换效果"
+- **排查**（实证，`C:\Agent Space\待删除\blurstep-test` 渲染测试）：半径 8.0→0 以 0.1 步进
+  逐档渲染算像素差——**档内（如 7.9→7.0）逐像素完全相同，跨整数边界才突变**；
+  Performance/Quality 两档 RenderingBias 行为一致。结论：**WPF BlurEffect.Radius 被量化到
+  整数档（floor）**，半径动画 8→0 实际只有 8 次离散跳变，任何缓动曲线都救不了
+- **修复**：半径固定、动画改做 Opacity——每个对焦目标盖一层"模糊镜像覆盖层"
+  （Rectangle + VisualBrush 实时镜像 + 固定 Radius 8/6/7），入场时覆盖层 Opacity 1→0 淡出
+  = 连续对焦；完成后 Collapse（双份渲染只存在于入场期间）。
+  三个覆盖层：MaskTitleFocusVeil / MaskIconFocusVeil（遮罩内，尺寸/变换绑定本体）+
+  ContentFocusVeil（主 Grid Row 1，与 ContentRoot 同单元格像素级对齐）
+- **回归验证**：覆盖层 Opacity 逐 0.05 渲染 20 档——Δ 全部 ≈0.023 均匀无平台期（平滑）；
+  对齐敏感性：2px 故意偏移 Δ 仅 0.077（8px 模糊下镜像错位不可见），绑定对齐方案稳
+- 顺带的隐性收益：原方案完成时摘除 Effect 会触发文字 ClearType↔灰阶抗锯齿切换（另一种"咔"），
+  新方案本体全程不挂 Effect，此跳变一并消除
+- C# 侧删除三个半径动画与 EntranceTitleBlurRadius/EntranceIconBlurRadius/ContentBlurRadius 常量，
+  ContentBlurMs 更名 ContentFocusMs；编译 0 错误
+
+## 8. 交叉淡化修复（覆盖层 v1 审查：文字/图标无模糊 + 内容模糊不同步）
+
+- **现象**（Four 审查反馈）：①文字和图标完全看不到模糊；②黑屏淡出时内容模糊未与入场动画同步
+- **根因（叠层合成原理性缺陷）**：v1 清晰本体在下、模糊镜像盖在上面——8px 模糊把 4-5px 笔画
+  alpha 冲淡到 ~50%，**清晰层从模糊层下透出** → 合成 = "清晰+光晕"而非虚焦；内容区更甚：
+  VisualBrush 镜像继承本源透明度，内容淡入到 0.2 时镜像也只剩 0.2 亮度，模糊压不住场
+- **修复（真·交叉淡化）**：清晰层与模糊层透明度独立控制，**模糊镜像源恒不透明**：
+  - 品牌元素三层结构：Fader（整体淡入，沿用原 EaseIn 渐亮节奏）→ Sharp 清晰层（同曲线淡入，
+    双重衰减 → 清晰边缘晚到）+ Veil 模糊镜像（淡出，镜像恒不透明本体）
+  - 内容区：新增 ContentSharpLayer 容器统一淡入（左右栏不再各自淡入），ContentRoot 恒不透明
+    做镜像源，ContentFocusVeil 与入场动画同一 BeginTime 开播（严格同步）
+  - 结构红利：变换移到组容器，v1 的 ActualWidth/变换绑定全删
+  - SetReturnStartState/PlayContentEntrance 同步改走 ContentSharpLayer（切回动画行为不变）
+- **回归验证**（blurstep-test 梯度能量法）：t=650ms 相对模糊度 0.93（≈纯模糊）→
+  1040ms 0.75 → 1300ms 0.13 → 1500ms 0.00（纯清晰），单调无跳档——真对焦成立；编译 0 错误
+
+## 9. 内容区对焦回退初版方案（覆盖层残影，Four 实测反馈）
+
+- **现象**：黑屏淡出时内容区的模糊镜像覆盖层产生**残影**——全亮度模糊镜像跟随滑动中的内容
+  拖尾、与清晰层错位叠加成鬼影（品牌文字/图标是原地对焦，不受影响）
+- **决策（Four）**：内容区回退**初版方案**——直接对内容挂 BlurEffect 动画半径（6→0/650ms/
+  QuadraticEase EaseOut），接受整数量化的有限跳档（初版实测观感可接受）
+- **改动**：XAML 删 ContentFocusVeil，BlurEffect 挂到 ContentSharpLayer（x:Name=ContentBlur，
+  完成后置 null 摘除）；C# 恢复 ContentBlurRadius=6/ContentBlurMs=650 常量
+- **保留**：品牌区（文字/图标）交叉淡化覆盖层不动——原地对焦无残影且已过梯度能量验证；
+  ContentSharpLayer 容器保留（统一淡入 + 模糊载体，切回动画行为不变）；编译 0 错误
+
+## 10. v1.8.2 发布
+
+- 版本号 v1.8.1 → **v1.8.2**（`setup/ToolboxSetup.iss` + 底部状态栏）
+- 内容 = 第 6–9 节启动动画质感优化全套；产物 `setup/Toolbox_Setup.exe`
