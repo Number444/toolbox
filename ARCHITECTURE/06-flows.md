@@ -26,6 +26,8 @@ App.xaml → App.xaml.cs OnStartup:
     7. HwndTarget.BackgroundColor = Transparent            // 交换链透明
     8. Dispatcher.BeginInvoke: UpdateCornerMask() + InitGroupHeights() + InitHighlight()
     9. 若 AutoOpenFloatWindow → 经 MusicFloatControllerHost.Current 打开悬浮窗（控制器未注册则跳过）
+    10. 启动遮罩入场链（v1.8.2：两段式品牌动画 + 交叉淡化对焦 + 淡出×内容入场编排，
+        时序骨架 3.3s 盖住 WPF 黑屏期，见 07-ui-system「启动遮罩」）
 
   MainWindow 构造函数末尾：
     10. InitHalo() — 初始化鼠标光晕系统 + EdgeGlowLayer（CompositionTarget.Rendering 逐帧轮询）

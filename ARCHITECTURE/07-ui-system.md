@@ -114,13 +114,16 @@ InitHalo():
 | 侧栏按压反馈 | 90ms 下压 / 180ms 回弹 | CubicEase EaseOut | 导航项/分组头缩放 0.96↔1（PreviewMouseLeftButtonDown/Up + MouseLeave 复位；`PressScale`/`PressDownMs`/`PressUpMs` 调参） |
 | 设置层进入 | 360ms | 二次 EaseOut | 淡入 + 8px 上滑 + 缩放 0.96→1（`SettingsEnterScale` 调参，1=关闭缩放） |
 | 设置层退出 | 150ms | CubicEase EaseIn | 淡出 + 8px 下滑 + 缩放→0.98（`SettingsExitScale`）；设置页点工具时串行对齐（见下） |
-| 切回前台·左侧 | 淡入 280ms + 位移 500ms | KeySpline(0.16,1,0.3,1) | 工具栏从左滑入（X -220→0）；淡入先于位移完成（≈55% 时长） |
-| 切回前台·右侧 | 延迟 60ms + 淡入 300ms + 位移 540ms | KeySpline(0.16,1,0.3,1) | 工具页淡入 + 大幅上滑 100→0（对等左侧滑入感）；60ms 微错峰润色 |
+| 切回前台·整体淡入 | 280ms | 二次 EaseOut | 统一走 ContentSharpLayer 容器（2026-08-19 起左右栏不再各自淡入）；先于位移完成（≈55% 时长） |
+| 切回前台·左侧位移 | 500ms | KeySpline(0.16,1,0.3,1) | 工具栏从左滑入（X -220→0） |
+| 切回前台·右侧位移 | 延迟 60ms + 540ms | KeySpline(0.16,1,0.3,1) | 工具页大幅上滑 100→0（对等左侧滑入感）；60ms 微错峰润色 |
 | 搜索框 focus 绿线 | 120ms 入 / 150ms 出 | 线性 | 底部 Accent 绿线 |
 | 导航高亮移动 | 200ms | CubicEase EaseOut | HighlightAnimMs |
 | 分组展开/折叠 | 200ms | CubicEase | 渲染式 Clip 揭示 + 兄弟平移；展开时子项 25ms 间隔错落淡入（`GroupItemStaggerMs`=0 关闭，`GroupItemFadeMs` 调单条时长） |
-| 启动遮罩·文字 | 淡入 1300ms EaseIn + 上滑 40px 1300ms EaseOut | CubicEase | 从下往上滑入 + 渐渐亮起（位移先快后慢、淡入 EaseIn 缓慢显，同步 1.3s 完成） |
-| 启动遮罩·图标 | 淡入 700ms EaseIn + 位移 48px 1000ms EaseOut | CubicEase | 从文字背后（起点 -18）滑入文字左侧（终点 -66）；文字同步右移 22px——三者同刻起止（1.3s→2.3s），详见「启动遮罩（两段式）」 |
+| 启动遮罩·文字 | 淡入 1300ms EaseIn + 上滑 40px 1300ms + 对焦 1500ms | 位移 KeySpline emphasized；淡入/对焦 CubicEase EaseIn | 从下往上滑入 + 渐渐亮起 + 虚焦→聚焦（Veil 覆盖层 8px 固定模糊，Opacity 淡出，落定后才对上焦） |
+| 启动遮罩·图标 | 淡入 700ms EaseIn + 位移 48px 1000ms + 对焦 1200ms | 同上 | 从文字背后滑入文字左侧（终点动态计算，兜底 -66）；文字同步右移 22px——三者同刻起止（1.3s→2.3s）；Veil 6px 模糊淡出，详见「启动遮罩（两段式入场 + 对焦淡出编排）」 |
+| 冷启动·内容入场 | 遮罩淡出 +120ms 起：位移 500/540ms + 淡入 280ms | KeySpline emphasized | 与切回前台同源（`PlayContentEntrance`）；黑幕揭开时内容滑入"浮出"，消除硬切 |
+| 冷启动·内容对焦 | 650ms | 二次 EaseOut | ContentSharpLayer 直接 BlurEffect 6→0（初版方案：覆盖层在滑动内容上产生残影已回退，接受整数量化跳档；完成后摘除 Effect） |
 
 ## 设置层过渡（进出 + 串行对齐）
 
@@ -132,26 +135,33 @@ InitHalo():
 
 ## 切回前台动画（后台 → 前台入场）
 
-窗口从后台恢复（最小化还原 / 托盘恢复 / 静默驻留唤起）时播放，`PlayReturnAnimations()`。
+窗口从后台恢复（最小化还原 / 托盘恢复 / 静默驻留唤起）时播放，`PlayReturnAnimations()`——
+实为 `PlayContentEntrance(TimeSpan.Zero)`：冷启动入场与本动画共用同一编排方法（baseTime 为整条时间轴偏移）。
 
-**触发机制**：`_wasBackground` 标志 + `Activated` 事件。置位点仅三处——最小化（StateChanged）、关闭到托盘（OnClosing 隐藏成功）、静默驻留（托盘创建成功）。**不监听 Deactivated**：点悬浮窗/系统弹窗导致的普通失焦不触发；正常启动不播放（启动遮罩链负责入场）。
+**触发机制**：`_wasBackground` 标志 + `Activated` 事件。置位点仅三处——最小化（StateChanged）、关闭到托盘（OnClosing 隐藏成功）、静默驻留（托盘创建成功）。**不监听 Deactivated**：点悬浮窗/系统弹窗导致的普通失焦不触发；正常启动不播放（启动遮罩链负责入场——OnWindowLoaded 编排前会把 `_wasBackground` 置 false，防静默启动首次唤起时本动画与冷启动入场叠加互踩，2026-08-19）。
 
-**节奏**：2026-08-10 精调为现代动效三原则——① 位移曲线 `KeySpline(0.16,1 → 0.3,1)`（= CSS `cubic-bezier(.16,1,.3,1)`，Apple/Fluent emphasized，起步干脆、收尾长而柔，替代 CubicEase EaseOut 的偏硬尾段）；② 不透明度先于位移完成（淡入 280/300ms ≈ 位移时长的 55%，运动继续缓落）；③ 右侧 60ms 微错峰润色。位移时长左侧 500ms / 右侧 540ms。参数集中在 `MainWindow` 类级调参区（ReturnLeftFrom/ReturnRightFrom/ReturnFadeMs/ReturnLeftMoveMs/ReturnRightMoveMs/ReturnRightDelayMs，RightDelayMs=0 回完全同步）——`PlayReturnAnimations` 与 `SetReturnStartState` 共享同源，起点与动画 From 改一处全同步（防止双写漂移）。曾尝试 200ms 大错峰 + QuinticEase（左侧先落位、右侧延迟），实测不理想已回退（2026-08-10）。
+**节奏**：2026-08-10 精调为现代动效三原则——① 位移曲线 `KeySpline(0.16,1 → 0.3,1)`（= CSS `cubic-bezier(.16,1,.3,1)`，Apple/Fluent emphasized，起步干脆、收尾长而柔，替代 CubicEase EaseOut 的偏硬尾段）；② 不透明度先于位移完成（淡入 280ms ≈ 位移时长的 55%，运动继续缓落）；③ 右侧 60ms 微错峰润色。位移时长左侧 500ms / 右侧 540ms。参数集中在 `MainWindow` 类级调参区（ReturnLeftFrom/ReturnRightFrom/ReturnFadeMs/ReturnLeftMoveMs/ReturnRightMoveMs/ReturnRightDelayMs，RightDelayMs=0 回完全同步）——`PlayContentEntrance` 与 `SetReturnStartState` 共享同源，起点与动画 From 改一处全同步（防止双写漂移）。曾尝试 200ms 大错峰 + QuinticEase（左侧先落位、右侧延迟），实测不理想已回退（2026-08-10）。
 
-**实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；右侧动画只作用于 ContentScrollViewer（不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
+**实现要点**：NavPane/ContentPane 的 RenderTransform 常态为 0，动画必须显式 From（无 From 则原地不动）；纯渲染层无布局抖动；淡入统一作用于 `ContentSharpLayer` 容器（2026-08-19 起，左右栏不再各自淡入——该容器同时是冷启动对焦模糊的载体）；位移仍分别作用于 NavPane（X）/ContentScrollViewer（Y，不含设置层兄弟元素）；与内部内容切换动画叠加但互不冲突（不同元素动画属性）。
 
 **首帧闪烁消除（清场帧拦截）**：还原瞬间 DWM 直接把最小化前缓存的最后一张窗口表面合成上屏——该位图在最小化时已定型，之后 `SetReturnStartState()` 无论多同步都改不了已上屏的缓存帧（录屏逐帧验证："后台置位 + 还原显示前再设"双保险仍闪一帧，2026-08-10 修复）。解法：`MinimizePreClearHook` 拦截 `WM_SYSCOMMAND / SC_MINIMIZE`（系统级最小化入口，如任务栏右键/点击最小化），先 `handled=true` 拦下最小化 → 同步置起点状态 → `WaitForRenderedFramesAsync(2)` 等"清场帧"（界面透明的起点状态）真正渲染提交进 DWM 缓存 → 再程序化 `WindowState=Minimized`（WPF 走 ShowWindow，不经 SC_MINIMIZE，无递归；`_preClearMinimize` 兼作重入保护）。自建标题栏最小化按钮（`MinimizeButton_Click`）直接设 `WindowState` 不产生 SC_MINIMIZE，须显式改调 `PreClearThenMinimizeAsync`（2026-08-10 实测：按钮路径闪烁即此遗漏）。还原时 DWM 亮出的是空窗帧，WPF 从起点播动画，无缝衔接。代价：最小化延迟约 2 帧（~33ms，不可感知）。已知边界：Win+D / Win+M 不经 SC_MINIMIZE 无法拦截，该路径首帧闪烁保留（系统级机制限制），仍由 `StateChanged` 兜底播动画。托盘隐藏/静默驻留路径不受 DWM 缓存影响（Hide 销毁表面，Show 首帧由 WPF 全新渲染），原有"Show 前同步起点"逻辑保留。
 
-## 启动遮罩（两段式入场）
+## 启动遮罩（两段式入场 + 对焦淡出编排，v1.8.2）
 
-纯黑遮罩（与 DWM 首帧空窗帧同色，无缝衔接），`MaskTitle` 文字 + `MaskIcon` 图标分层定位（Grid 内均居中基准，图标声明在前=下层，从文字背后出发）。`OnWindowLoaded` 驱动（静默启动首次托盘唤起同样生效）。
+纯黑遮罩（与 DWM 首帧空窗帧同色，无缝衔接；**停留时长盖住 WPF 启动初期无法绘制的黑屏期——功能需求，勿缩短**）。`OnWindowLoaded` 驱动（静默启动首次托盘唤起同样生效，Loaded 首次显示才触发）。
 
-**时间线**（2026-08-11 定稿）：
-- **0–1.3s 阶段 1**：文字从下方 40px 滑入 + 渐渐淡入（位移 CubicEase EaseOut 先快后慢；淡入 CubicEase EaseIn 缓慢亮起，同步完成）
-- **1.3–2.3s 阶段 2**：图标从文字背后（起点 = 终点 + 48px，与文字重叠处）淡入（EaseIn，700ms）并向左滑入文字左侧（终点 = 文字右移后的左缘外 12px，动态计算，兜底 -66）；文字同步右移 22px（= (图标宽 32 + 间距 12)/2，保证组合居中）
-- **2.3–2.8s 定格 → 2.8–3.3s 遮罩淡出**（500ms EaseOut，完成后 Collapsed，Acrylic 透出）
+**时间线**（时序骨架 2026-08-11 定稿；质感 2026-08-19 v1.8.2）：
+- **0–1.3s 阶段 1**：文字从下方 40px 滑入（KeySpline emphasized）+ 三层交叉淡化对焦——Fader 整体淡入（EaseIn 1300ms，沿用原渐亮节奏）/ Sharp 清晰层同曲线淡入（双重衰减 → 清晰边缘晚到）/ Veil 模糊镜像（固定 Radius 8，Opacity 淡出 1500ms EaseIn——落定后才对上焦）
+- **1.3–2.3s 阶段 2**：图标从文字背后（起点 = 终点 + 48px）同三层结构（模糊 6px、对焦 1200ms）向左滑入文字左侧（终点动态计算，兜底 -66）；文字同步右移 22px（= (图标宽 32 + 间距 12)/2，保证组合居中）
+- **2.3–2.8s 定格 → 2.8s 起（`MaskFadeStartMs`）遮罩淡出** 500ms EaseOut，完成后 Collapsed，Acrylic 透出
+- **2.92s 起（淡出 +120ms，`ContentEntranceDelayMs`）内容入场**：遮罩仍纯黑时 `SetReturnStartState()` 藏好起点 → `PlayContentEntrance(entranceStart)` 左右栏滑入 + ContentSharpLayer 淡入 + `ContentBlur` 对焦 6→0（650ms 二次 EaseOut，完成后 Effect 置 null）——动作前段隔半透黑幕隐约可见（"浮出"感），消除"片头播完硬切静态界面"
 
-**协同约束**：图标位移与文字右移共用同一时长常量 + 同一 BeginTime + 同一缓动，严格同时开始同时结束；图标动画前先写入起点本地值（消除 From ≠ 实际位置的跳变）。调参集中在 OnWindowLoaded 方法内常量（MaskPhase1Ms / MaskIconMoveMs / MaskIconFadeMs / MaskIconTravelX / MaskTitleShiftX / MaskTitleRiseFrom）。
+**模糊对焦的技术约束（2026-08-19 逐档渲染实测，blurstep-test 验证）**：
+- WPF `BlurEffect.Radius` **量化到整数档**（floor；档内逐像素不变、跨整数边界突变，Performance/Quality 两档一致）——半径动画必跳档，缓动曲线只改变跳变时机
+- 品牌区（原地对焦）→ **VisualBrush 模糊镜像覆盖层 Opacity 淡出**绕开（Opacity 连续）。覆盖层三要点：① **镜像源恒不透明**（VisualBrush 继承本源透明度——v1 直接镜像参与淡入的本体，模糊被拖暗、清晰层从底下透出 = 只见光晕不见虚焦）；② **交叉淡化**（Sharp/Veil 各自独立 Opacity，Fader 管整体渐亮）；③ 变换放组容器（镜像随动免绑定）
+- 内容区（滑动中内容）**不能用覆盖层**——全亮度模糊镜像跟随位移拖尾 = 残影（v2 教训，Four 实测），回退初版直接半径动画、接受有限跳档
+
+**协同约束**（保留）：图标位移与文字右移共用同一时长常量 + 同一 BeginTime + 同一缓动，严格同时开始同时结束；图标动画前先写入起点本地值（消除 From ≠ 实际位置的跳变）。调参：类级 `MaskFadeStartMs`/`MaskFadeMs`/`ContentBlurRadius`/`ContentBlurMs`/`ContentEntranceDelayMs`；方法内 `MaskPhase1Ms`/`MaskTitleFocusMs`/`MaskIconMoveMs`/`MaskIconFadeMs`/`MaskIconFocusMs`/`MaskIconTravelX`/`MaskTitleShiftX`/`MaskTitleRiseFrom`。
 
 **注意**：启动动画**不在**光晕闸门清单（IsAnyGlowTrackedAnimationActive）内，无需清时钟——HoldEnd 保持终值即可（遮罩期 GlowLayer 被黑罩遮挡，无定格问题）。
 
