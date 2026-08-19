@@ -126,9 +126,10 @@ MusicFloatWindowManager (单例)
 │   ├── Acrylic 窗口：仅 WS_EX_NOACTIVATE + WM_NCHITTEST 拦截
 │   └── 开启后鼠标完全穿透悬浮窗，不会切出全屏游戏焦点
 │
-├── ThemedMenuWindow         深色主题右键菜单（悬浮窗 + TextBox 共用）
+├── ThemedMenuWindow         深色主题右键菜单（悬浮窗 + TextBox + 托盘共用）
 │   ├── 深色圆角主题，DropShadowEffect 投影
 │   ├── 自动屏幕边界吸附
+│   ├── PopupAnimator 开关动画（v1.8.3，见 07-ui-system「弹窗开关动画」）
 │   └── 点击外部自动关闭
 │
 ├── TaskbarMusicWindow       任务栏嵌入宿主（v1.8.1，SetParent 进 Shell_TrayWnd）

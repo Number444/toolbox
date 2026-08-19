@@ -31,9 +31,17 @@ public sealed class ThemedMenuWindow : Window
     /// <summary>关闭流程已开始标记——防止 Deactivated 在 Close 期间重入调用 Close。</summary>
     private bool _closeInitiated;
 
-    /// <summary>卡片四周留给投影的透明边距（px）。
-    /// 投影需要外扩空间，否则会被窗口方形边界切成圆角外的半透明尖角。</summary>
-    private const double ShadowMargin = 16;
+    /// <summary>卡片四周的透明边距（px）。双重用途：① 投影外扩空间（否则被窗口方形边界切成
+    /// 圆角外的半透明尖角）；② PopupAnimator 抛出位移/过冲的动画安全区（24px 抛出 + 2px 过冲 < 40）。
+    /// 边距透明不可见，其上的点击视为"点击外部"关闭菜单。</summary>
+    private const double SafeMargin = 40;
+
+    /// <summary>动画承载层（最外层 Border）：PopupAnimator 的 BlurEffect/变换挂它身上。</summary>
+    private Border? _animHost;
+    /// <summary>打开动画抛出起点（按菜单相对光标的展开方向取 ±24），关闭倒放复用同一方向。</summary>
+    private Point _flyFrom = new(0, -24);
+    /// <summary>关闭动画播完置位后真正关窗（OnClosing 首次拦截播倒放动画）。</summary>
+    private bool _allowClose;
 
     /// <summary>统一关闭入口（带重入守卫）。</summary>
     private void InitiateClose()
@@ -57,15 +65,20 @@ public sealed class ThemedMenuWindow : Window
         foreach (var item in items)
             panel.Children.Add(item.IsSeparator ? BuildSeparator() : BuildRow(item));
 
-        Content = new Border
+        // 三层结构（dsh-app AppMenuPanel 同款分层）：
+        // 最内层 = 视觉卡片（背景/描边/圆角）；中层 = 静态阴影（Effect 同一元素只能挂一个，
+        // 阴影与 PopupAnimator 动画模糊必须分层）；最外层 = 动画承载 + 透明安全区。
+        var card = new Border
         {
             CornerRadius = new CornerRadius(8),
             Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x2D, 0x2D, 0x2D)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(4),
-            // 透明边距：给投影留出外扩空间，避免被窗口边界切成尖角
-            Margin = new Thickness(ShadowMargin),
+            Child = panel
+        };
+        var shadowLayer = new Border
+        {
             Effect = new DropShadowEffect
             {
                 BlurRadius = 20,
@@ -73,8 +86,15 @@ public sealed class ThemedMenuWindow : Window
                 Opacity = 0.45,
                 Color = Colors.Black
             },
-            Child = panel
+            Child = card
         };
+        var animHost = new Border
+        {
+            Margin = new Thickness(SafeMargin),
+            Child = shadowLayer
+        };
+        Content = animHost;
+        _animHost = animHost;
 
         // 点击菜单外部 → 窗口失焦 → 自动收回
         // （Close 过程中也会触发 Deactivated，必须守卫重入，否则 VerifyNotClosing 崩溃）
@@ -165,26 +185,58 @@ public sealed class ThemedMenuWindow : Window
         var menu = new ThemedMenuWindow(items)
         {
             // 窗口含透明边距，向左上偏移使卡片（而非窗口）对齐光标
-            Left = screenPosDip.X - ShadowMargin,
-            Top = screenPosDip.Y - ShadowMargin
+            Left = screenPosDip.X - SafeMargin,
+            Top = screenPosDip.Y - SafeMargin
         };
-        menu.Show();
-        menu.Activate(); // 必须激活，后续失焦（点击外部）才能触发 Deactivated 收回
-
-        menu.Dispatcher.BeginInvoke(new Action(() =>
+        // Loaded 必须在 Show() 之前挂——AllowsTransparency 分层窗口的时序事实（2026-08-19 实测三连）：
+        // ① Show() 内部同步触发 Loaded；② Show() 内部同步合成并呈现首帧（不等调度器），
+        //    Show() 返回后再设起始态 = 最终态已呈现一帧（"瞬间出现→消失→再播动画"的闪帧）；
+        // ③ Loaded 在同步呈现之前触发，此处设起始态 + 夹紧定位，首帧即动画起点。
+        // Loaded 触发时布局已完成，ActualWidth/ActualHeight 可用。
+        menu.Loaded += (_, _) =>
         {
             var wa = SystemParameters.WorkArea;
-            double cardWidth = menu.ActualWidth - ShadowMargin * 2;
-            double cardHeight = menu.ActualHeight - ShadowMargin * 2;
+            double cardWidth = menu.ActualWidth - SafeMargin * 2;
+            double cardHeight = menu.ActualHeight - SafeMargin * 2;
 
-            if (menu.Left + ShadowMargin + cardWidth > wa.Right)
-                menu.Left = wa.Right - cardWidth - ShadowMargin;
-            if (menu.Top + ShadowMargin + cardHeight > wa.Bottom)
-                menu.Top = screenPosDip.Y - cardHeight - ShadowMargin; // 卡片底边贴光标上方
-            if (menu.Left + ShadowMargin < wa.Left)
-                menu.Left = wa.Left - ShadowMargin;
-            if (menu.Top + ShadowMargin < wa.Top)
-                menu.Top = wa.Top - ShadowMargin;
-        }), System.Windows.Threading.DispatcherPriority.Loaded);
+            if (menu.Left + SafeMargin + cardWidth > wa.Right)
+                menu.Left = wa.Right - cardWidth - SafeMargin;
+            if (menu.Top + SafeMargin + cardHeight > wa.Bottom)
+            {
+                menu.Top = screenPosDip.Y - cardHeight - SafeMargin; // 卡片底边贴光标上方
+                menu._flyFrom = new Point(0, 24); // 上翻展开：从下方抛出
+            }
+            if (menu.Left + SafeMargin < wa.Left)
+                menu.Left = wa.Left - SafeMargin;
+            if (menu.Top + SafeMargin < wa.Top)
+                menu.Top = wa.Top - SafeMargin;
+
+            // 打开动画（dsh-app 菜单同款：抛出回弹 + 放大 + 模糊渐清）
+            PopupAnimator.PlayOpen(menu._animHost!, menu._flyFrom);
+        };
+
+        menu.Show();
+        menu.Activate(); // 必须激活，后续失焦（点击外部）才能触发 Deactivated 收回
+    }
+
+    /// <summary>
+    /// 关闭先播倒放动画（打开的严格时间反转，沿打开时的抛出方向飞回）：首次 Closing 取消关窗、
+    /// 播收拢动画，完成后回调里置 _allowClose 真正关窗。系统关闭"菜单动画"时 PlayClose 立即回调 = 直接关。
+    /// </summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        // Dispatcher.HasShutdownStarted：应用退出（如托盘菜单"退出"动作）正在关窗时必须放行，
+        // 否则关窗动画拦截会中止整个 Shutdown
+        if (!_allowClose && IsLoaded && _animHost is not null
+            && !Application.Current!.Dispatcher.HasShutdownStarted)
+        {
+            e.Cancel = true;
+            PopupAnimator.PlayClose(_animHost, () =>
+            {
+                _allowClose = true;
+                Close();
+            }, null, _flyFrom);
+        }
+        base.OnClosing(e);
     }
 }

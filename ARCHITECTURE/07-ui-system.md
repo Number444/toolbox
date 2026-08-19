@@ -124,6 +124,8 @@ InitHalo():
 | 启动遮罩·图标 | 淡入 700ms EaseIn + 位移 48px 1000ms + 对焦 1200ms | 同上 | 从文字背后滑入文字左侧（终点动态计算，兜底 -66）；文字同步右移 22px——三者同刻起止（1.3s→2.3s）；Veil 6px 模糊淡出，详见「启动遮罩（两段式入场 + 对焦淡出编排）」 |
 | 冷启动·内容入场 | 遮罩淡出 +120ms 起：位移 500/540ms + 淡入 280ms | KeySpline emphasized | 与切回前台同源（`PlayContentEntrance`）；黑幕揭开时内容滑入"浮出"，消除硬切 |
 | 冷启动·内容对焦 | 650ms | 二次 EaseOut | ContentSharpLayer 直接 BlurEffect 6→0（初版方案：覆盖层在滑动内容上产生残影已回退，接受整数量化跳档；完成后摘除 Effect） |
+| 弹窗/菜单·打开 | 480ms（缩放 0.5→1 于 70% 落位）+ 240ms 淡入 + 模糊 20→0 420ms | 位置单条 BackEase EaseOut（过冲 2px）；模糊线性 | PopupAnimator 默认档：垂直抛出 24px + 惯性回弹 + 模糊渐清（dsh-app 菜单同款） |
+| 弹窗/菜单·关闭 | 480ms（模糊 60ms 起、淡出 240ms 起） | 打开严格时间反转（BackEase EaseIn 等） | 打开动画倒放：先沿惯性微顿 2px 再飞回起点 |
 
 ## 设置层过渡（进出 + 串行对齐）
 
@@ -164,6 +166,21 @@ InitHalo():
 **协同约束**（保留）：图标位移与文字右移共用同一时长常量 + 同一 BeginTime + 同一缓动，严格同时开始同时结束；图标动画前先写入起点本地值（消除 From ≠ 实际位置的跳变）。调参：类级 `MaskFadeStartMs`/`MaskFadeMs`/`ContentBlurRadius`/`ContentBlurMs`/`ContentEntranceDelayMs`；方法内 `MaskPhase1Ms`/`MaskTitleFocusMs`/`MaskIconMoveMs`/`MaskIconFadeMs`/`MaskIconFocusMs`/`MaskIconTravelX`/`MaskTitleShiftX`/`MaskTitleRiseFrom`。
 
 **注意**：启动动画**不在**光晕闸门清单（IsAnyGlowTrackedAnimationActive）内，无需清时钟——HoldEnd 保持终值即可（遮罩期 GlowLayer 被黑罩遮挡，无定格问题）。
+
+## 弹窗开关动画（PopupAnimator，v1.8.3）
+
+公共实现 `Toolbox.Core/Controls/PopupAnimator.cs`（dsh-app 菜单动画移植），覆盖全部自绘弹窗：`ConfirmDialog`（6 处调用，含 v1.8.3 合并进来的 JunkCleanerTool 原私有副本——`warningText` 参数承载回收站警告）、`DownloadDialog`、`ThemedMenuWindow`（托盘/悬浮窗/文本框右键 3 处共用）。
+
+**打开** = 垂直抛出 24px + 惯性回弹 2px（单条 BackEase 全程连续，无拼接接缝）+ 缩放 0.5→1（70% 落位不过冲）+ 模糊 20→0 渐清（420ms 线性）+ 240ms 淡入；**关闭** = 打开的严格时间倒放（先沿惯性微顿 2px 再飞回起点）。尊重系统"菜单动画"设置；渲染 Tier<2 时跳过逐帧模糊。实现关键：`Animatable.BeginAnimation` 直调（Storyboard.SetTarget 对 Transform/Effect 等非元素目标的动画会被静默丢弃）。
+
+窗口化适配三要点：
+1. **动画安全区**：AllowsTransparency 分层窗口裁切越界位移/模糊外扩——卡片四周 40px 透明边距（ThemedMenuWindow 原 16px 投影边距已并入该常量），窗口宽 = 卡片宽 + 80
+2. **关闭拦截**：重写 `OnClosing` 首次取消关窗 → `PlayClose` 完成回调置标志真正关窗；`Dispatcher.HasShutdownStarted` 时必须放行（托盘"退出"动作路径会被关窗动画拦截中止 Shutdown）；Confirmed 等结果语义在点击时已写入，调用方零改动
+3. **Effect 分层**：动画模糊与静态阴影不得同层（`UIElement.Effect` 唯一）——ThemedMenuWindow 三层：动画承载 / DropShadow / 视觉卡片
+
+**首帧时序三连教训（2026-08-19 实测）**：① `BeginInvoke(DispatcherPriority.Loaded)` 在首帧**之后**执行（优先级数值大者先，Render(7) > Loaded(6)）→ 闪帧；② AllowsTransparency 窗口 `Show()` **内部同步合成呈现首帧**，Show 返回后再设起始态 = 最终态已上屏一帧（"瞬间出现→消失→再播动画"）；③ `Window.Show()` 同步触发 Loaded（事后挂事件永远等不到）——**唯一起效位置 = Show 之前挂 `Loaded` 事件**（对话框挂构造函数、菜单在 `ShowAt` 内 Show 之前挂），起始态 + 定位夹紧在其中同步完成，首帧即动画起点。
+
+原生 `MessageBox`（崩溃兜底/启动告警/关机失败）不动：崩溃时 WPF 可能不稳定，Win32 原生弹窗最安全（有意设计）。
 
 ## 搜索框（MainWindow 左侧顶部）
 

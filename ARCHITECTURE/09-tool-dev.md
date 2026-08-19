@@ -47,8 +47,8 @@ public class MyNewTool : ITool
 |----|------|
 | `ThemeColors` | 颜色常量（禁止自定义色值） |
 | `GlowCardMarker` | 卡片发光标记（`SetIsGlowCard(card, true)`） |
-| `ThemedMenuWindow` | 深色右键菜单（`ShowAt()`） |
-| `ConfirmDialog` | 确认弹窗 |
+| `ThemedMenuWindow` | 深色右键菜单（`ShowAt()`；自带开关动画，v1.8.3） |
+| `ConfirmDialog` | 确认弹窗（可选 `warningText` 警示行；自带开关动画，v1.8.3） |
 | `JsonSettingsFile` | JSON 设置读写（原子写入） |
 | `DwmHelper` | DWM 窗口效果 |
 | `ClickThroughHelper` | 点击穿透 |

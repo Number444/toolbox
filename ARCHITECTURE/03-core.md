@@ -57,7 +57,8 @@ public static class ToolCategory
 
 | 文件 | 职责 |
 |------|------|
-| ThemedMenuWindow.cs | 深色圆角主题弹出菜单窗口（DropShadowEffect 投影 + 屏幕边界吸附） |
+| ThemedMenuWindow.cs | 深色圆角主题弹出菜单窗口（三层结构：动画承载/静态阴影/视觉卡片 + 屏幕边界吸附 + 开关动画，v1.8.3） |
+| PopupAnimator.cs | 弹窗/浮层开关动画公共实现（dsh-app 菜单同款：抛出回弹 + 放大 + 模糊渐清，关闭严格倒放；详见 07-ui-system.md「弹窗开关动画」） |
 
 ## Helpers/
 

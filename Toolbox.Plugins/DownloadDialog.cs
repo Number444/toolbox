@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Toolbox.Core.Controls;
 using Toolbox.Models;
 
 namespace Toolbox.Tools;
@@ -37,10 +39,21 @@ public sealed class DownloadDialog : Window
     private readonly Button _actionButton;
     private bool _isComplete;
 
+    /// <summary>开/关动画抛出起点（dsh-app 菜单同款：上方 24px 抛出落位，与 ConfirmDialog 一致）。</summary>
+    private static readonly Point FlyFrom = new(0, -24);
+
+    /// <summary>动画安全区（与 ConfirmDialog 同款）：抛出位移/过冲超出窗口客户区的部分会被
+    /// AllowsTransparency 分层窗口裁切，四周留 40px 透明余量（视觉不可见）。</summary>
+    private const double AnimSafePad = 40;
+
+    private readonly Border _mainBorder;
+    /// <summary>关闭动画播完置位后真正关窗（OnClosing 首次拦截播倒放动画）。</summary>
+    private bool _allowClose;
+
     public DownloadDialog(string title, string description)
     {
         Title = title;
-        Width = 420;
+        Width = 500; // 卡片 420 + 两侧动画安全区 40×2
         SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Owner = Application.Current?.MainWindow;
@@ -62,7 +75,9 @@ public sealed class DownloadDialog : Window
             BorderBrush = new SolidColorBrush(borderColor),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
+            Margin = new Thickness(AnimSafePad),
         };
+        _mainBorder = mainBorder;
 
         var root = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
 
@@ -141,11 +156,35 @@ public sealed class DownloadDialog : Window
         mainBorder.Child = root;
         Content = mainBorder;
 
+        // 打开动画（dsh-app 菜单同款：抛出回弹 + 放大 + 模糊渐清）。
+        // Loaded 再开播：构造内开播时钟会先行消耗几十毫秒，窗口首帧看不到抛出起点；Loaded 开播首帧即起点不闪帧
+        Loaded += (_, _) => PopupAnimator.PlayOpen(mainBorder, FlyFrom);
+
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape && !_isComplete)
                 CancelAndClose();
         };
+    }
+
+    /// <summary>
+    /// 关闭先播倒放动画（打开的严格时间反转，与 ConfirmDialog 一致）：首次 Closing 取消关窗、
+    /// 播收拢动画，完成后回调里置 _allowClose 真正关窗。系统关闭"菜单动画"时 PlayClose 立即回调 = 直接关。
+    /// </summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Dispatcher.HasShutdownStarted：应用退出正在关窗时必须放行，否则动画拦截会中止 Shutdown
+        if (!_allowClose && IsLoaded
+            && !Application.Current!.Dispatcher.HasShutdownStarted)
+        {
+            e.Cancel = true;
+            PopupAnimator.PlayClose(_mainBorder, () =>
+            {
+                _allowClose = true;
+                Close();
+            }, null, FlyFrom);
+        }
+        base.OnClosing(e);
     }
 
     /// <summary>

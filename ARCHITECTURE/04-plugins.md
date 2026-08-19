@@ -57,8 +57,8 @@
 
 | 文件 | 职责 |
 |------|------|
-| ConfirmDialog.cs | 统一深色主题确认弹窗（通用删除/清空确认） |
-| DownloadDialog.cs | OCR 引擎下载进度对话框（进度条 + 取消） |
+| ConfirmDialog.cs | 统一深色主题确认弹窗（通用删除/清空确认；可选 warningText 警示行；PopupAnimator 开关动画，v1.8.3；JunkCleanerTool 私有副本已于 v1.8.3 合并删除） |
+| DownloadDialog.cs | OCR 引擎下载进度对话框（进度条 + 取消；PopupAnimator 开关动画，v1.8.3） |
 
 ## Models/
 

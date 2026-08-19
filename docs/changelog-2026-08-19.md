@@ -107,3 +107,27 @@
 
 - 版本号 v1.8.1 → **v1.8.2**（`setup/ToolboxSetup.iss` + 底部状态栏）
 - 内容 = 第 6–9 节启动动画质感优化全套；产物 `setup/Toolbox_Setup.exe`
+
+## 11. 弹窗开关动画全覆盖（v1.8.3）
+
+- **PopupAnimator 移植**：dsh-app 菜单动画助手原样移植到 `Toolbox.Core/Controls/PopupAnimator.cs`
+  （打开 = 垂直抛出 24px + 惯性回弹 2px（单条 BackEase）+ 缩放 0.5→1（70% 落位）+ 模糊 20→0
+  420ms 线性渐清 + 240ms 淡入；关闭 = 打开严格时间倒放；尊重系统"菜单动画"设置，Tier<2 跳过逐帧模糊）。
+  转写时抓到自己抄丢一帧：BuildScaleReverse 少了 0.30 处保持 1.0 的关键帧（会导致关闭动画开头立刻缩小），已对照原版修正
+- **ConfirmDialog / DownloadDialog 挂载**：卡片四周 40px 透明动画安全区（分层窗口裁切越界位移）；
+  打开动画构造函数挂 `Loaded` 播；关闭重写 `OnClosing` 首次拦截播倒放、完成后回调真正关窗；
+  三处 OnClosing 均带 `Dispatcher.HasShutdownStarted` 放行守卫（否则托盘"退出"会被关窗动画中止 Shutdown）
+- **ThemedMenuWindow 挂载（托盘/悬浮窗/TextBox 右键 3 处共用）**：三层重构（动画承载/静态阴影/视觉卡片，
+  Effect 同元素唯一铁律），原 16px 投影边距并入 40px 安全区常量；抛出方向随展开方向自适应（贴底上翻时从下方抛出）
+- **JunkCleanerTool 私有确认弹窗删除合并**：共享 ConfirmDialog 新增可选 `warningText` 警示行参数
+  （承载"⚠️ 回收站清空后不可恢复！"），-110 行重复代码；按钮文字"确定清理"与警告行为保持不变
+- **菜单首帧时序三连坑（实测逐轮排查）**：
+  ① `BeginInvoke(DispatcherPriority.Loaded)` 在首帧之后才执行——优先级数值大者先，Render(7) > Loaded(6) → 闪帧；
+  ② AllowsTransparency 分层窗口 `Show()` **内部同步合成呈现首帧**——Show 返回后再设起始态 = 最终态已上屏一帧
+  （"瞬间出现→消失→再播动画"）；且 `Window.Show()` 同步触发 Loaded，事后挂事件永远等不到（动画整体丢失）；
+  ③ **唯一起效位置 = Show 之前挂 `Loaded` 事件**（Loaded 在同步呈现之前、布局完成之后触发）——
+  起始态 + 定位夹紧在其中同步完成，首帧即动画起点
+- **同类隐患全项目审计**：其余 9 处 Loaded/Render 优先级延后调用逐处确认无害（交换链重建/走马灯/重定位
+  等均为故意延后或操作已可见稳定界面）；闪帧模式只存在于 PopupAnimator 3 个调用点，已全部落在正确时序槽
+- **文档同步**：ARCHITECTURE 03-core（ThemedMenuWindow/PopupAnimator 行）/04-plugins（对话框节）/
+  06-flows（菜单行）/07-ui-system（动效表 2 行 + 新节「弹窗开关动画」）/09-tool-dev（公共类表）+ README 动效行

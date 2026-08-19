@@ -518,7 +518,9 @@ public class JunkCleanerTool : ITool
                 ? "其中包含「回收站」，清空后不可恢复。\n其余类别的文件会先移入回收站，可随时恢复。"
                 : "文件会先移入回收站，误删可恢复。");
 
-        var dialog = new ConfirmDialog(message, "确认清理", hasRecycleBin);
+        // 共享确认弹窗（2026-08-19 合并：原私有副本删除，warningText 承载回收站警告）
+        var dialog = new ConfirmDialog(message, "确认清理", confirmText: "确定清理",
+            warningText: hasRecycleBin ? "⚠️ 回收站清空后不可恢复！" : null);
         dialog.ShowDialog();
         if (!dialog.Confirmed)
             return;
@@ -958,117 +960,4 @@ public class JunkCleanerTool : ITool
         return null;
     }
 
-    // ===== 确认弹窗 =====
-
-    private sealed class ConfirmDialog : Window
-    {
-        public bool Confirmed { get; private set; }
-
-        public ConfirmDialog(string message, string title, bool recycleBinWarning)
-        {
-            Title = title;
-            Width = 400;
-            SizeToContent = SizeToContent.Height;
-            WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            Owner = Application.Current?.MainWindow;
-            ResizeMode = ResizeMode.NoResize;
-            WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
-            Background = Brushes.Transparent;
-
-            var darkBg = ThemeColors.BgDark;
-            var textPrimary = ThemeColors.TextPrimary;
-            var textSecondary = Color.FromRgb(0xC0, 0xC0, 0xC0); // 弹窗正文专用：比全局次要文本更亮
-            var borderColor = ThemeColors.BorderSubtle;
-            var warningColor = ThemeColors.Warning;
-
-            var mainBorder = new Border
-            {
-                Background = new SolidColorBrush(darkBg),
-                BorderBrush = new SolidColorBrush(borderColor),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-            };
-
-            var root = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
-
-            // 标题
-            root.Children.Add(new TextBlock
-            {
-                Text = title,
-                FontSize = 15,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(textPrimary),
-                Margin = new Thickness(0, 0, 0, 14)
-            });
-
-            // 正文
-            root.Children.Add(new TextBlock
-            {
-                Text = message,
-                FontSize = 13,
-                Foreground = new SolidColorBrush(textSecondary),
-                TextWrapping = TextWrapping.Wrap,
-                LineHeight = 20,
-                Margin = new Thickness(0, 0, 0, recycleBinWarning ? 10 : 22)
-            });
-
-            // 回收站警告
-            if (recycleBinWarning)
-            {
-                root.Children.Add(new TextBlock
-                {
-                    Text = "⚠️ 回收站清空后不可恢复！",
-                    FontSize = 12,
-                    Foreground = new SolidColorBrush(warningColor),
-                    Margin = new Thickness(0, 0, 0, 18)
-                });
-            }
-
-            // 按钮行
-            var buttonBar = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
-
-            var cancelBtn = new Button
-            {
-                Content = "取消",
-                Width = 80,
-                Height = 32,
-                FontSize = 13,
-                Background = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x3D)),
-                Foreground = new SolidColorBrush(textPrimary),
-                BorderBrush = new SolidColorBrush(borderColor),
-                Margin = new Thickness(0, 0, 10, 0)
-            };
-            cancelBtn.Click += (_, _) => { Confirmed = false; Close(); };
-
-            var confirmBtn = new Button
-            {
-                Content = "确定清理",
-                Width = 90,
-                Height = 32,
-                FontSize = 13,
-                Background = new SolidColorBrush(ThemeColors.DangerButton),
-                Foreground = new SolidColorBrush(textPrimary),
-                BorderThickness = new Thickness(0)
-            };
-            confirmBtn.Click += (_, _) => { Confirmed = true; Close(); };
-
-            buttonBar.Children.Add(cancelBtn);
-            buttonBar.Children.Add(confirmBtn);
-            root.Children.Add(buttonBar);
-
-            mainBorder.Child = root;
-            Content = mainBorder;
-
-            KeyDown += (_, e) =>
-            {
-                if (e.Key == Key.Escape)
-                { Confirmed = false; Close(); }
-            };
-        }
-    }
 }
